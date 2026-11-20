@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/"
+title = "Gold Chat"
+version = "1.0.0"
+id = "artifacts/gold-chat"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 26123
+
+[services.development]
+run = "pnpm --filter @workspace/gold-chat run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gold-chat", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/gold-chat", "run", "serve" ]
+
+[services.env]
+PORT = "26123"
+BASE_PATH = "/"

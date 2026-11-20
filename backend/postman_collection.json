@@ -1,0 +1,188 @@
+{
+  "info": {
+    "_postman_id": "oozox-production-api-collection-v1",
+    "name": "OOZOX Production API Collection",
+    "description": "Comprehensive Postman API test collection for OOZOX Invoicing & Financial Platform.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "receiverId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "1. Auth - Register",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Ahmed Trader\",\n  \"email\": \"ahmed@oozox.com\",\n  \"phone\": \"+201000000010\",\n  \"password\": \"password123\",\n  \"role\": \"MERCHANT\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "2. Auth - Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData.success && jsonData.data.token) {",
+              "    pm.collectionVariables.set('authToken', jsonData.data.token);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"emailOrPhone\": \"ahmed@oozox.com\",\n  \"password\": \"password123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. Auth - Get Profile (Me)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "me"]
+        }
+      }
+    },
+    {
+      "name": "4. Invoices - Create Invoice",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData.success && jsonData.data.invoice) {",
+              "    pm.collectionVariables.set('invoiceId', jsonData.data.invoice._id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"receiverId\": \"{{receiverId}}\",\n  \"items\": [\n    {\n      \"name\": \"ذهب عيار 21 سبيكة 10 جرام\",\n      \"quantity\": 1,\n      \"unitPrice\": 38500,\n      \"karat\": 21\n    }\n  ],\n  \"taxAmount\": 150,\n  \"discount\": 0,\n  \"paymentMethod\": \"INSTAPAY\",\n  \"dueDate\": \"2026-09-15T00:00:00.000Z\",\n  \"notes\": \"سداد عبر تطبيق انستاباي\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/invoices",
+          "host": ["{{baseUrl}}"],
+          "path": ["invoices"]
+        }
+      }
+    },
+    {
+      "name": "5. Invoices - Get Invoices List",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/invoices?page=1&limit=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["invoices"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Invoices - Update Status to PAID",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"PAID\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/invoices/{{invoiceId}}/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["invoices", "{{invoiceId}}", "status"]
+        }
+      }
+    },
+    {
+      "name": "7. Notifications - List All",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/notifications",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications"]
+        }
+      }
+    }
+  ]
+}

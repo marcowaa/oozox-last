@@ -1,0 +1,8 @@
+{
+  "name": "oozox last ",
+  "description": "Imported from GitHub: marcowaa/gold-chat",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

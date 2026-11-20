@@ -1,0 +1,48 @@
+# STANDALONE HOST FALLBACK TEMPLATE ONLY (Not needed when using docker-compose.prod.yml)
+# The primary production stack builds and serves the web portal inside Docker (`web` service
+# via deploy/web/Dockerfile) and terminates TLS in `deploy/nginx/nginx.conf`.
+# Use this template ONLY if you choose to host static files outside Docker.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name oozox.com www.oozox.com admin.oozox.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name oozox.com www.oozox.com admin.oozox.com;
+
+    ssl_certificate     /etc/letsencrypt/live/oozox.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/oozox.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    root /var/www/oozox-web;
+    index index.html;
+
+    location /assets/ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # SPA fallback for /app, /admin/login, /admin/dashboard, /contact
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

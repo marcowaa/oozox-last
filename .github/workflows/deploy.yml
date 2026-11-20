@@ -1,0 +1,150 @@
+name: Production CI/CD & Deployment Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - production
+      - release/*
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release_track:
+        description: 'Google Play Release Track (internal, alpha, beta, production)'
+        required: true
+        default: 'internal'
+
+jobs:
+  verify_backend_and_docker:
+    name: 🛡️ Verify Backend, Go Signaling & Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: 🔍 Validate Deployment Scripts & Docker Compose Config
+        run: |
+          bash -n scripts/deploy-prod.sh deploy/mongo/init-app-user.sh
+          cp .env.production.example .env.production
+          docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
+          rm -f .env.production
+
+      - name: 🟢 Set up Node.js 20 & Test Express API
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - name: 🧪 Run Backend Security & Unit Tests
+        working-directory: backend
+        run: |
+          npm ci
+          npm test
+
+      - name: 🐹 Set up Go 1.22 & Test WebRTC Signaling
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: 🧪 Run Signaling Race Tests
+        working-directory: backend-signaling
+        run: |
+          go mod tidy
+          go test -race -v ./...
+
+  test_and_build:
+    name: 🧪 Test & Build Release Artifacts (AAB & APK)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: ☕ Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🛠️ Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: 🔑 Decode Android Release Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+            echo "Release keystore successfully generated."
+          else
+            echo "ANDROID_KEYSTORE_BASE64 not found, falling back to debug keystore."
+          fi
+
+      - name: 🧪 Run Unit & Robolectric Tests
+        run: |
+          GRADLE_CMD=$([ -x ./gradlew ] && echo "./gradlew" || echo "gradle")
+          $GRADLE_CMD :app:testDebugUnitTest --stacktrace
+
+      - name: 🏗️ Build Release Android App Bundle (AAB)
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          GRADLE_CMD=$([ -x ./gradlew ] && echo "./gradlew" || echo "gradle")
+          $GRADLE_CMD :app:bundleRelease --stacktrace
+
+      - name: 📦 Build Release APK
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          GRADLE_CMD=$([ -x ./gradlew ] && echo "./gradlew" || echo "gradle")
+          $GRADLE_CMD :app:assembleRelease --stacktrace
+
+      - name: 📤 Upload Production AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: 📤 Upload Production APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+  deploy_google_play:
+    name: 🚀 Deploy to Google Play Console
+    needs: [verify_backend_and_docker, test_and_build]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Production AAB Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-aab
+          path: artifacts/
+
+      - name: 🚀 Upload AAB to Google Play Track
+        uses: rslcn/google-play-publisher@v1.4.1
+        if: ${{ secrets.SERVICE_ACCOUNT_JSON_RAW != '' }}
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON_RAW }}
+          packageName: com.aistudio.goldchat.app.mirhxk
+          aabFilePath: artifacts/app-release.aab
+          track: ${{ github.event.inputs.release_track || 'internal' }}
+          status: 'completed'

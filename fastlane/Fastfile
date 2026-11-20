@@ -1,0 +1,29 @@
+default_platform(:android)
+
+platform :android do
+  desc "Runs tests and builds production AAB and APK"
+  lane :build do
+    gradle_bin = File.exist?("../gradlew") ? "./gradlew" : "gradle"
+    sh("cd .. && #{gradle_bin} :app:testDebugUnitTest :app:bundleRelease :app:assembleRelease")
+  end
+
+  desc "Deploy to Google Play Internal Testing Track"
+  lane :deploy_internal do
+    build
+    upload_to_play_store(
+      track: 'internal',
+      aab: 'app/build/outputs/bundle/release/app-release.aab',
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Promote Internal to Beta / Production"
+  lane :deploy_production do
+    build
+    upload_to_play_store(
+      track: 'production',
+      aab: 'app/build/outputs/bundle/release/app-release.aab'
+    )
+  end
+end

@@ -1,0 +1,117 @@
+package com.example.util
+
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import java.util.concurrent.TimeUnit
+
+object RetrofitClient {
+
+    @Volatile
+    var baseUrl: String = "https://api.oozox.com/api/"
+        private set
+
+    @Volatile
+    private var authToken: String? = null
+
+    @Volatile
+    var enableNetworkBodyLogs: Boolean = false
+
+    @Volatile
+    private var cachedBaseUrl: String? = null
+
+    @Volatile
+    private var cachedRetrofit: Retrofit? = null
+
+    private val lock = Any()
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+    }
+
+    private fun buildLoggingInterceptor(): HttpLoggingInterceptor {
+        return HttpLoggingInterceptor().apply {
+            redactHeader("Authorization")
+            redactHeader("Cookie")
+            level = if (enableNetworkBodyLogs) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        }
+    }
+
+    fun setAuthToken(token: String?) {
+        authToken = token?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun getAuthToken(): String? = authToken
+
+    fun hasActiveSession(): Boolean = !authToken.isNullOrBlank()
+
+    fun configureBaseUrl(newBaseUrl: String) {
+        val normalized = if (newBaseUrl.endsWith("/")) newBaseUrl else "$newBaseUrl/"
+        synchronized(lock) {
+            baseUrl = normalized
+            cachedRetrofit = null
+            cachedBaseUrl = null
+        }
+    }
+
+    val okHttpClient: OkHttpClient
+        get() = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val originalRequest = chain.request()
+                val requestBuilder = originalRequest.newBuilder()
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+
+                val token = authToken
+                if (!token.isNullOrBlank() && originalRequest.header("Authorization").isNullOrBlank()) {
+                    requestBuilder.header("Authorization", "Bearer $token")
+                }
+
+                chain.proceed(requestBuilder.build())
+            }
+            .addInterceptor(buildLoggingInterceptor())
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+
+    val retrofit: Retrofit
+        get() {
+            val current = cachedRetrofit
+            if (current != null && cachedBaseUrl == baseUrl) {
+                return current
+            }
+            return synchronized(lock) {
+                val again = cachedRetrofit
+                if (again != null && cachedBaseUrl == baseUrl) {
+                    again
+                } else {
+                    val contentType = "application/json".toMediaType()
+                    val created = Retrofit.Builder()
+                        .baseUrl(baseUrl)
+                        .client(okHttpClient)
+                        .addConverterFactory(json.asConverterFactory(contentType))
+                        .build()
+                    cachedBaseUrl = baseUrl
+                    cachedRetrofit = created
+                    created
+                }
+            }
+        }
+
+    fun <T> createService(serviceClass: Class<T>): T {
+        return retrofit.create(serviceClass)
+    }
+
+    fun apiService(): OozoxApiService = createService(OozoxApiService::class.java)
+}

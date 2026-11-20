@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OOZOX</string>
+    <string name="app_motto">CONNECT • THINK • DO</string>
+    <string name="app_description">منصة OOZOX لإدارة الأعمال والمحادثات والحسابات المالية والمساعد الصوتي</string>
+    <string name="app_tagline">CONNECT • THINK • DO | أعمال • محادثات • حسابات</string>
+    <string name="aso_keywords">OOZOX, CONNECT THINK DO, دردشة, إدارة أعمال, محاسبة, فواتير, مشاريع, حسابات مالية, دفاتر, مساعد رقمي, كشوف حساب, مساعد صوتي</string>
+    <string name="seo_meta_title">OOZOX | إدارة الأعمال والحسابات المالية</string>
+</resources>
+
