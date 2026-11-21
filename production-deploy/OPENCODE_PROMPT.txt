@@ -1,0 +1,35 @@
+================================================================================
+READY-TO-PASTE PROMPT FOR OPENCODE (أوبنكود) — 100% DOCKERIZED PRODUCTION DEPLOY
+================================================================================
+Copy and paste everything below the line directly into OpenCode inside `/opt/oozox/repo` on your Ubuntu VPS:
+
+--------------------------------------------------------------------------------
+Read `production-deploy/OPENCODE_PRODUCTION_RUNBOOK.txt`, `production-deploy/EXTERNAL_SERVICES_AND_SUBSCRIPTIONS.md`, and `scripts/deploy-prod.sh` completely, then deploy the 100% Dockerized OOZOX production stack on this server step-by-step:
+
+1. Preflight & Security Audit:
+   - Run `chmod +x scripts/deploy-prod.sh deploy/mongo/init-app-user.sh production-deploy/deploy-prod.sh`.
+   - Verify Docker Engine, Docker Compose v2, UFW ports (22, 80, 443, 3478/tcp+udp, 5349/tcp, 49152:65535/udp), and ensure no host nginx/apache2/mongod/redis-server is occupying ports 80/443.
+   - Verify DNS A records resolve to this server's public IPv4 for: oozox.com, www.oozox.com, admin.oozox.com, api.oozox.com, signaling.oozox.com, and turn.oozox.com.
+
+2. Secrets & Environment Initialization:
+   - Run `./scripts/deploy-prod.sh init-env` to generate `.env.production` and `/opt/oozox/.backup.key` with strong random secrets (`MONGO_ROOT_PASSWORD`, `MONGO_APP_USER`, `MONGO_APP_PASSWORD`, `DB_ENCRYPTION_KEY`, `REDIS_PASSWORD`, `JWT_SECRET`, `COTURN_SECRET`, `VITE_API_BASE_URL`).
+   - Run `./scripts/deploy-prod.sh validate-env` and confirm zero `CHANGE_ME` placeholders remain.
+
+3. Containerized TLS Certificates (MUST run before starting nginx/coturn):
+   - Run `./scripts/deploy-prod.sh issue-ssl admin@oozox.com` (ask me for my preferred email if needed).
+
+4. Containerized Pre-Flight Test Suite:
+   - Run `./scripts/deploy-prod.sh test` (executes Express Jest SEC-01..SEC-10 tests in `node:20-alpine` and Go race tests in `golang:1.22-alpine`) and confirm all tests pass.
+
+5. Launch All 7 Production Containers:
+   - Run `./scripts/deploy-prod.sh up` to build and start `mongo`, `redis`, `api`, `signaling`, `web`, `nginx`, and `coturn`.
+   - If upgrading an existing Mongo volume, also run `./scripts/deploy-prod.sh ensure-mongo-user`.
+
+6. Create Initial Production ADMIN Account:
+   - Ask me for the production admin email, phone, and strong password (10+ chars), then run:
+     `./scripts/deploy-prod.sh create-admin "<EMAIL>" "<PHONE>" "<PASSWORD>" "OOZOX Root Admin"`
+
+7. Post-Deployment Verification & Automated Encrypted Backups:
+   - Run `./scripts/deploy-prod.sh smoke` and verify every check passes (Web HTTPS, API `/api/health`, Signaling `/health`, `/auth/token` HTTP 403 block, DB ports 27017/6379 isolated, Redis `NOAUTH` enforced).
+   - Run `./scripts/deploy-prod.sh install-backup-script`, test `./scripts/deploy-prod.sh backup`, install the daily backup + weekly Dockerized certbot renewal cron jobs, and report the exact command outputs.
+--------------------------------------------------------------------------------

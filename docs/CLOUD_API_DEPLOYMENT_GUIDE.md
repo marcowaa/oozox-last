@@ -1,99 +1,30 @@
-# 🚀 الدليل المبسط لنشر سيرفر الـ API السحابي (Node.js Express)
-> **تطبيق Oozox (ذهبي)**  
-> **الهدف:** خطة عمل مبسطة خطوة بخطوة لرفع وتشغيل سيرفر الباك إند على منصات سحابية سهلة وسريعة (**Render** أو **Railway**) مع المتغيرات البيئية ورابط الإنتاج النهائي للربط مع أندرويد و iOS.
+# 🚀 الدليل المحدّث لنشر خادم الـ API والمنظومة السحابية (100% Dockerized)
+> **منصة OOZOX**  
+> **تحديث هام:** يعمل الخادم حالياً بالكامل داخل **Docker** (`Express API + MongoDB 7 + Go Signaling + Redis 7 + Coturn + Web Portal + Nginx TLS + Certbot`) على VPS واحد دون حاجة لاشتراكات Render أو PostgreSQL خارجي.
 
 ---
 
-## 🧭 الخيار الموصى به: منصة Render.com (أو Railway.app)
-تعتبر منصات مثل **Render** أو **Railway** الحل الأسرع والأسهل للمشاريع الناشئة لأنها تدعم Node.js بنقرة واحدة دون الحاجة لإدارة خوادم Linux أو أوامر صعبة.
+## 📋 خطوات التشغيل السريع على الخادم (VPS)
 
----
-
-## 📋 الخطوات خطوة بخطوة من الصفر حتى التشغيل
-
-### 1️⃣ الخطوة الأولى: تجهيز مستودع الكود على GitHub
-1. تأكد من أن كود سيرفر الـ Node.js (`api-server` أو مجلد السيرفر) مرفوع على حسابك في **GitHub**.
-2. تأكد من وجود ملف `package.json` يحتوي على أمر التشغيل:
-   ```json
-   "scripts": {
-     "start": "node server.js"
-   }
+1. تأكد من توجيه سجلات `DNS A` للنطاق (`oozox.com`، `www`، `admin`، `api`، `signaling`، `turn`) إلى IP السيرفر.
+2. نفّذ الأوامر التالية من جذر المشروع:
+   ```bash
+   chmod +x scripts/deploy-prod.sh deploy/mongo/init-app-user.sh
+   ./scripts/deploy-prod.sh check-prereqs
+   ./scripts/deploy-prod.sh init-env
+   ./scripts/deploy-prod.sh issue-ssl admin@oozox.com
+   ./scripts/deploy-prod.sh test
+   ./scripts/deploy-prod.sh up
+   ./scripts/deploy-prod.sh create-admin "admin@oozox.com" "+201000000000" "STRONG_ADMIN_PASS_16+"
+   ./scripts/deploy-prod.sh smoke
    ```
+3. للتحقق بعد التشغيل:
+   - `https://api.oozox.com/api/health` → يعيد `200 HEALTHY`
+   - `https://signaling.oozox.com/health` → يعيد `200 HEALTHY`
+   - `https://oozox.com` → بوابة الويب ولوحة الإدارة `/admin/login`
 
----
+## 📱 نقاط الربط في تطبيق الأندرويد (`app/`)
+- `RetrofitClient.kt`: `https://api.oozox.com/api/`
+- `WebRtcSignalingManager.kt`: `wss://signaling.oozox.com/ws`
 
-### 2️⃣ الخطوة الثانية: إنشاء خدمة الويب على Render.com
-1. سجّل الدخول إلى [Render.com](https://render.com) بحسابك (يمكنك التسجيل مباشرة بحساب GitHub).
-2. من لوحة التحكم، اضغط على زر **New +** ثم اختر **Web Service**.
-3. اختر مستودع المشروع الخاص بك من GitHub واضغط **Connect**.
-4. املأ الإعدادات البسيطة التالية:
-   - **Name (اسم الخدمة):** `oozox-api`
-   - **Region (المنطقة):** اختر أقرب منطقة لعملائك (مثل *Frankfurt* أو *Oregon*).
-   - **Branch:** `main`
-   - **Runtime:** `Node`
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-   - **Instance Type:** اختر الخطة المجانية **Free** أو الباقة الأساسية **Starter**.
-
----
-
-### 3️⃣ الخطوة الثالثة: ضبط المتغيرات البيئية (Environment Variables)
-في نفس صفحة إعداد الخدمة (قسم **Environment Variables**)، أضف المتغيرات التالية للحفاظ على سرية واستقرار النظام:
-
-| اسم المتغير (Key) | القيمة المقترحة (Value) | الغرض |
-| :--- | :--- | :--- |
-| `NODE_ENV` | `production` | تفعيل وضع الإنتاج والأداء العالي |
-| `PORT` | `10000` (أو اتركه تلقائي) | منفذ السيرفر الداخلي |
-| `JWT_SECRET` | `oozox_super_secure_jwt_key_2026_x#99` | مفتاح تشفير جلسات تسجيل الدخول |
-| `DATABASE_URL` | رابط قاعدة بيانات PostgreSQL (من Render أو Supabase) | الاتصال بقاعدة البيانات المركزية |
-| `CORS_ORIGIN` | `*` | السماح لتطبيقات الجوال بإرسال الطلبات |
-| `ADMIN_EMAIL` | `marco0000110@gmail.com` | بريد المشرف الرئيسي |
-
----
-
-### 4️⃣ الخطوة الرابعة: نشر الخدمة والحصول على الرابط السحابي
-1. اضغط على زر **Create Web Service** أسفل الصفحة.
-2. سيبدأ Render بتثبيت الحزم وتشغيل السيرفر تلقائياً خلال دقيقة أو دقيقتين.
-3. بمجرد ظهور علامة **Live** الخضراء، ستحصل على رابط السيرفر العام الآمن المجاني (HTTPS) مثل:
-   ```
-   https://oozox-api.onrender.com
-   ```
-
-*(إذا قمت بربط نطاقك الخاص مثل `api.oozox.com`، يمكنك إضافته بضغطة زر من تبويب **Custom Domains** في Render).*
-
----
-
-## 📱 الخطوة الخامسة: تحديث رابط السيرفر في تطبيقات الجوال (Android / iOS)
-
-### 🔹 في تطبيق الأندرويد (Kotlin / Android App):
-افتح ملف إعدادات الشبكة:
-`/app/src/main/java/com/example/util/RetrofitClient.kt`
-
-وقم بتعيين الرابط النهائي:
-```kotlin
-// الرابط الإنتاجي السحابي الجديد
-var baseUrl: String = "https://oozox-api.onrender.com/api/"
-```
-*(أو إذا كنت تستخدم نطاقك الخاص: `https://api.oozox.com/api/`)*
-
-### 🔹 في تطبيق الـ iOS (Swift / Web App):
-في ملف إعدادات الشبكة (مثل `APIConfig.swift` أو `constants.js`):
-```swift
-struct APIConfig {
-    static let baseURL = "https://oozox-api.onrender.com/api/"
-}
-```
-
----
-
-## 🔍 اختبار الرابط للتأكد من عمله بنجاح
-بعد النشر، افتح المتصفح أو تطبيق Postman وضع الرابط:
-`https://oozox-api.onrender.com/api/health` أو الرابط الرئيسي، وستحصل على استجابة JSON تؤكد عمل السيرفر بنجاح:
-```json
-{
-  "status": "ok",
-  "service": "Oozox API Server",
-  "version": "1.0.0"
-}
-```
-الان السيرفر سحابي، محمي بشهادة SSL مجانية، وتطبيقات الجوال متصلة به في جميع أنحاء العالم! 🚀
+للمرجع التنفيذي الكامل وقائمة مزودي الخدمات الخارجية ودليل **OpenCode**، راجع المجلد الموحد **`production-deploy/`** (وخاصة `OPENCODE_PRODUCTION_RUNBOOK.txt` و`EXTERNAL_SERVICES_AND_SUBSCRIPTIONS.md`).

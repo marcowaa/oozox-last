@@ -5,6 +5,7 @@ const {
   registerUser,
   loginUser,
   getMe,
+  updateLanguagePreference,
   searchUsers,
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/authMiddleware');
@@ -17,10 +18,11 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'تم حظر محاولات تسجيل الدخول مؤقتاً لكثرة المحاولات الخاطئة',
-  },
+  handler: (req, res) =>
+    res.status(429).json({
+      success: false,
+      message: req.t ? req.t('api.login_rate_limited') : 'Too many login attempts',
+    }),
 });
 
 const registerLimiter = rateLimit({
@@ -28,15 +30,17 @@ const registerLimiter = rateLimit({
   max: Number(process.env.REGISTER_RATE_LIMIT_MAX) || 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'تم تجاوز الحد المسموح لإنشاء الحسابات، يرجى المحاولة لاحقاً',
-  },
+  handler: (req, res) =>
+    res.status(429).json({
+      success: false,
+      message: req.t ? req.t('api.register_rate_limited') : 'Too many registration requests',
+    }),
 });
 
 router.post('/register', registerLimiter, validate(schemas.register), registerUser);
 router.post('/login', loginLimiter, validate(schemas.login), loginUser);
 router.get('/me', protect, getMe);
+router.patch('/language', protect, validate(schemas.updateLanguage), updateLanguagePreference);
 router.get('/search', protect, validate(schemas.searchUsersQuery, 'query'), searchUsers);
 
 module.exports = router;

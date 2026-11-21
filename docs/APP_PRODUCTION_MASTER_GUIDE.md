@@ -21,16 +21,20 @@
 ### الخطوة 2: بناء حزمة الإنتاج الموقعة (Signed AAB)
 1. افتح مشروع أندرويد (مصمم بلغة Kotlin و Jetpack Compose).
 2. قم بإنشاء مفتاح التوقيع الرقمي (Keystore) لتأمين التطبيق:
-   ```powershell
-   keytool -genkey -v -keystore oozox-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias oozox-key-alias
+   ```bash
+   keytool -genkeypair -v -keystore release.keystore -alias releasekey -keyalg RSA -keysize 2048 -validity 10000
    ```
-   *(احفظ هذا الملف وكلمة السر في مكان آمن جداً لأنك ستحتاجه في كل تحديث للمتجر).*
-3. قم بتشغيل أمر البناء النهائي للإنتاج في الـ PowerShell أو Terminal:
-   ```powershell
-   .\gradlew.bat bundleRelease
+   *(احفظ هذا الملف وكلمة السر في مكان آمن جداً؛ ومرّرها عبر متغيرات البيئة `ANDROID_KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` دون حفظها في الكود).*
+3. قم بتشغيل الاختبارات وبناء نسخة الإنتاج النهائية:
+   ```bash
+   gradle :app:testDebugUnitTest
+   gradle :app:bundleRelease
+   gradle :app:assembleRelease
    ```
-4. **موقع الملف الناتج:** سيكون جاهزاً في المسار:
-   `app/build/outputs/bundle/release/app-release.aab`
+4. **موقع الملفات الناتجة:**
+   - المتجر (AAB): `app/build/outputs/bundle/release/app-release.aab`
+   - التثبيت المباشر (APK): `app/build/outputs/apk/release/app-release.apk`
+   - **معرف التطبيق الرسمي (`applicationId`):** `com.aistudio.goldchat.app.mirhxk`
 
 ### الخطوة 3: إنشاء التطبيق على Google Play Console
 1. افتح لوحة تحكم جوجل بلاي، واضغط على **Create App**.
@@ -93,16 +97,13 @@
 
 # القسم الثالث: ربط السيرفر والخدمات الإنتاجية (Backend & APIs)
 
-1. **إعداد قاعدة البيانات والباك إند:**
-   - المشروع مصمم بمعمارية تعتمد على التخزين المحلي المحمي (`Room Database`) وسيرفر API جاهز للربط.
-   - لربط السيرفر الفعلي، تأكد من ضبط عنوان الـ API (`Base URL`) في ملف `RetrofitClient.kt`:
-     ```kotlin
-     var baseUrl: String = "https://api.oozox.com/api/"
-     ```
-2. **الأمان والشهادات (SSL / HTTPS):**
-   - تأكد من أن سيرفرك يدعم شهادة حماية SSL صالحة لكي يقبلها نظام أندرويد وآبل للاتصالات الآمنة.
+1. **إعداد قاعدة البيانات والباك إند (100% Dockerized):**
+   - يعمل الخادم وقواعد البيانات (`MongoDB 7` و`Redis 7`) وخادم الإشارات (`Go WebRTC Signaling`) وبوابة الويب بالكامل داخل Docker عبر `docker-compose.prod.yml` و`./scripts/deploy-prod.sh`.
+   - عنوان الـ API مضبوط في `RetrofitClient.kt` على `https://api.oozox.com/api/`، والإشارات في `WebRtcSignalingManager.kt` على `wss://signaling.oozox.com/ws`.
+2. **الأمان والشهادات (SSL / HTTPS) والتشفير:**
+   - شهادات HTTPS مجانية عبر حاوية Let's Encrypt `certbot`، وتشفير محلي في Room بـ `AndroidKeyStore AES-256-GCM` وتشفير حقول MongoDB بـ `AES-256-GCM`.
 3. **خدمات الإشعارات (Firebase Cloud Messaging - FCM):**
-   - ضع ملف `google-services.json` الخاص بمشروعك في مجلد أندرويد لتعمل الإشعارات الفورية بكفاءة.
+   - ضع ملف `google-services.json` الخاص بمعرف `com.aistudio.goldchat.app.mirhxk` في مجلد `app/` لتفعيل إشعارات الدفع الفورية.
 
 ---
-*هذا المستند محفوظ وجاهز بالكامل لتنسخه وتعطيه لأي مساعد ذكي أو تتبعه خطوة بخطوة للوصول بتطبيقك للأسواق العالمية!*
+*راجع الحزمة الموحدة **`production-deploy/`** في جذر المشروع للحصول على قائمة كل مزودي الخدمات الخارجية ودليل أوبنكود وسكربت النشر الجاهز.*

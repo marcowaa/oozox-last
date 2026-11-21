@@ -10,6 +10,10 @@ const createNotification = async ({
   message,
   type = 'INVOICE_CREATED',
   relatedInvoiceId = null,
+  titleKey = null,
+  messageKey = null,
+  messageParams = null,
+  language = 'ar',
 }) => {
   try {
     const notification = await Notification.create({
@@ -19,6 +23,10 @@ const createNotification = async ({
       message,
       type,
       relatedInvoice: relatedInvoiceId,
+      titleKey,
+      messageKey,
+      messageParams,
+      language,
     });
     return notification;
   } catch (error) {

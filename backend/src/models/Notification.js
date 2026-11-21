@@ -39,6 +39,22 @@ const notificationSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    titleKey: {
+      type: String,
+      default: null,
+    },
+    messageKey: {
+      type: String,
+      default: null,
+    },
+    messageParams: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    language: {
+      type: String,
+      default: 'ar',
+    },
   },
   {
     timestamps: true,

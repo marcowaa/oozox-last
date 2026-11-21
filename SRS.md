@@ -5,14 +5,13 @@
 
 | **البيان** | **القيمة** |
 |---|---|
-| اسم المشروع | ذهبي (Gold Trader Chat) |
-| رقم الإصدار | 3.0 |
+| اسم المشروع | OOZOX / ذهبي (Gold Trader & Financial Enterprise Platform) |
+| رقم الإصدار | 4.0 (Production Hardened & 100% Dockerized) |
 | تاريخ الإنشاء | 2026-07-26 |
-| آخر تحديث | 2026-07-26 — محاسب ذكي + ثيم داكن + لوحة إدارة + دعوات أعضاء |
-| آخر تحديث | 2026-07-26 — تحديث شامل برؤية المنتج الجديدة |
-| المنصة | React Native (Expo) — iOS / Android / Web |
-| اللغة | العربية (RTL) |
-| نوع المشروع | Monorepo (pnpm workspaces) |
+| آخر تحديث | 2026-11-20 — التحديث الإنتاجي الكامل: Android Kotlin/Compose + MongoDB 7 + Go Signaling + AES-256-GCM + Docker Compose |
+| المنصات | Android Native (`com.aistudio.goldchat.app.mirhxk`) + Web Portal & Admin Gate (`oozox.com`) |
+| اللغة | العربية (RTL) والإنجليزية (LTR) |
+| نوع المشروع | Multi-Service Production Suite (Native Android + Node API + Go Signaling + React/Vite Web + Docker) |
 
 ---
 
@@ -88,33 +87,30 @@
 2. **إدارة مشاريع** بمجموعات عمل هرمية وإخفاء هوية وإدارة رأس مال
 3. **مدخرات ذهبية** بتحليل صور ذكي وحساب أرباح
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      تطبيق "ذهبي"                             │
-│                                                               │
-│  ┌─────────────────┐ ┌──────────────────┐ ┌────────────────┐ │
-│  │  دردشة الأعمال   │ │  مجموعات العمل    │ │  مدخرات ذهبي   │ │
-│  │  + الهاشتاج      │ │  + رأس المال      │ │  + تحليل صور   │ │
-│  │  + جداول Excel   │ │  + إخفاء هوية     │ │  + حساب ربح    │ │
-│  └────────┬────────┘ └────────┬─────────┘ └───────┬────────┘ │
-│           │                   │                   │           │
-│           └───────────────────┴───────────────────┘           │
-│                              │                                │
-│                    ┌─────────┴─────────┐                      │
-│                    │   AppContext      │                      │
-│                    │  (State + Storage)│                      │
-│                    └─────────┬─────────┘                      │
-│                              │                                │
-│                    ┌─────────┴─────────┐                      │
-│                    │   API Server      │                      │
-│                    │   (Express 5)     │                      │
-│                    └─────────┬─────────┘                      │
-│                              │                                │
-│                    ┌─────────┴─────────┐                      │
-│                    │  PostgreSQL +     │                      │
-│                    │  Drizzle ORM      │                      │
-│                    └───────────────────┘                      │
-└──────────────────────────────────────────────────────────────┘
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│              OOZOX Enterprise Production Platform (v4.0)             │
+│                                                                      │
+│  ┌──────────────────────────────┐  ┌──────────────────────────────┐  │
+│  │  Native Android App (/app)   │  │  Web Portal & Admin Gate     │  │
+│  │  Kotlin + Jetpack Compose    │  │  React 19 + Vite 7 (Docker)  │  │
+│  │  Room AES-256-GCM (KeyStore) │  │  oozox.com / admin.oozox.com │  │
+│  └──────────────┬───────────────┘  └──────────────┬───────────────┘  │
+│                 └────────────────┬─────────────────┘                 │
+│                        HTTPS / TLS 1.3 / WSS (Nginx Docker)          │
+│         ┌────────────────────────┴────────────────────────┐          │
+│         ▼                                                 ▼          │
+│  ┌─────────────────────────────┐         ┌────────────────────────┐  │
+│  │  Core API (/backend)        │         │ WebRTC Signaling (Go)  │  │
+│  │  Node 20 + Express + Zod    │         │ Gorilla WS + Coturn    │  │
+│  │  JWT + bcrypt(12) + GCM Key │         │ HMAC-SHA1 TURN Secrets │  │
+│  └──────────────┬──────────────┘         └───────────┬────────────┘  │
+│                 ▼  (Docker Network: internal: true)  ▼               │
+│  ┌─────────────────────────────┐         ┌────────────────────────┐  │
+│  │  MongoDB 7.0 (Docker)       │         │ Redis 7 Alpine (Docker)│  │
+│  │  MONGO_APP_USER readWrite   │         │ --requirepass + AOF    │  │
+│  └─────────────────────────────┘         └────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 وظائف المنتج
@@ -154,12 +150,12 @@
 
 ### 2.4 القيود
 
-- **التخزين المحلي**: البيانات تُحفظ حالياً في AsyncStorage (جاهز للتوسع للخادم).
-- **لغة واحدة**: الواجهة بالعربية فقط (RTL).
-- **لا مصادقة حقيقية**: التسجيل محلي بدون تحقق فعلي (مخطط لها مستقبلاً).
-- **تحليل الصور**: يتطلب اتصالاً بالإنترنت لخدمة OCR أو نموذج AI محلي.
-- **عدم القابلية للتعديل**: جميع الفواتير والمعاملات والهاشتاجات سجلات دائمة.
-- **إخفاء الهوية**: في مجموعات العمل، لا يرى المستخدم أسماء المستخدمين الآخرين.
+- **التخزين المحلي والنسخ الاحتياطي**: البيانات المحلية على أندرويد تُحفظ في **Room Database** مشفرة بـ **AES-256-GCM** بمفاتيح محمية داخل **AndroidKeyStore** (`android:allowBackup="false"`).
+- **دعم اللغات والاتجاهات**: دعم الواجهة العربية (RTL) والإنجليزية (LTR) مع تباين ألوان عالٍ.
+- **المصادقة الحقيقية والأمان**: تسجيل دخول عبر **JWT + bcrypt(12)** على الخادم، مع عزل الصلاحيات (`USER`, `MERCHANT`, `ADMIN`) وحماية الحسابات الفرعية بـ `PBKDF2WithHmacSHA256` (65,536 تكراراً).
+- **تحليل الصور وOCR**: يعتمد على CameraX / معالجة الصور؛ وتحليل المساعد الذكي يعتمد اختيارياً على `GEMINI_API_KEY`.
+- **عدم القابلية للتعديل**: الفواتير والمعاملات المالية المؤكدة سجلات تدقيقية دائمة.
+- **إخفاء الهوية**: في مجموعات العمل، لا يرى الأعضاء الهويات الحقيقية دون صلاحية الإدارة.
 
 ### 2.5 الافتراضات والتبعيات
 
@@ -559,12 +555,14 @@
 
 | NFR | المتطلب | الحالة |
 |---|---|---|
-| NFR-S1 | بيانات الربح الخاصة بالتاجر لا تُشارك | ✅ مخطط |
+| NFR-S1 | بيانات الربح الخاصة بالتاجر لا تُشارك | ✅ مطبّق |
 | NFR-S2 | تأكيد مزدوج قبل حذف كل البيانات | ✅ مطبّق |
-| NFR-S3 | إخفاء هوية المستخدمين في مجموعات العمل | ✅ مخطط |
-| NFR-S4 | لا يمكن حذف أو تعديل الفواتير والمعاملات | ✅ مخطط |
-| NFR-S5 | مصادقة حقيقية (OTP) | ❌ مستقبلاً |
-| NFR-S6 | تشفير البيانات الحساسة | ❌ مستقبلاً |
+| NFR-S3 | إخفاء هوية المستخدمين في مجموعات العمل | ✅ مطبّق |
+| NFR-S4 | عدم تعديل السجلات المالية المؤكدة وعزل المسار المالي | ✅ مطبّق |
+| NFR-S5 | مصادقة حقيقية (`JWT` + `bcrypt(12)`) + منع تسجيل `ADMIN` من الواجهة العامة | ✅ مطبّق |
+| NFR-S6 | تشفير البيانات الحساسة في أندرويد (`AndroidKeyStore AES-256-GCM` + `PBKDF2`) وفي MongoDB (`AES-256-GCM` عبر `DB_ENCRYPTION_KEY`) | ✅ مطبّق |
+| NFR-S7 | عزل قواعد البيانات (`MongoDB` & `Redis`) داخل شبكة Docker داخلية (`internal: true`) بدون أي منفذ خارجي | ✅ مطبّق |
+| NFR-S8 | مستخدم MongoDB بأقل صلاحيات (`MONGO_APP_USER` على قاعدة الإنتاج فقط) + تعطيل `android:allowBackup` وتجاوز المحاكي | ✅ مطبّق |
 
 ### 4.3 قابلية الاستخدام
 
@@ -582,75 +580,54 @@
 
 | NFR | المتطلب |
 |---|---|
-| NFR-R1 | حفظ البيانات محلياً (AsyncStorage) |
-| NFR-R2 | ErrorBoundary لالتقاط الأخطاء |
-| NFR-R3 | لا فقدان للبيانات عند انقطاع مفاجئ |
-| NFR-R4 | مزامنة مع الخادم (مستقبلاً) |
-| NFR-R5 | نسخ احتياطي (مستقبلاً) |
+| NFR-R1 | حفظ البيانات محلياً في Room DB مشفرة بـ `AndroidKeyStore AES-256-GCM` |
+| NFR-R2 | معالجة الأخطاء وحفظ الاستقرار في Android & React & Express (`gracefulShutdown`) |
+| NFR-R3 | عدم فقدان البيانات عند الانقطاع (`OfflineSyncWorker` + Redis `AOF` + MongoDB Volumes) |
+| NFR-R4 | مزامنة موثقة مع الخادم (`Retrofit` + `WSS`) عبر `https://api.oozox.com` |
+| NFR-R5 | نسخ احتياطي يومي آلي مشفر بـ `AES-256-CBC PBKDF2` (`/opt/oozox/backup_mongo.sh`) |
 
-### 4.5 قابلية الصيانة
+### 4.5 قابلية الصيانة والاختبار
 
 | NFR | المتطلب |
 |---|---|
-| NFR-M1 | كود TypeScript معقّب (strict mode) |
-| NFR-M2 | بنية Monorepo منظمة |
-| NFR-M3 | فصل واضح بين المكتبات والتطبيقات |
-| NFR-M4 | توليد كود API تلقائياً (Orval) |
-| NFR-M5 | فحص أنواع (typecheck) قبل البناء |
+| NFR-M1 | فحص صارم للأنواع والتحقق عبر `Kotlin` + `TypeScript` + `Zod` |
+| NFR-M2 | معمارية خدمات معزولة (`app/`, `backend/`, `backend-signaling/`, `artifacts/mockup-sandbox/`) |
+| NFR-M3 | توحيد نشر الخادم 100% داخل Docker (`docker-compose.prod.yml` و`scripts/deploy-prod.sh`) |
+| NFR-M4 | اختبارات أمنية وتحميلية آلية (`Jest SEC-01..SEC-10`, `go test -race`, `Robolectric`) |
+| NFR-M5 | خط CI/CD آلي متكامل عبر GitHub Actions (`.github/workflows/deploy.yml`) |
 
 ---
 
 ## 5. المعمارية التقنية (Technical Architecture)
 
-### 5.1 بنية المشروع (Monorepo)
+### 5.1 بنية المستودع الإنتاجية الفعلية
 
-```
-Gold-Trader-Chat/
-├── artifacts/
-│   ├── api-server/              # خادم API (Express 5)
-│   ├── gold-chat/               # تطبيق الموبايل (Expo)
-│   │   ├── app/                 # شاشات Expo Router
-│   │   │   ├── (tabs)/          # تبويبات رئيسية
-│   │   │   ├── chat/[id]/       # محادثة فردية
-│   │   │   ├── transaction/[id]/# تفاصيل معاملة
-│   │   │   ├── project/[id]/    # تفاصيل مشروع/مجموعة عمل
-│   │   │   └── gold-purchase/   # شراء ذهب
-│   │   ├── components/          # مكونات مشتركة
-│   │   │   ├── HashtagTable.tsx # جدول Excel المدمج
-│   │   │   ├── InvoiceCard.tsx  # بطاقة فاتورة
-│   │   │   ├── GoldScaleCamera.tsx # كاميرا الميزان
-│   │   │   └── ...
-│   │   ├── context/             # إدارة الحالة
-│   │   ├── utils/               # دوال مساعدة
-│   │   │   ├── gold.ts          # حسابات الذهب
-│   │   │   ├── hashtag.ts       # معالجة الهاشتاج
-│   │   │   ├── ocr.ts           # تحليل صورة الميزان
-│   │   │   └── ...
-│   │   └── types/               # تعريفات الأنواع
-│   └── mockup-sandbox/          # بيئة تجريب
-├── lib/
-│   ├── api-client-react/        # عميل API
-│   ├── api-spec/                # مواصفة OpenAPI
-│   ├── api-zod/                 # مخططات Zod
-│   └── db/                      # طبقة قاعدة البيانات
-└── scripts/
+```text
+oozox-repo/
+├── app/                         # تطبيق Android الأصلي (Kotlin + Jetpack Compose + Room AES-256-GCM)
+├── backend/                     # خادم Express API (Node.js 20 + Mongoose + MongoDB 7 + AES-256-GCM Field Crypto)
+├── backend-signaling/           # خادم إشارات WebRTC (Go 1.22 + Gorilla WebSocket + Redis 7 + HMAC TURN)
+├── artifacts/mockup-sandbox/    # بوابة الويب ولوحة الإدارة (React 19 + Vite 7 + Tailwind CSS v4)
+├── deploy/                      # إعدادات Docker للإنتاج (nginx, web Dockerfile, mongo init-app-user, coturn)
+├── scripts/deploy-prod.sh       # سكربت النشر والإدارة الموحد 100% Dockerized
+├── production-deploy/           # الحزمة الموحدة الشاملة لكل أدلة OpenCode وملف SRS وقائمة الخدمات الخارجية
+├── docker-compose.prod.yml      # ملف التشغيل الإنتاجي الكامل (7 خدمات + certbot profile)
+├── docker-compose.yml           # ملف التشغيل المعزول للـ API + Signaling + MongoDB + Redis
+└── .env.production.example      # قالب متغيرات البيئة الإنتاجية
 ```
 
 ### 5.2 التقنيات المستخدمة
 
-| الطبقة | التقنية | الإصدار |
+| الطبقة | التقنية | الإصدار / التفاصيل |
 |---|---|---|
-| **الموبايل** | React Native (Expo) | ~54.0.27 |
-| **التوجيه** | Expo Router | ~6.0.17 |
-| **إدارة الحالة** | React Context API | — |
-| **التخزين المحلي** | AsyncStorage | 2.2.0 |
-| **الكاميرا** | Expo Image Picker / Camera | ~17.0.9 |
-| **OCR** | Tesseract.js أو Google ML Kit | (يُحدد) |
-| **توليد PDF** | react-native-pdf أو expo-print | (يُحدد) |
-| **الخادم** | Express | ^5.2.1 |
-| **قاعدة البيانات** | PostgreSQL + Drizzle ORM | ^0.45.2 |
-| **التحقق** | Zod | ^3.25.76 |
-| **اللغة** | TypeScript | ~5.9.3 |
+| **تطبيق الأندرويد** | Kotlin + Jetpack Compose + Material 3 | Kotlin `2.0.21` / AGP `8.7.2` / SDK `24..35` (`com.aistudio.goldchat.app.mirhxk`) |
+| **التخزين المحلي (Android)** | Room + AndroidKeyStore AES-256-GCM + PBKDF2 | Room `2.6.1` / 65,536 تكراراً لـ PBKDF2 |
+| **الشبكة والوسائط (Android)** | Retrofit + OkHttp + CameraX + Media3 + FCM | HTTPS/TLS + WSS |
+| **خادم API الرئيسي** | Node.js 20 + Express + Mongoose + Zod + Helmet | Express `4.19.2` / Mongoose `8.5.1` / `AES-256-GCM` |
+| **قاعدة البيانات الرئيسية** | MongoDB 7.0 (Docker Container) | `oozox_mongo_prod` على شبكة `internal: true` |
+| **خادم الإشارات والمكالمات** | Go 1.22 + Gorilla WebSocket + Coturn STUN/TURN | `oozox_signaling_prod` + `oozox_coturn_prod` |
+| **الذاكرة الوسيطة والطوابير** | Redis 7 Alpine (Docker Container) | `oozox_redis_prod` (`--requirepass` + `AOF`) |
+| **بوابة الويب والوكيل العكسي** | React 19 + Vite 7 + Nginx 1.27 Alpine + Certbot | `oozox_web_prod` + `oozox_nginx_prod` |
 
 ### 5.3 نموذج البيانات (Data Model)
 
@@ -855,28 +832,25 @@ interface GoldPrices {
 | 11 | محادثة جديدة | `/new-chat` | إضافة جهة اتصال |
 | 12 | مشروع جديد | `/new-project` | إنشاء مجموعة عمل |
 
-### 6.2 واجهة API (المخطط لها)
+### 6.2 واجهة البرمجة الإنتاجية الفعلية (REST API & WebRTC Signaling)
 
-| Endpoint | Method | الوصف |
-|---|---|---|
-| `/api/healthz` | GET | فحص صحة الخادم |
-| `/api/auth/register` | POST | تسجيل مستخدم |
-| `/api/auth/login` | POST | تسجيل دخول |
-| `/api/users/me` | GET | بيانات المستخدم |
-| `/api/contacts` | GET/POST | جهات الاتصال |
-| `/api/chats` | GET/POST | المحادثات |
-| `/api/chats/:id/messages` | GET/POST | الرسائل |
-| `/api/chats/:id/hashtags` | GET/POST | الحسابات الجارية |
-| `/api/hashtags/:id/entries` | POST | إضافة معاملة لحساب |
-| `/api/hashtags/:id/comments` | POST | تعليق على حساب |
-| `/api/workgroups` | GET/POST | مجموعات العمل |
-| `/api/workgroups/:id/subgroups` | POST | مجموعة فرعية |
-| `/api/workgroups/:id/members` | POST | إضافة عضو |
-| `/api/projects` | GET/POST | المشاريع |
-| `/api/projects/:id/capital` | PATCH | تحديث رأس المال |
-| `/api/gold-purchases` | GET/POST | عمليات شراء الذهب |
-| `/api/gold-prices` | GET/PUT | أسعار الذهب |
-| `/api/manufacturers` | GET/POST | شركات الذهب |
+| Endpoint | Method | الوصف | الحماية |
+|---|---|---|---|
+| `/api/health` | GET | فحص صحة الخادم واتصال MongoDB | عام |
+| `/api/auth/register` | POST | تسجيل مستخدم أو تاجر (`USER` / `MERCHANT` فقط) | عام |
+| `/api/auth/login` | POST | تسجيل الدخول عبر `{ emailOrPhone, password }` وإصدار JWT | عام |
+| `/api/auth/me` | GET | بيانات المستخدم الحالي | Bearer JWT |
+| `/api/auth/search?q=` | GET | البحث عن مستخدمين عبر الهاتف أو البريد | Bearer JWT |
+| `/api/invoices` | GET / POST | جلب وإنشاء الفواتير (`notes` مشفرة بـ `AES-256-GCM`) | Bearer JWT |
+| `/api/invoices/:id` | GET / DELETE | تفاصيل أو إلغاء فاتورة | Bearer JWT |
+| `/api/invoices/:id/status` | PATCH | تحديث حالة الفاتورة (`PENDING`, `PAID`, `OVERDUE`) | Bearer JWT |
+| `/api/notifications` | GET | جلب الإشعارات (`message` مشفر بـ `AES-256-GCM`) | Bearer JWT |
+| `/api/notifications/read-all` | PATCH | تعليم كافة الإشعارات كمقروءة | Bearer JWT |
+| `/api/notifications/:id/read` | PATCH | تعليم إشعار كمقروء | Bearer JWT |
+| `wss://signaling.oozox.com/ws` | WebSocket | إشارات المكالمات الفورية عبر Go + Redis | JWT |
+| `/match` | POST | مطابقة أطراف الاتصال عبر Redis | Bearer JWT |
+| `/turn-credentials` | POST | إصدار بيانات Coturn STUN/TURN مؤقتة بـ HMAC-SHA1 | Bearer JWT |
+| `/health` & `/status/load` | GET | صحة خادم الإشارات ومؤشر الحماية من الضغط | عام |
 
 ---
 
@@ -918,21 +892,17 @@ interface GoldPrices {
 | محفظة ذهبية | ✅ مكتمل | مشتريات مع تحليل الربح/الخسارة |
 | استيراد جهات الاتصال | ✅ مكتمل | expo-contacts (موبايل فقط) |
 | الثيم الداكن (Dark Premium) | ✅ مكتمل | خلفيات داكنة + ذهبي + تباين عالٍ |
-| API Server | ⚠️ هيكل فقط | endpoint واحد (healthz) |
-| قاعدة البيانات | ⚠️ هيكل فقط | لا توجد جداول |
-| المصادقة | ❌ غير مطبّقة | مستقبلاً |
+| API Server (`backend/`) | ✅ مكتمل ومفحوص | Express + MongoDB + JWT + Helmet + Zod + اختبارات `SEC-01`..`SEC-10` |
+| قاعدة البيانات (`MongoDB 7` & `Redis 7`) | ✅ مكتمل ومفحوص | حاويات Docker معزولة بشبكة `internal: true` + `MONGO_APP_USER` + تشفير حقول `AES-256-GCM` |
+| المصادقة والأمان | ✅ مكتمل ومفحوص | `bcrypt(12)` + JWT مشترك مع Signaling + قفل `ADMIN` + `AndroidKeyStore AES-256-GCM` + تعطيل تجاوز المحاكي و`allowBackup` |
+| النشر السحابي الـ Dockerized | ✅ مكتمل | `docker-compose.prod.yml` (7 حاويات + `certbot`) + `./scripts/deploy-prod.sh` + `production-deploy/` |
 
 ### 7.2 سجل التغييرات
 
 | التاريخ | الإصدار | التغيير |
 |---|---|---|
-| 2026-07-26 | 1.0 | إنشاء وثيقة SRS الأولية بعد تحليل المشروع |
-| 2026-07-26 | 2.0 | تحديث شامل: إضافة نظام هاشتاج، جداول Excel مدمجة، مجموعات عمل، إخفاء هوية، إدارة رأس مال، مدخرات ذهبية، حساب ربح/خسارة |
-| 2026-07-26 | 2.1 | تنفيذ الكود: تحديث types، storage، gold utils، hashtag utils، HashtagPicker، HashtagTable، InvoiceMessage، AppContext، chat/[id]، onboarding، tabs layout، projects، gold-purchase، project/[id]، gold/[id]، new-project، إصلاح UserType في كل الملفات |
-| 2026-07-26 | 2.2 | حسابات متعددة لكل محادثة + فاتورة متعددة الحسابات + AccountSelector |
-| 2026-07-26 | 2.3 | استيراد جهات اتصال الهاتف (expo-contacts) + اسم مستخدم (Telegram-style) + إخفاء الهوية |
-| 2026-07-26 | 2.4 | إزالة gold_buyer + توثيق تاجر ذهب + لوحة إدارة + ميزات eDahab (زكاة، محفظة، 4 عيارات) |
-| 2026-07-26 | 3.0 | ثيم داكن Premium + محاسب ذكي v2 (تنبيهات، صحة، تحقق أرقام، ربط AI) + أخبار ذكية + دعوات أعضاء + مجموعة دردشة تلقائية + بحث في الهاشتاجات + إصلاح تباين الألوان |
+| 2026-07-26 | 1.0 - 3.0 | بناء وثيقة SRS الأولية ومميزات الدردشة والهاشتاج والمشاريع ومدخرات الذهب والمحاسب الذكي |
+| 2026-11-20 | 4.0 | التحول الكامل إلى البنية الإنتاجية الفعلية: تطبيق Android Kotlin/Compose مشفّر بـ `AndroidKeyStore AES-256-GCM` و`PBKDF2`، خادم `Express + MongoDB 7` بتشفير حقول `AES-256-GCM` ومستخدم محدود الصلاحيات، خادم إشارات `Go + Redis + Coturn`، بوابة ويب `React 19 + Vite 7`، تشغيل 100% عبر Docker مع حزمة النشر الموحدة `production-deploy/` |
 
 ---
 
@@ -940,13 +910,13 @@ interface GoldPrices {
 
 ### 8.1 أولوية عالية
 
-| # | المتطلب | الوصف |
-|---|---|---|
-| FR-12 | مصادقة OTP | تسجيل دخول برقم الهاتف + OTP |
-| FR-13 | مزامنة البيانات | ربط التطبيق بالـ API Server |
-| FR-14 | قاعدة البيانات | تعريف كل الجداول في Drizzle |
-| FR-15 | إشعارات Push | إشعار عند رسالة/فاتورة/تأكيد |
-| FR-16 | جلب أسعار الذهب تلقائياً | تكامل مع API أسعار عالمية |
+| # | المتطلب | الوصف | الحالة |
+|---|---|---|---|
+| FR-12 | مصادقة OTP / 2FA | التحقق بخطوتين عبر SMS/WhatsApp بجانب JWT الحالي | مخطط (اختياري) |
+| FR-13 | مزامنة البيانات | ربط التطبيق بـ API Server (`https://api.oozox.com/api/`) | ✅ مطبّق |
+| FR-14 | قاعدة البيانات | نماذج MongoDB (`User`, `Invoice`, `Notification`) + Room Encrypted DB | ✅ مطبّق |
+| FR-15 | إشعارات Push (FCM) | جاهز برمجياً؛ يتطلب فقط إرفاق `app/google-services.json` | ✅ جاهز للتفعيل |
+| FR-16 | جلب أسعار الذهب تلقائياً | تكامل اختياري مع مزود أسعار ذهب عبر `AdminScreen` | اختياري |
 
 ### 8.2 أولوية متوسطة
 
@@ -1063,4 +1033,4 @@ profitLossPercent = (profitLoss / totalPaid) × 100
 
 ---
 
-*نهاية وثيقة SRS — سيتم تحديث هذه الوثيقة مع كل تغيير يطرأ على المشروع. الإصدار الحالي: 2.0*
+*نهاية وثيقة SRS — الإصدار المحدّث المطابق للبيئة الإنتاجية: **4.0 (2026-11-20)**. للاطلاع على خطوات النشر، المزوّدين الخارجيين، وأوامر OpenCode راجع المجلد الموحد `production-deploy/`.*

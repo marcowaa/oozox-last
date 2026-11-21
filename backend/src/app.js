@@ -11,7 +11,9 @@ const authRoutes = require('./routes/authRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const healthRoutes = require('./routes/healthRoutes');
+const i18nRoutes = require('./routes/i18nRoutes');
 const { sanitizeNoSql } = require('./middlewares/sanitizeMiddleware');
+const { i18nMiddleware } = require('./middlewares/i18nMiddleware');
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
 
 const app = express();
@@ -40,10 +42,13 @@ app.use(
       return callback(new Error('CORS origin not allowed'));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept-Language', 'X-App-Language', 'If-None-Match'],
+    exposedHeaders: ['ETag', 'Content-Language', 'X-I18n-Version'],
     credentials: true,
   })
 );
+
+app.use(i18nMiddleware);
 
 // Rate Limiting to protect against DoS
 const limiter = rateLimit({
@@ -51,10 +56,11 @@ const limiter = rateLimit({
   max: Number(process.env.API_RATE_LIMIT_MAX) || 500,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'تم تجاوز الحد المسموح من الطلبات، يرجى المحاولة بعد 15 دقيقة (Too many requests)',
-  },
+  handler: (req, res) =>
+    res.status(429).json({
+      success: false,
+      message: req.t ? req.t('api.rate_limit') : 'Too many requests, please try again later.',
+    }),
 });
 app.use('/api', limiter);
 
@@ -72,11 +78,14 @@ app.get('/', (req, res) => {
     project: 'OOZOX API Platform',
     status: 'Running',
     version: '1.0.0',
+    language: req.lang,
     documentation: '/api/health',
+    i18n: '/api/i18n/languages',
   });
 });
 
 app.use('/api/health', healthRoutes);
+app.use('/api/i18n', i18nRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/notifications', notificationRoutes);

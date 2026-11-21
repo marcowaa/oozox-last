@@ -1,8 +1,10 @@
 const { verifyToken } = require('../utils/jwt');
 const User = require('../models/User');
 const { errorResponse } = require('../utils/response');
+const { resolveRequestedLang, t } = require('../i18n');
 
 const protect = async (req, res, next) => {
+  const translate = typeof req.t === 'function' ? req.t : (k, v) => t(resolveRequestedLang(req), k, v);
   let token;
 
   if (
@@ -13,7 +15,7 @@ const protect = async (req, res, next) => {
   }
 
   if (!token) {
-    return errorResponse(res, 401, 'غير مصرح بالوصول: يرجى تسجيل الدخول وإرفاق التوكن (Token Missing)');
+    return errorResponse(res, 401, translate('api.auth_token_missing'));
   }
 
   try {
@@ -21,23 +23,24 @@ const protect = async (req, res, next) => {
     const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {
-      return errorResponse(res, 401, 'المستخدم المرتبط بهذا التوكن غير موجود');
+      return errorResponse(res, 401, translate('api.auth_user_not_found'));
     }
 
     req.user = user;
     next();
   } catch (error) {
-    return errorResponse(res, 401, 'جلسة العمل منتهية أو التوكن غير صالح (Token Expired / Invalid)');
+    return errorResponse(res, 401, translate('api.auth_token_invalid'));
   }
 };
 
 const authorize = (...roles) => {
   return (req, res, next) => {
+    const translate = typeof req.t === 'function' ? req.t : (k, v) => t(resolveRequestedLang(req), k, v);
     if (!req.user || !roles.includes(req.user.role)) {
       return errorResponse(
         res,
         403,
-        `غير مصرح لهذا الدور (${req.user ? req.user.role : 'مجهول'}) بتنفيذ هذا الإجراء`
+        translate('api.auth_forbidden_role', { role: req.user ? req.user.role : translate('api.unknown_role') })
       );
     }
     next();
