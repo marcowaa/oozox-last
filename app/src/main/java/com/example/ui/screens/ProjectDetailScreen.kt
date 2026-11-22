@@ -53,6 +53,7 @@ import java.util.Locale
 import java.util.UUID
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.PrimaryScrollableTabRow
 import com.example.data.model.ShiftHandoverEntity

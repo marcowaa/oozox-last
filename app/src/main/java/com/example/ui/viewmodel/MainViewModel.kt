@@ -417,12 +417,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val matched = allSubAccounts.value.find {
             val matchesUser = it.phone.equals(cleanInput, ignoreCase = true) ||
                 it.username.equals(cleanInput, ignoreCase = true)
-            val matchesPassword = if (it.passwordHash.isNotBlank() && it.passwordSalt.isNotBlank()) {
-                com.example.util.HiddenAccountSecurityEngine.verifyPassword(cleanSecret, it.passwordSalt, it.passwordHash) ||
-                    it.rawSecretTrigger == cleanSecret
-            } else {
-                it.rawSecretTrigger == cleanSecret
-            }
+            val matchesPassword = com.example.util.HiddenAccountSecurityEngine.verifyPassword(cleanSecret, it)
             matchesUser && matchesPassword && it.isActiveEmployee
         }
         if (matched != null) {

@@ -120,6 +120,9 @@ fun MainAppNavigation(viewModel: MainViewModel) {
     val allHashtagAccounts by viewModel.allHashtagAccounts.collectAsStateWithLifecycle()
 
     val globalAccountingSnapshot by viewModel.globalAccountingSnapshot.collectAsStateWithLifecycle()
+    val businessProfile by viewModel.businessProfile.collectAsStateWithLifecycle()
+    val allPayrollAdjustments by viewModel.allPayrollAdjustments.collectAsStateWithLifecycle()
+    val allEmployeeLeaves by viewModel.allEmployeeLeaves.collectAsStateWithLifecycle()
 
     var showNewChatDialog by remember { mutableStateOf(false) }
     var showNewProjectDialog by remember { mutableStateOf(false) }
@@ -870,6 +873,12 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             allHashtagAccounts = allHashtagAccounts,
                                             allHashtagEntries = allHashtagEntries,
                                             allDailyRecords = allDailyAccountingRecords,
+                                            businessProfile = businessProfile,
+                                            allPayrollAdjustments = allPayrollAdjustments,
+                                            allEmployeeLeaves = allEmployeeLeaves,
+                                            allAttendanceRecords = allAttendanceRecords,
+                                            allWorkGroups = allWorkGroups,
+                                            allGroupMembers = allGroupMembers,
                                             onLoginSubAccount = { user, pin -> viewModel.loginEmployee(user, pin) },
                                             onLogoutSubAccount = { viewModel.lockToMainAccount() },
                                             onAddShiftHandover = { handover -> viewModel.addShiftHandover(handover) },
@@ -893,6 +902,49 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                                     discreetNotifications = false
                                                 )
                                             },
+                                            onSaveBusinessProfile = { profile -> viewModel.saveBusinessProfile(profile) },
+                                            onCreateOrUpdateEmployee = { id, name, user, phone, pass, role, dept, sal, cur, geo, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
+                                                viewModel.createOrUpdateEnterpriseEmployee(
+                                                    existingId = id,
+                                                    fullName = name,
+                                                    username = user,
+                                                    phone = phone,
+                                                    password = pass,
+                                                    roleTitle = role,
+                                                    department = dept,
+                                                    baseSalary = sal,
+                                                    salaryCurrency = cur,
+                                                    geofenceEnforced = geo,
+                                                    canCreateInvoices = inv,
+                                                    canViewReports = rep,
+                                                    canSetProductPrices = disc,
+                                                    permManageBusiness = mBiz,
+                                                    permManageStaff = mStaff,
+                                                    permManagePayroll = mPay,
+                                                    permManageProjects = mProj,
+                                                    permAssignTasks = aTask,
+                                                    permManageAccounting = mAcct,
+                                                    permApproveDiscounts = aDisc,
+                                                    permDirectChat = dChat
+                                                )
+                                            },
+                                            onDeleteEmployee = { empId -> viewModel.deleteSubAccount(empId) },
+                                            onAddPayrollAdjustment = { emp, type, amt, reason, date ->
+                                                viewModel.addEmployeePayrollAdjustment(emp, type, amt, reason, date)
+                                            },
+                                            onAddEmployeeLeave = { emp, type, start, end, notes ->
+                                                viewModel.addEmployeeLeaveRecord(emp, type, start, end, notes)
+                                            },
+                                            onClockInMandatoryGps = { emp -> viewModel.clockInEmployeeWithMandatoryGps(emp) },
+                                            onOpenCompanyGroupChat = {
+                                                viewModel.openCompanyStaffGroupChat { chatId ->
+                                                    navController.navigate(Screen.ChatDetail(chatId))
+                                                }
+                                            },
+                                            onAssignTaskToCompanyGroup = { task ->
+                                                viewModel.insertProjectTask(task)
+                                            },
+                                            onOpenProject = onProjectClickAction,
                                             onOpenSubscriptions = onOpenSubscriptionsAction,
                                             onOpenCompanyAccounting = onOpenCompanyAccountingAction,
                                             onOpenDrawer = onOpenDrawerAction
