@@ -177,6 +177,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val businessProfile: StateFlow<BusinessProfileEntity?> = repository.businessProfile.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    val allPayrollAdjustments: StateFlow<List<PayrollAdjustmentEntity>> = repository.allPayrollAdjustments.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    val allEmployeeLeaves: StateFlow<List<EmployeeLeaveEntity>> = repository.allEmployeeLeaves.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
     fun getTasksForProject(projectId: String): Flow<List<ProjectTaskEntity>> = repository.getTasksForProject(projectId)
     fun getInvoicesForProject(projectId: String): Flow<List<InvoiceEntity>> = repository.getInvoicesForProject(projectId)
 
@@ -400,9 +412,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loginEmployee(phoneOrUsername: String, pin: String): Boolean {
-        val matched = allSubAccounts.value.find { 
-            (it.phone == phoneOrUsername.trim() || it.username == phoneOrUsername.trim()) && 
-            (it.rawSecretTrigger == pin.trim())
+        val cleanInput = phoneOrUsername.trim().removePrefix("@")
+        val cleanSecret = pin.trim()
+        val matched = allSubAccounts.value.find {
+            val matchesUser = it.phone.equals(cleanInput, ignoreCase = true) ||
+                it.username.equals(cleanInput, ignoreCase = true)
+            val matchesPassword = if (it.passwordHash.isNotBlank() && it.passwordSalt.isNotBlank()) {
+                com.example.util.HiddenAccountSecurityEngine.verifyPassword(cleanSecret, it.passwordSalt, it.passwordHash) ||
+                    it.rawSecretTrigger == cleanSecret
+            } else {
+                it.rawSecretTrigger == cleanSecret
+            }
+            matchesUser && matchesPassword && it.isActiveEmployee
         }
         if (matched != null) {
             _activeSubAccount.value = matched
@@ -3535,6 +3556,326 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 message = "تمت إضافة ${chat.contactName} إلى $targetName بنجاح",
                 type = com.example.ui.components.AppToastType.SUCCESS
             )
+        }
+    }
+
+    // ---------------- Enterprise Business Setup, HR, Payroll, Leaves & GPS Check-In ----------------
+
+    fun saveBusinessProfile(
+        profile: BusinessProfileEntity,
+        onSaved: (WorkGroupEntity) -> Unit = {}
+    ) {
+        viewModelScope.launch(safeExceptionHandler) {
+            val ownerId = currentUser.value?.id ?: "me"
+            val wg = repository.saveBusinessProfileAndSyncGroup(profile, ownerId)
+            val sectorLabel = BusinessActivitySector.entries
+                .firstOrNull { it.name == profile.activityType }
+                ?.labelAr
+                ?: profile.customActivityLabel.ifBlank { profile.activityType }
+            updateUserProfession(sectorLabel)
+
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().upsertBusinessProfile(
+                        com.example.util.ApiBusinessProfileRequest(
+                            companyName = profile.companyName,
+                            activityType = profile.activityType,
+                            customActivityLabel = profile.customActivityLabel,
+                            commercialRegistration = profile.commercialRegistration,
+                            taxNumber = profile.taxNumber,
+                            phone = profile.phone,
+                            address = profile.address,
+                            currency = profile.currency,
+                            hqLatitude = profile.hqLatitude,
+                            hqLongitude = profile.hqLongitude,
+                            geofenceRadiusMeters = profile.geofenceRadiusMeters,
+                            companyGroupName = profile.companyGroupName
+                        )
+                    )
+                } catch (_: Exception) {}
+            }
+
+            com.example.ui.components.ToastNotificationBus.showToast(
+                message = "تم حفظ بيانات النشاط ومجموعة كل الموظفين بنجاح 🏢",
+                type = com.example.ui.components.AppToastType.SUCCESS
+            )
+            onSaved(wg)
+        }
+    }
+
+    fun createOrUpdateEnterpriseEmployee(
+        existingId: String? = null,
+        fullName: String,
+        username: String,
+        phone: String,
+        password: String,
+        roleTitle: String,
+        department: String,
+        baseSalary: Double,
+        salaryCurrency: String,
+        geofenceEnforced: Boolean,
+        canCreateInvoices: Boolean,
+        canViewReports: Boolean,
+        canSetProductPrices: Boolean,
+        permManageBusiness: Boolean,
+        permManageStaff: Boolean,
+        permManagePayroll: Boolean,
+        permManageProjects: Boolean,
+        permAssignTasks: Boolean,
+        permManageAccounting: Boolean,
+        permApproveDiscounts: Boolean,
+        permDirectChat: Boolean,
+        onComplete: (HiddenSubAccountEntity) -> Unit = {}
+    ) {
+        viewModelScope.launch(safeExceptionHandler) {
+            val cleanUsername = username.trim().removePrefix("@").lowercase()
+            val existing = existingId?.let { id -> allSubAccounts.value.find { it.id == id } }
+            val salt = if (password.isNotBlank() || existing == null) {
+                com.example.util.HiddenAccountSecurityEngine.generateSalt()
+            } else {
+                existing.passwordSalt
+            }
+            val hash = if (password.isNotBlank() || existing == null) {
+                com.example.util.HiddenAccountSecurityEngine.hashPassword(password.trim(), salt)
+            } else {
+                existing.passwordHash
+            }
+
+            val employee = HiddenSubAccountEntity(
+                id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                username = cleanUsername,
+                displayName = fullName.trim(),
+                passwordHash = hash,
+                passwordSalt = salt,
+                rawSecretTrigger = if (password.isNotBlank()) password.trim() else existing?.rawSecretTrigger.orEmpty(),
+                avatarUri = existing?.avatarUri,
+                bio = "$roleTitle • $department",
+                phone = phone.trim().ifBlank { null },
+                muteNotifications = existing?.muteNotifications ?: false,
+                discreetNotifications = existing?.discreetNotifications ?: false,
+                autoLockOnExit = false,
+                isEncrypted = true,
+                roleTitle = roleTitle.trim().ifBlank { "موظف" },
+                canSetProductPrices = canSetProductPrices,
+                canCreateInvoices = canCreateInvoices,
+                canViewReports = canViewReports,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                lastActiveAt = System.currentTimeMillis(),
+                department = department.trim().ifBlank { "العمليات" },
+                baseSalary = baseSalary.coerceAtLeast(0.0),
+                salaryCurrency = salaryCurrency.ifBlank { "EGP" },
+                geofenceEnforced = geofenceEnforced,
+                permManageBusiness = permManageBusiness,
+                permManageStaff = permManageStaff,
+                permManagePayroll = permManagePayroll,
+                permManageProjects = permManageProjects,
+                permAssignTasks = permAssignTasks,
+                permManageAccounting = permManageAccounting,
+                permApproveDiscounts = permApproveDiscounts,
+                permDirectChat = permDirectChat,
+                isActiveEmployee = true
+            )
+
+            repository.addHiddenSubAccount(employee)
+            val profile = repository.getBusinessProfileSync()
+            repository.syncEmployeeToCompanyGroup(employee, profile)
+
+            if (existing == null && com.example.util.RetrofitClient.hasActiveSession() && password.isNotBlank()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().createEmployee(
+                        com.example.util.ApiCreateEmployeeRequest(
+                            fullName = employee.displayName,
+                            username = employee.username,
+                            phone = employee.phone.orEmpty(),
+                            password = password.trim(),
+                            roleTitle = employee.roleTitle,
+                            department = employee.department,
+                            baseSalary = employee.baseSalary,
+                            salaryCurrency = employee.salaryCurrency,
+                            geofenceEnforced = employee.geofenceEnforced,
+                            permissions = com.example.util.ApiEmployeePermissionsDto(
+                                manageBusiness = permManageBusiness,
+                                manageStaff = permManageStaff,
+                                managePayroll = permManagePayroll,
+                                manageProjects = permManageProjects,
+                                assignTasks = permAssignTasks,
+                                manageAccounting = permManageAccounting,
+                                createInvoices = canCreateInvoices,
+                                approveDiscounts = permApproveDiscounts,
+                                viewReports = canViewReports,
+                                directChat = permDirectChat
+                            )
+                        )
+                    )
+                } catch (_: Exception) {}
+            }
+
+            com.example.ui.components.ToastNotificationBus.showToast(
+                message = "تم حفظ الموظف ${employee.displayName} وإضافته لمجموعة الشركة ✅",
+                type = com.example.ui.components.AppToastType.SUCCESS
+            )
+            onComplete(employee)
+        }
+    }
+
+    fun addEmployeePayrollAdjustment(
+        employee: HiddenSubAccountEntity,
+        type: String,
+        amount: Double,
+        reason: String,
+        effectiveDate: String
+    ) {
+        viewModelScope.launch(safeExceptionHandler) {
+            if (amount <= 0.0) return@launch
+            val monthKey = effectiveDate.take(7).ifBlank {
+                java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(java.util.Date())
+            }
+            val adj = PayrollAdjustmentEntity(
+                id = "pay_${System.currentTimeMillis()}_${(100..999).random()}",
+                employeeId = employee.id,
+                employeeName = employee.displayName,
+                type = type,
+                amount = amount,
+                reason = reason.trim(),
+                effectiveDate = effectiveDate,
+                monthKey = monthKey,
+                createdByName = currentUser.value?.name ?: "المدير"
+            )
+            repository.insertPayrollAdjustment(adj)
+            val actionLabel = if (type == "BONUS") "حافز مالي +" else "خصم مالي -"
+            com.example.ui.components.ToastNotificationBus.showToast(
+                message = "تم تسجيل $actionLabel ${GoldUtils.formatCurrency(amount)} للموظف ${employee.displayName}",
+                type = com.example.ui.components.AppToastType.SUCCESS
+            )
+        }
+    }
+
+    fun addEmployeeLeaveRecord(
+        employee: HiddenSubAccountEntity,
+        leaveType: String,
+        startDate: String,
+        endDate: String,
+        notes: String
+    ) {
+        viewModelScope.launch(safeExceptionHandler) {
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val days = try {
+                val s = fmt.parse(startDate)?.time ?: System.currentTimeMillis()
+                val e = fmt.parse(endDate)?.time ?: s
+                (((e - s) / (1000L * 60 * 60 * 24)).toInt() + 1).coerceAtLeast(1)
+            } catch (_: Exception) { 1 }
+
+            val leave = EmployeeLeaveEntity(
+                id = "lv_${System.currentTimeMillis()}_${(100..999).random()}",
+                employeeId = employee.id,
+                employeeName = employee.displayName,
+                leaveType = leaveType,
+                startDate = startDate,
+                endDate = endDate,
+                daysCount = days,
+                status = "APPROVED",
+                notes = notes.trim(),
+                approvedByName = currentUser.value?.name ?: "المدير"
+            )
+            repository.insertEmployeeLeave(leave)
+            com.example.ui.components.ToastNotificationBus.showToast(
+                message = "تم اعتماد إجازة (${days} يوم) للموظف ${employee.displayName}",
+                type = com.example.ui.components.AppToastType.SUCCESS
+            )
+        }
+    }
+
+    suspend fun clockInEmployeeWithMandatoryGps(
+        employee: HiddenSubAccountEntity
+    ): com.example.util.WorkplaceLocationPolicyManager.LocationPolicyCheckResult {
+        val appCtx = getApplication<Application>()
+        val profile = repository.getBusinessProfileSync()
+        val groupId = profile?.companyGroupId?.ifBlank { "wg_company_main" } ?: "wg_company_main"
+
+        val result = com.example.util.WorkplaceLocationPolicyManager.enforceLoginLocationPolicy(
+            context = appCtx,
+            employeeId = employee.id,
+            employeeName = employee.displayName,
+            workplaceLat = profile?.hqLatitude,
+            workplaceLng = profile?.hqLongitude,
+            radiusMeters = profile?.geofenceRadiusMeters ?: 250,
+            workplaceName = profile?.companyName?.ifBlank { "مقر العمل الرئيسي" } ?: "مقر العمل الرئيسي"
+        )
+
+        val curDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        val curTime = java.text.SimpleDateFormat("hh:mm a", java.util.Locale("ar")).format(java.util.Date())
+        val now = System.currentTimeMillis()
+
+        val attendance = EmployeeAttendanceEntity(
+            id = "att_${employee.id}_$curDate",
+            memberId = "gm_${employee.id}",
+            groupId = groupId,
+            employeeName = employee.displayName,
+            employeeRole = employee.roleTitle,
+            date = curDate,
+            clockInTime = curTime,
+            clockInTimestamp = now,
+            status = when {
+                !result.isGpsActive || result.status == "PERMISSIONS_MISSING" -> "GPS_DISABLED"
+                !result.isCompliant -> "OUT_OF_BOUNDS"
+                else -> "CLOCKED_IN"
+            },
+            locationTag = profile?.companyName?.ifBlank { "المقر الرئيسي" } ?: "المقر الرئيسي",
+            notes = result.messageAr,
+            isLocationVerified = result.isCompliant,
+            verificationDetails = result.messageAr,
+            outOfBoundsSince = if (result.isCompliant) null else now,
+            gpsStatus = result.status,
+            locationPolicyViolated = !result.isCompliant,
+            lastLocationCheckTime = now,
+            timestamp = now
+        )
+        repository.saveAttendance(attendance)
+
+        if (!result.isCompliant && result.shouldAlertManager) {
+            // Post automated violation notice in Company Staff Group for the manager
+            val wg = repository.getWorkGroupByIdSync(groupId)
+            if (wg != null) {
+                val chat = repository.ensureWorkGroupChat(wg, displayTitle = wg.name)
+                repository.sendMessage(
+                    chatId = chat.id,
+                    senderId = "system",
+                    senderName = "نظام المراقبة الجغرافية",
+                    content = "🚨 تنبيه إداري: ${result.messageAr} (الموظف: ${employee.displayName})",
+                    type = MessageType.SYSTEM.name
+                )
+            }
+        }
+
+        if (com.example.util.RetrofitClient.hasActiveSession()) {
+            try {
+                com.example.util.RetrofitClient.apiService().checkInAttendance(
+                    com.example.util.ApiAttendanceGeoRequest(
+                        gpsEnabled = result.isGpsActive,
+                        latitude = result.currentLatitude,
+                        longitude = result.currentLongitude
+                    )
+                )
+            } catch (_: Exception) {}
+        }
+
+        return result
+    }
+
+    fun openCompanyStaffGroupChat(onChatReady: (String) -> Unit) {
+        viewModelScope.launch(safeExceptionHandler) {
+            val profile = repository.getBusinessProfileSync()
+            val ownerId = currentUser.value?.id ?: "me"
+            val wg = repository.saveBusinessProfileAndSyncGroup(
+                profile = profile ?: BusinessProfileEntity(
+                    ownerId = ownerId,
+                    companyName = currentUser.value?.name ?: "الشركة الرئيسية",
+                    companyGroupName = "مجموعة كل الموظفين"
+                ),
+                ownerId = ownerId
+            )
+            val chat = repository.ensureWorkGroupChat(wg, displayTitle = wg.name)
+            onChatReady(chat.id)
         }
     }
 

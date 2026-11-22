@@ -399,7 +399,21 @@ data class HiddenSubAccountEntity(
     val canCreateInvoices: Boolean = true, // إمكانية إنشاء وفورورد الفواتير
     val canViewReports: Boolean = false, // إمكانية عرض تقارير الأرباح والمبيعات
     val createdAt: Long = System.currentTimeMillis(),
-    val lastActiveAt: Long = System.currentTimeMillis()
+    val lastActiveAt: Long = System.currentTimeMillis(),
+    // Enterprise HR & RBAC extensions
+    val department: String = "العمليات",
+    val baseSalary: Double = 0.0,
+    val salaryCurrency: String = "EGP",
+    val geofenceEnforced: Boolean = true,
+    val permManageBusiness: Boolean = false,
+    val permManageStaff: Boolean = false,
+    val permManagePayroll: Boolean = false,
+    val permManageProjects: Boolean = false,
+    val permAssignTasks: Boolean = false,
+    val permManageAccounting: Boolean = true,
+    val permApproveDiscounts: Boolean = false,
+    val permDirectChat: Boolean = true,
+    val isActiveEmployee: Boolean = true
 )
 
 @Entity(tableName = "work_groups")
@@ -1135,7 +1149,9 @@ data class ProjectTaskEntity(
     val isArchived: Boolean = false, // تم تأكيدها وأرشفتها بالسجلات
     val adminConfirmedAt: Long? = null,
     val financialAmount: Double = 0.0, // المعاملات المالية المربوطة بالمهمة
-    val financialNotes: String? = null
+    val financialNotes: String? = null,
+    val timingMode: String = "HOURS", // NOW, HOURS, DAYS
+    val durationValue: Int = 3
 )
 
 object QuickBusinessReplies {
@@ -1269,5 +1285,70 @@ data class DynamicExcelRowRecordEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+enum class BusinessActivitySector(val labelAr: String, val labelEn: String) {
+    GENERAL_TRADING("تجارة وتوزيع", "Trading & Retail"),
+    GOLD_JEWELRY("ذهب ومجوهرات", "Gold & Jewelry"),
+    CONTRACTING_REAL_ESTATE("مقاولات وعقارات", "Contracting & Real Estate"),
+    RESTAURANT_CAFE("مطاعم وكافيهات", "Restaurants & Hospitality"),
+    CLINIC_PHARMACY("عيادات وصيدليات", "Clinics & Healthcare"),
+    MANUFACTURING("تصنيع ومصانع", "Manufacturing & Industry"),
+    LOGISTICS_SHIPPING("شحن ولوجستيات", "Logistics & Shipping"),
+    SERVICES_MARKETING("خدمات وتسويق", "Services & Marketing"),
+    TECH_SOFTWARE("تقنية وبرمجيات", "Technology & Software"),
+    CUSTOM("نشاط مخصص", "Custom Business");
 
+    fun localizedLabel(language: com.example.util.AppLanguage): String =
+        if (language == com.example.util.AppLanguage.ARABIC) labelAr else labelEn
+}
 
+@Entity(tableName = "business_profiles")
+data class BusinessProfileEntity(
+    @PrimaryKey val id: String = "company_profile_main",
+    val ownerId: String = "",
+    val companyName: String = "",
+    val activityType: String = BusinessActivitySector.GENERAL_TRADING.name,
+    val customActivityLabel: String = "",
+    val commercialRegistration: String = "",
+    val taxNumber: String = "",
+    val phone: String = "",
+    val address: String = "",
+    val currency: String = "EGP",
+    val workStartTime: String = "09:00",
+    val workEndTime: String = "17:00",
+    val hqLatitude: Double? = null,
+    val hqLongitude: Double? = null,
+    val geofenceRadiusMeters: Int = 250,
+    val companyGroupId: String = "wg_company_main",
+    val companyGroupName: String = "مجموعة كل الموظفين",
+    val isSetupCompleted: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "payroll_adjustments")
+data class PayrollAdjustmentEntity(
+    @PrimaryKey val id: String,
+    val employeeId: String,
+    val employeeName: String,
+    val type: String, // BONUS or DEDUCTION
+    val amount: Double,
+    val reason: String,
+    val effectiveDate: String, // YYYY-MM-DD
+    val monthKey: String, // YYYY-MM
+    val createdByName: String = "المدير",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "employee_leaves")
+data class EmployeeLeaveEntity(
+    @PrimaryKey val id: String,
+    val employeeId: String,
+    val employeeName: String,
+    val leaveType: String = "ANNUAL", // ANNUAL, SICK, EMERGENCY, UNPAID
+    val startDate: String, // YYYY-MM-DD
+    val endDate: String, // YYYY-MM-DD
+    val daysCount: Int = 1,
+    val status: String = "APPROVED", // PENDING, APPROVED, REJECTED
+    val notes: String = "",
+    val approvedByName: String = "المدير",
+    val timestamp: Long = System.currentTimeMillis()
+)

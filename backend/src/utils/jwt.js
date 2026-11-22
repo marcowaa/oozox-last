@@ -38,6 +38,24 @@ const generateToken = (userId, role) => {
   );
 };
 
+const generateEmployeeToken = (employee) => {
+  return jwt.sign(
+    {
+      id: employee._id,
+      sub: String(employee._id),
+      role: 'EMPLOYEE',
+      tokenType: 'EMPLOYEE',
+      businessId: String(employee.business),
+      ownerId: String(employee.owner),
+    },
+    getJwtSecret(),
+    {
+      algorithm: 'HS256',
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    }
+  );
+};
+
 const verifyToken = (token) => {
   return jwt.verify(token, getJwtSecret(), {
     algorithms: ['HS256'],
@@ -46,6 +64,7 @@ const verifyToken = (token) => {
 
 module.exports = {
   generateToken,
+  generateEmployeeToken,
   verifyToken,
   getJwtSecret,
 };

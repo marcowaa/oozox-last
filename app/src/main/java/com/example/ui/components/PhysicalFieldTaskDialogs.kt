@@ -39,8 +39,8 @@ import java.util.*
 
 /**
  * Dialog for Admin / Manager to create a Physical Field Operation Task
- * (e.g. Construction, Real Estate, Maintenance) with photo/video of site,
- * assignment to 1-3 persons with mentions, deadline durations, and escalating alerts.
+ * with photo/video attachment, team member mentions, and flexible timing modes:
+ * NOW (immediate), HOURS (1..720h), or DAYS (1..365d).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,43 +54,53 @@ fun CreatePhysicalFieldTaskDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var selectedMediaType by remember { mutableStateOf("PHOTO") } // PHOTO or VIDEO
+    var selectedMediaType by remember { mutableStateOf("PHOTO") }
     var mediaUri by remember { mutableStateOf<String?>(null) }
     val mediaPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        if (uri != null) {
-            mediaUri = uri.toString()
-        }
+        if (uri != null) mediaUri = uri.toString()
     }
     var financialAmountStr by remember { mutableStateOf("") }
     var financialNotes by remember { mutableStateOf("") }
 
-    // Assignees (1, 2, or 3 persons with @mentions)
     val selectedMembers = remember { mutableStateListOf<String>() }
     var customMemberInput by remember { mutableStateOf("") }
 
-    // Deadline Durations (فترات متقطعة)
-    val durationOptions = listOf(
-        Pair("بعد ساعة", 1L * 3600 * 1000),
-        Pair("بعد ساعتين", 2L * 3600 * 1000),
-        Pair("بعد 3 ساعات", 3L * 3600 * 1000),
-        Pair("بعد 6 ساعات", 6L * 3600 * 1000),
-        Pair("بعد 12 ساعة", 12L * 3600 * 1000),
-        Pair("بعد يوم", 24L * 3600 * 1000),
-        Pair("بعد يومين", 48L * 3600 * 1000),
-        Pair("بعد 3 أيام", 72L * 3600 * 1000),
-        Pair("بعد أسبوع", 7L * 24 * 3600 * 1000)
-    )
-    var selectedDurationIndex by remember { mutableIntStateOf(2) } // Default: بعد 3 ساعات
+    // Timing Modes: NOW, HOURS, DAYS (no 4-hour cap!)
+    var timingMode by remember { mutableStateOf("DAYS") } // NOW, HOURS, DAYS
+    var hoursValueText by remember { mutableStateOf("6") }
+    var daysValueText by remember { mutableStateOf("3") }
+    var selectedPriority by remember { mutableStateOf(TaskPriority.HIGH.name) }
 
-    val defaultSuggestedMembers = remember {
+    val suggestedMembers = remember(availableMembers) {
         if (availableMembers.isNotEmpty()) availableMembers else listOf(
-            "@م/ أحمد حسن - مدير الموقع (01011111111)",
-            "@علي محمود - فني سباكة وتشطيبات (01122223333)",
-            "@طارق كمال - مقاول أعمال خرسانية (01233334444)",
-            "@محمد إبراهيم - مسؤول مشتريات (01555556666)"
+            "@فريق العمل الكامل",
+            "@مدير الموقع الميداني",
+            "@مشرف التشغيل والتنفيذ"
         )
+    }
+
+    val durationMillis: Long = when (timingMode) {
+        "NOW" -> 15L * 60L * 1000L // Urgent immediate window (15 mins tracking baseline)
+        "HOURS" -> {
+            val h = (hoursValueText.toIntOrNull() ?: 1).coerceIn(1, 720)
+            h.toLong() * 3600L * 1000L
+        }
+        else -> {
+            val d = (daysValueText.toIntOrNull() ?: 1).coerceIn(1, 365)
+            d.toLong() * 24L * 3600L * 1000L
+        }
+    }
+    val numericDuration: Int = when (timingMode) {
+        "NOW" -> 0
+        "HOURS" -> (hoursValueText.toIntOrNull() ?: 1).coerceIn(1, 720)
+        else -> (daysValueText.toIntOrNull() ?: 1).coerceIn(1, 365)
+    }
+    val deadlineLabelText: String = when (timingMode) {
+        "NOW" -> com.example.util.tr("task.mode_now")
+        "HOURS" -> "$numericDuration ساعة"
+        else -> "$numericDuration يوم"
     }
 
     Dialog(
@@ -100,7 +110,7 @@ fun CreatePhysicalFieldTaskDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.90f),
+                .fillMaxHeight(0.91f),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
@@ -125,25 +135,25 @@ fun CreatePhysicalFieldTaskDialog(
                             modifier = Modifier.size(40.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Construction, contentDescription = null, tint = GoldPrimary)
+                                Icon(Icons.Default.AssignmentInd, contentDescription = null, tint = GoldPrimary)
                             }
                         }
                         Column {
                             Text(
-                                text = "مهمة ميدانية / فيزيائية جديدة 🏗️",
+                                text = com.example.util.tr("hr.assign_task_group"),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "مشروع: $projectName",
+                                text = projectName,
                                 fontSize = 11.5.sp,
-                                color = GoldAccent
+                                color = OozoxTeal
                             )
                         }
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق")
+                        Icon(Icons.Default.Close, contentDescription = com.example.util.tr("common.close"))
                     }
                 }
 
@@ -153,7 +163,7 @@ fun CreatePhysicalFieldTaskDialog(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 1. Media Capture / Attachment Section
+                    // 1. Media Attachment Section
                     item {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -163,7 +173,7 @@ fun CreatePhysicalFieldTaskDialog(
                         ) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "١. تصوير فيديو أو صورة العمل المطلوب من الموقع:",
+                                    text = "١. توثيق صورة أو فيديو العمل المطلوب (اختياري):",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GoldPrimary
@@ -207,8 +217,8 @@ fun CreatePhysicalFieldTaskDialog(
                                 if (mediaUri != null) {
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = if (selectedMediaType == "VIDEO") Color(0xFFEF4444).copy(alpha = 0.1f) else Color(0xFF10B981).copy(alpha = 0.1f),
-                                        border = BorderStroke(1.dp, if (selectedMediaType == "VIDEO") Color(0xFFEF4444).copy(alpha = 0.4f) else Color(0xFF10B981).copy(alpha = 0.4f)),
+                                        color = Color(0xFF10B981).copy(alpha = 0.1f),
+                                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Row(
@@ -220,16 +230,16 @@ fun CreatePhysicalFieldTaskDialog(
                                                 Icon(
                                                     if (selectedMediaType == "VIDEO") Icons.Default.Videocam else Icons.Default.PhotoCamera,
                                                     contentDescription = null,
-                                                    tint = if (selectedMediaType == "VIDEO") Color(0xFFEF4444) else Color(0xFF10B981),
+                                                    tint = Color(0xFF10B981),
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Text(
-                                                    text = if (selectedMediaType == "VIDEO") "تم توثيق فيديو موقع العمل بنجاح (جاهز للإرسال)" else "تم التقاط صورة موقع العمل بنجاح (جاهز للإرسال)",
+                                                    text = if (selectedMediaType == "VIDEO") "تم إرفاق الفيديو" else "تم إرفاق الصورة",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Medium
                                                 )
                                             }
-                                            Text("✓ مرفق", fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                                            Text("✓", fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -242,8 +252,8 @@ fun CreatePhysicalFieldTaskDialog(
                         OutlinedTextField(
                             value = title,
                             onValueChange = { title = it },
-                            label = { Text("عنوان المهمة الميدانية", fontSize = 12.sp) },
-                            placeholder = { Text("مثال: صب خرسانة الدور الرابع / تركيب شبكة الكهرباء") },
+                            label = { Text("عنوان المهمة المطلوبة", fontSize = 12.sp) },
+                            placeholder = { Text("مثال: استلام وتوريد خامات / مراجعة حسابات الفرع") },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth().testTag("field_task_title_input")
@@ -254,8 +264,8 @@ fun CreatePhysicalFieldTaskDialog(
                         OutlinedTextField(
                             value = description,
                             onValueChange = { description = it },
-                            label = { Text("النص التفصيلي بالعمل المطلوب والتعليمات", fontSize = 12.sp) },
-                            placeholder = { Text("اكتب بدقة العمل المطلوب تنفيذه، المواد المستخدمة، والمعايير الهندسية...") },
+                            label = { Text("النص التفصيلي والتعليمات المطلوبة", fontSize = 12.sp) },
+                            placeholder = { Text("اكتب بدقة العمل المطلوب تنفيذه ومعايير التسليم...") },
                             minLines = 3,
                             maxLines = 5,
                             shape = RoundedCornerShape(10.dp),
@@ -263,7 +273,7 @@ fun CreatePhysicalFieldTaskDialog(
                         )
                     }
 
-                    // 3. Assign to 1, 2, or 3 persons with @mentions
+                    // 3. Assign Team Members (unlimited selection + Select All)
                     item {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -277,20 +287,30 @@ fun CreatePhysicalFieldTaskDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "٢. إسناد المهمة بالمنشن (شخص أو ٢ أو ٣ كحد أقصى):",
+                                        text = "٢. إسناد المهمة للموظفين بالمنشن (${selectedMembers.size}):",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = GoldPrimary
                                     )
-                                    Text(
-                                        text = "${selectedMembers.size}/3",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (selectedMembers.size in 1..3) Color(0xFF10B981) else Color.Red
-                                    )
+                                    TextButton(
+                                        onClick = {
+                                            if (selectedMembers.size == suggestedMembers.size) {
+                                                selectedMembers.clear()
+                                            } else {
+                                                selectedMembers.clear()
+                                                selectedMembers.addAll(suggestedMembers)
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (selectedMembers.size == suggestedMembers.size) "إلغاء الكل" else "تحديد الكل",
+                                            fontSize = 11.sp,
+                                            color = OozoxTeal
+                                        )
+                                    }
                                 }
 
-                                // Selected Mentions Chips
                                 if (selectedMembers.isNotEmpty()) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -301,7 +321,7 @@ fun CreatePhysicalFieldTaskDialog(
                                                 selected = true,
                                                 onClick = { selectedMembers.remove(member) },
                                                 label = { Text(member, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                                trailingIcon = { Icon(Icons.Default.Close, contentDescription = "حذف", modifier = Modifier.size(14.dp)) },
+                                                trailingIcon = { Icon(Icons.Default.Close, contentDescription = com.example.util.tr("common.delete"), modifier = Modifier.size(14.dp)) },
                                                 colors = InputChipDefaults.inputChipColors(
                                                     selectedContainerColor = GoldPrimary.copy(alpha = 0.2f),
                                                     selectedLabelColor = GoldAccent
@@ -311,22 +331,13 @@ fun CreatePhysicalFieldTaskDialog(
                                     }
                                 }
 
-                                // Quick Member Suggestions
-                                Text(
-                                    text = "اختر من فريق العمل المشار إليه:",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    defaultSuggestedMembers.forEach { member ->
+                                    suggestedMembers.forEach { member ->
                                         val isChosen = selectedMembers.contains(member)
                                         Surface(
                                             onClick = {
-                                                if (isChosen) {
-                                                    selectedMembers.remove(member)
-                                                } else if (selectedMembers.size < 3) {
-                                                    selectedMembers.add(member)
-                                                }
+                                                if (isChosen) selectedMembers.remove(member)
+                                                else selectedMembers.add(member)
                                             },
                                             shape = RoundedCornerShape(8.dp),
                                             color = if (isChosen) GoldPrimary.copy(alpha = 0.15f) else Color.Transparent,
@@ -340,8 +351,8 @@ fun CreatePhysicalFieldTaskDialog(
                                                 Checkbox(
                                                     checked = isChosen,
                                                     onCheckedChange = { chk ->
-                                                        if (chk && selectedMembers.size < 3) selectedMembers.add(member)
-                                                        else selectedMembers.remove(member)
+                                                        if (chk && !selectedMembers.contains(member)) selectedMembers.add(member)
+                                                        else if (!chk) selectedMembers.remove(member)
                                                     },
                                                     colors = CheckboxDefaults.colors(checkedColor = GoldPrimary),
                                                     modifier = Modifier.size(20.dp)
@@ -353,7 +364,6 @@ fun CreatePhysicalFieldTaskDialog(
                                     }
                                 }
 
-                                // Add Custom Member Input
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -362,20 +372,22 @@ fun CreatePhysicalFieldTaskDialog(
                                     OutlinedTextField(
                                         value = customMemberInput,
                                         onValueChange = { customMemberInput = it },
-                                        placeholder = { Text("أو اكتب منشن مخصص: @الاسم (الهاتف)...", fontSize = 11.sp) },
+                                        placeholder = { Text("أو أضف موظف/منشن: @الاسم...", fontSize = 11.sp) },
                                         singleLine = true,
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.weight(1f)
                                     )
                                     Button(
                                         onClick = {
-                                            if (customMemberInput.isNotBlank() && selectedMembers.size < 3) {
+                                            if (customMemberInput.isNotBlank()) {
                                                 val formatted = if (customMemberInput.startsWith("@")) customMemberInput.trim() else "@${customMemberInput.trim()}"
-                                                selectedMembers.add(formatted)
+                                                if (!selectedMembers.contains(formatted)) {
+                                                    selectedMembers.add(formatted)
+                                                }
                                                 customMemberInput = ""
                                             }
                                         },
-                                        enabled = customMemberInput.isNotBlank() && selectedMembers.size < 3,
+                                        enabled = customMemberInput.isNotBlank(),
                                         shape = RoundedCornerShape(8.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.Black),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
@@ -387,18 +399,18 @@ fun CreatePhysicalFieldTaskDialog(
                         }
                     }
 
-                    // 4. Delivery Deadline & Escalating Reminders
+                    // 4. Flexible Timing Mode (NOW / HOURS / DAYS) — NO 4-hour restriction!
                     item {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Icon(Icons.Default.Timer, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Schedule, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(18.dp))
                                     Text(
-                                        text = "٣. تحديد مدة التسليم المطلوبة (فترات محددة):",
+                                        text = "٣. ${com.example.util.tr("task.timing_mode_label")}:",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = GoldPrimary
@@ -406,57 +418,119 @@ fun CreatePhysicalFieldTaskDialog(
                                 }
 
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
+                                    modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    durationOptions.forEachIndexed { index, option ->
+                                    listOf(
+                                        "NOW" to com.example.util.tr("task.mode_now"),
+                                        "HOURS" to com.example.util.tr("task.mode_hours"),
+                                        "DAYS" to com.example.util.tr("task.mode_days")
+                                    ).forEach { (modeKey, modeLabel) ->
                                         FilterChip(
-                                            selected = selectedDurationIndex == index,
-                                            onClick = { selectedDurationIndex = index },
-                                            label = { Text(option.first, fontSize = 11.sp) },
+                                            selected = timingMode == modeKey,
+                                            onClick = {
+                                                timingMode = modeKey
+                                                if (modeKey == "NOW") selectedPriority = TaskPriority.URGENT.name
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = modeLabel,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = if (timingMode == modeKey) FontWeight.Bold else FontWeight.Normal,
+                                                    maxLines = 1
+                                                )
+                                            },
                                             colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = GoldPrimary,
-                                                selectedLabelColor = Color.Black
+                                                selectedContainerColor = if (modeKey == "NOW") Color(0xFFEF4444) else OozoxTeal,
+                                                selectedLabelColor = Color.White
                                             ),
-                                            shape = RoundedCornerShape(8.dp)
+                                            modifier = Modifier.weight(1f)
                                         )
                                     }
                                 }
 
-                                val chosenDuration = durationOptions[selectedDurationIndex]
-                                val deadlineDate = Date(System.currentTimeMillis() + chosenDuration.second)
+                                if (timingMode == "HOURS") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = hoursValueText,
+                                            onValueChange = { raw ->
+                                                val digits = raw.filter { it.isDigit() }.take(3)
+                                                hoursValueText = digits
+                                            },
+                                            label = { Text(com.example.util.tr("task.custom_hours_label"), fontSize = 11.sp) },
+                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                            ),
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f).testTag("task_hours_input")
+                                        )
+                                        listOf(2, 6, 12, 24, 48).forEach { preset ->
+                                            FilterChip(
+                                                selected = hoursValueText == preset.toString(),
+                                                onClick = { hoursValueText = preset.toString() },
+                                                label = { Text("${preset}س", fontSize = 10.5.sp) }
+                                            )
+                                        }
+                                    }
+                                } else if (timingMode == "DAYS") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = daysValueText,
+                                            onValueChange = { raw ->
+                                                val digits = raw.filter { it.isDigit() }.take(3)
+                                                daysValueText = digits
+                                            },
+                                            label = { Text(com.example.util.tr("task.custom_days_label"), fontSize = 11.sp) },
+                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                            ),
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f).testTag("task_days_input")
+                                        )
+                                        listOf(1, 3, 7, 14, 30).forEach { preset ->
+                                            FilterChip(
+                                                selected = daysValueText == preset.toString(),
+                                                onClick = { daysValueText = preset.toString() },
+                                                label = { Text("${preset}ي", fontSize = 10.5.sp) }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                val deadlineDate = Date(System.currentTimeMillis() + durationMillis)
                                 val deadlineFormatted = SimpleDateFormat("yyyy-MM-dd  hh:mm a", Locale.getDefault()).format(deadlineDate)
 
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = Color(0xFFF59E0B).copy(alpha = 0.12f),
-                                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f)),
+                                    color = if (timingMode == "NOW") Color(0xFFEF4444).copy(alpha = 0.12f) else OozoxTeal.copy(alpha = 0.12f),
+                                    border = BorderStroke(1.dp, if (timingMode == "NOW") Color(0xFFEF4444).copy(alpha = 0.4f) else OozoxTeal.copy(alpha = 0.4f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = if (timingMode == "NOW") Color(0xFFEF4444) else OozoxTeal, modifier = Modifier.size(16.dp))
                                             Text(
-                                                text = "الموعد النهائي للتسليم: $deadlineFormatted",
+                                                text = if (timingMode == "NOW") "تنفيذ فوري (حالاً): يبدأ التتبع والإنذار الآن" else "المدة: $deadlineLabelText • الموعد: $deadlineFormatted",
                                                 fontSize = 11.5.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFF59E0B)
+                                                color = if (timingMode == "NOW") Color(0xFFEF4444) else OozoxTeal
                                             )
                                         }
-                                        Text(
-                                            text = "🔔 نظام التنبيهات التصاعدية: يتم تنبيه الأدمن والمكلفين قبل الميعاد، وتزداد سرعة التنبيهات وتكرارها كلما اقترب الميعاد جداً ولم يتم الرد.",
-                                            fontSize = 10.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    // 5. Optional Financial Amount (مكافأة أو تكلفة)
+                    // 5. Optional Financial Amount
                     item {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -465,7 +539,7 @@ fun CreatePhysicalFieldTaskDialog(
                         ) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "٤. التعاملات المالية المربوطة بالمهمة (اختياري):",
+                                    text = "٤. البند المالي أو الحافز المربوط بالمهمة (اختياري):",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GoldPrimary
@@ -473,7 +547,7 @@ fun CreatePhysicalFieldTaskDialog(
                                 OutlinedTextField(
                                     value = financialAmountStr,
                                     onValueChange = { financialAmountStr = it.filter { c -> c.isDigit() || c == '.' } },
-                                    label = { Text("المبلغ المالي أو المكافأة أو التكلفة (ج.م)", fontSize = 11.5.sp) },
+                                    label = { Text("المبلغ المالي أو المكافأة أو التكلفة", fontSize = 11.5.sp) },
                                     placeholder = { Text("مثال: 1500") },
                                     leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(18.dp)) },
                                     singleLine = true,
@@ -483,7 +557,7 @@ fun CreatePhysicalFieldTaskDialog(
                                 OutlinedTextField(
                                     value = financialNotes,
                                     onValueChange = { financialNotes = it },
-                                    label = { Text("تفاصيل البند المالي (مثال: أجر مصنعية صب خرسانة)", fontSize = 11.sp) },
+                                    label = { Text("تفاصيل البند المالي", fontSize = 11.sp) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.fillMaxWidth()
@@ -495,7 +569,6 @@ fun CreatePhysicalFieldTaskDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Action Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -507,13 +580,12 @@ fun CreatePhysicalFieldTaskDialog(
                             .weight(1f)
                             .heightIn(min = 48.dp)
                     ) {
-                        Text("إلغاء")
+                        Text(com.example.util.tr("common.cancel"))
                     }
 
                     Button(
                         onClick = {
-                            val chosenDuration = durationOptions[selectedDurationIndex]
-                            val deadlineTimestamp = System.currentTimeMillis() + chosenDuration.second
+                            val deadlineTimestamp = System.currentTimeMillis() + durationMillis
                             val deadlineDate = Date(deadlineTimestamp)
                             val deadlineFormatted = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(deadlineDate)
                             val finAmount = financialAmountStr.toDoubleOrNull() ?: 0.0
@@ -527,7 +599,7 @@ fun CreatePhysicalFieldTaskDialog(
                                 assignedToUserId = null,
                                 assignedToName = selectedMembers.joinToString("، "),
                                 assignedToPhone = null,
-                                priority = TaskPriority.HIGH.name,
+                                priority = if (timingMode == "NOW") TaskPriority.URGENT.name else selectedPriority,
                                 status = TaskStatus.PENDING.name,
                                 dueDate = deadlineFormatted,
                                 costEstimate = finAmount,
@@ -537,11 +609,13 @@ fun CreatePhysicalFieldTaskDialog(
                                 mediaAttachmentType = selectedMediaType,
                                 assignedMembersList = selectedMembers.joinToString(" | "),
                                 assignedMemberIds = "",
-                                deadlineDurationText = chosenDuration.first,
+                                deadlineDurationText = deadlineLabelText,
                                 deadlineTimestamp = deadlineTimestamp,
-                                urgencyAlertLevel = "NORMAL",
+                                urgencyAlertLevel = if (timingMode == "NOW") "CRITICAL" else "NORMAL",
                                 financialAmount = finAmount,
-                                financialNotes = financialNotes.ifBlank { null }
+                                financialNotes = financialNotes.ifBlank { null },
+                                timingMode = timingMode,
+                                durationValue = numericDuration
                             )
 
                             onCreateTask(task)

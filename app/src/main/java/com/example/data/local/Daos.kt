@@ -977,6 +977,38 @@ interface DynamicExcelDao {
     suspend fun clearTemplateRows(templateId: String)
 }
 
+@Dao
+interface BusinessHrDao {
+    @Query("SELECT * FROM business_profiles LIMIT 1")
+    fun observeBusinessProfile(): Flow<BusinessProfileEntity?>
 
+    @Query("SELECT * FROM business_profiles LIMIT 1")
+    suspend fun getBusinessProfileSync(): BusinessProfileEntity?
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveBusinessProfile(profile: BusinessProfileEntity)
 
+    @Query("SELECT * FROM payroll_adjustments ORDER BY timestamp DESC")
+    fun getAllPayrollAdjustments(): Flow<List<PayrollAdjustmentEntity>>
+
+    @Query("SELECT * FROM payroll_adjustments WHERE employeeId = :employeeId ORDER BY timestamp DESC")
+    fun getPayrollForEmployee(employeeId: String): Flow<List<PayrollAdjustmentEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPayrollAdjustment(adjustment: PayrollAdjustmentEntity)
+
+    @Query("DELETE FROM payroll_adjustments WHERE id = :id")
+    suspend fun deletePayrollAdjustment(id: String)
+
+    @Query("SELECT * FROM employee_leaves ORDER BY startDate DESC")
+    fun getAllEmployeeLeaves(): Flow<List<EmployeeLeaveEntity>>
+
+    @Query("SELECT * FROM employee_leaves WHERE employeeId = :employeeId ORDER BY startDate DESC")
+    fun getLeavesForEmployee(employeeId: String): Flow<List<EmployeeLeaveEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEmployeeLeave(leave: EmployeeLeaveEntity)
+
+    @Query("DELETE FROM employee_leaves WHERE id = :id")
+    suspend fun deleteEmployeeLeave(id: String)
+}

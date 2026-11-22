@@ -997,10 +997,17 @@ fun ProjectDetailScreen(
                                                 tint = if (isOverdue) Color.Red else if (isVeryUrgent) Color(0xFFF59E0B) else GoldPrimary,
                                                 modifier = Modifier.size(16.dp)
                                             )
+                                            val totalHoursRem = diffMs / 3600000L
+                                            val daysRem = totalHoursRem / 24L
+                                            val remHoursPart = totalHoursRem % 24L
+                                            val remainingLabel = when {
+                                                daysRem >= 1L -> "${daysRem} يوم و ${remHoursPart} س"
+                                                else -> "${totalHoursRem} س و ${(diffMs % 3600000L) / 60000L} د"
+                                            }
                                             Text(
                                                 text = if (isOverdue) "🛑 تجاوزت المهمة موعد التسليم المحدد!"
-                                                else if (isVeryUrgent) "🚨 تنبيه متصاعد: اقترب موعد التسليم جداً (${diffMs / 60000} دقيقة متبقية) ولم يتم الرد!"
-                                                else "⏳ مدة التسليم المطلوبة: ${task.deadlineDurationText} (متبقي ${diffMs / 3600000} س و ${(diffMs % 3600000) / 60000} د)",
+                                                else if (isVeryUrgent) "🚨 تنبيه متصاعد: اقترب موعد التسليم جداً (${diffMs / 60000} دقيقة متبقية)!"
+                                                else "⏳ المدة: ${task.deadlineDurationText} (متبقي $remainingLabel)",
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isOverdue) Color.Red else if (isVeryUrgent) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurface
@@ -1569,19 +1576,41 @@ fun ProjectDetailScreen(
     }
 
     if (showAddTaskDialog) {
+        var taskTimingMode by remember { mutableStateOf("DAYS") } // NOW, HOURS, DAYS
+        var taskHoursText by remember { mutableStateOf("6") }
+        var taskDaysText by remember { mutableStateOf("3") }
+        val scrollStateDialog = rememberScrollState()
+
+        val calculatedDurationMs: Long = when (taskTimingMode) {
+            "NOW" -> 15L * 60L * 1000L
+            "HOURS" -> ((taskHoursText.toIntOrNull() ?: 1).coerceIn(1, 720)).toLong() * 3600L * 1000L
+            else -> ((taskDaysText.toIntOrNull() ?: 1).coerceIn(1, 365)).toLong() * 24L * 3600L * 1000L
+        }
+        val calculatedDurationNum: Int = when (taskTimingMode) {
+            "NOW" -> 0
+            "HOURS" -> (taskHoursText.toIntOrNull() ?: 1).coerceIn(1, 720)
+            else -> (taskDaysText.toIntOrNull() ?: 1).coerceIn(1, 365)
+        }
+        val calculatedDurationText: String = when (taskTimingMode) {
+            "NOW" -> com.example.util.tr("task.mode_now")
+            "HOURS" -> "$calculatedDurationNum ساعة"
+            else -> "$calculatedDurationNum يوم"
+        }
+
         AlertDialog(
             onDismissRequest = { showAddTaskDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.AddTask, contentDescription = null, tint = GoldPrimary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("إضافة مهمة جديدة للمشروع (Offline)", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("إسناد مهمة جديدة للمشروع", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             },
             text = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(scrollStateDialog)
                         .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -1589,7 +1618,7 @@ fun ProjectDetailScreen(
                         value = newTaskTitle,
                         onValueChange = { newTaskTitle = it },
                         label = { Text("عنوان المهمة / البند") },
-                        placeholder = { Text("توريد خامات") },
+                        placeholder = { Text("توريد خامات / مراجعة هندسية") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1603,31 +1632,73 @@ fun ProjectDetailScreen(
                     OutlinedTextField(
                         value = newTaskAssignee,
                         onValueChange = { newTaskAssignee = it },
-                        label = { Text("اسم المكلف / المهندس المشرف") },
+                        label = { Text("اسم المكلف / الموظف المسؤول") },
                         placeholder = { Text("م. أحمد") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
-                        value = newTaskDueDate,
-                        onValueChange = { newTaskDueDate = it },
-                        label = { Text("موعد التسليم المتوقع (اختياري)") },
-                        placeholder = { Text("مثال: 2026-09-15") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+
+                    Text(
+                        text = com.example.util.tr("task.timing_mode_label"),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldPrimary
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            "NOW" to com.example.util.tr("task.mode_now"),
+                            "HOURS" to com.example.util.tr("task.mode_hours"),
+                            "DAYS" to com.example.util.tr("task.mode_days")
+                        ).forEach { (mKey, mLabel) ->
+                            FilterChip(
+                                selected = taskTimingMode == mKey,
+                                onClick = {
+                                    taskTimingMode = mKey
+                                    if (mKey == "NOW") newTaskPriority = TaskPriority.URGENT.name
+                                },
+                                label = { Text(mLabel, fontSize = 10.sp, maxLines = 1) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    if (taskTimingMode == "HOURS") {
+                        OutlinedTextField(
+                            value = taskHoursText,
+                            onValueChange = { taskHoursText = it.filter { c -> c.isDigit() }.take(3) },
+                            label = { Text(com.example.util.tr("task.custom_hours_label")) },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else if (taskTimingMode == "DAYS") {
+                        OutlinedTextField(
+                            value = taskDaysText,
+                            onValueChange = { taskDaysText = it.filter { c -> c.isDigit() }.take(3) },
+                            label = { Text(com.example.util.tr("task.custom_days_label")) },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
                     OutlinedTextField(
                         value = newTaskCost,
                         onValueChange = { newTaskCost = it },
-                        label = { Text("التكلفة التقديرية (ج.م)") },
+                        label = { Text("التكلفة التقديرية أو الميزانية") },
                         placeholder = { Text("0.0") },
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("الأولوية:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
@@ -1658,27 +1729,45 @@ fun ProjectDetailScreen(
                             .weight(1f)
                             .height(48.dp)
                     ) {
-                        Text("إلغاء", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(com.example.util.tr("common.cancel"), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Button(
                         onClick = {
                             if (newTaskTitle.isNotBlank()) {
                                 val cost = newTaskCost.toDoubleOrNull() ?: 0.0
-                                onAddTask(
-                                    newTaskTitle.trim(),
-                                    newTaskDesc.trim().ifBlank { null },
-                                    newTaskAssignee.trim().ifBlank { null },
-                                    newTaskPriority,
-                                    newTaskDueDate.trim().ifBlank { null },
-                                    cost
+                                val deadlineTs = System.currentTimeMillis() + calculatedDurationMs
+                                val dueFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(deadlineTs))
+                                val assigneeName = newTaskAssignee.trim().ifBlank { "فريق المشروع" }
+                                val task = ProjectTaskEntity(
+                                    id = "proj_task_${System.currentTimeMillis()}",
+                                    projectId = project.id,
+                                    projectName = project.name,
+                                    title = newTaskTitle.trim(),
+                                    description = newTaskDesc.trim().ifBlank { null },
+                                    assignedToUserId = null,
+                                    assignedToName = assigneeName,
+                                    assignedToPhone = null,
+                                    priority = if (taskTimingMode == "NOW") TaskPriority.URGENT.name else newTaskPriority,
+                                    status = TaskStatus.PENDING.name,
+                                    dueDate = dueFmt,
+                                    costEstimate = cost,
+                                    isSynced = true,
+                                    workGroupId = workGroup?.id,
+                                    assignedMembersList = assigneeName,
+                                    deadlineDurationText = calculatedDurationText,
+                                    deadlineTimestamp = deadlineTs,
+                                    urgencyAlertLevel = if (taskTimingMode == "NOW") "CRITICAL" else "NORMAL",
+                                    financialAmount = cost,
+                                    timingMode = taskTimingMode,
+                                    durationValue = calculatedDurationNum
                                 )
+                                onAddFieldTask(task)
                                 newTaskTitle = ""
                                 newTaskDesc = ""
                                 newTaskAssignee = ""
                                 newTaskCost = ""
                                 newTaskDueDate = ""
                                 showAddTaskDialog = false
-                                Toast.makeText(context, "تم حفظ المهمة محلياً", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, "يرجى كتابة عنوان المهمة", Toast.LENGTH_SHORT).show()
                             }
@@ -1689,7 +1778,7 @@ fun ProjectDetailScreen(
                             .weight(1f)
                             .height(48.dp)
                     ) {
-                        Text("حفظ المهمة", color = adaptiveOnPrimary, fontWeight = FontWeight.Bold)
+                        Text("إسناد المهمة", color = adaptiveOnPrimary, fontWeight = FontWeight.Bold)
                     }
                 }
             },

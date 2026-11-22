@@ -64,9 +64,14 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf("-Xbackend-threads=4")
     }
     buildFeatures {
         compose = true
+        aidl = false
+        renderScript = false
+        shaders = false
+        resValues = false
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true

@@ -70,6 +70,9 @@ class GoldChatRepository(context: Context) {
     val allInvoices: Flow<List<InvoiceEntity>> = db.invoiceDao().getAllInvoices()
     val allProjectTasks: Flow<List<ProjectTaskEntity>> = db.projectTaskDao().getAllProjectTasks()
     val allShiftHandovers: Flow<List<ShiftHandoverEntity>> = db.shiftHandoverDao().getAllShiftHandovers()
+    val businessProfile: Flow<BusinessProfileEntity?> = db.businessHrDao().observeBusinessProfile()
+    val allPayrollAdjustments: Flow<List<PayrollAdjustmentEntity>> = db.businessHrDao().getAllPayrollAdjustments()
+    val allEmployeeLeaves: Flow<List<EmployeeLeaveEntity>> = db.businessHrDao().getAllEmployeeLeaves()
 
     fun getTasksForProject(projectId: String): Flow<List<ProjectTaskEntity>> = db.projectTaskDao().getTasksForProject(projectId)
     fun getTaskById(id: String): Flow<ProjectTaskEntity?> = db.projectTaskDao().getTaskById(id)
@@ -2530,6 +2533,140 @@ class GoldChatRepository(context: Context) {
     ) = withContext(Dispatchers.IO) {
         db.projectTaskDao().confirmAndArchiveTask(id, financialAmount, financialNotes)
     }
+
+    // ---------------- Enterprise Business Profile, Company Group, Payroll & Leaves ----------------
+
+    suspend fun getBusinessProfileSync(): BusinessProfileEntity? = withContext(Dispatchers.IO) {
+        db.businessHrDao().getBusinessProfileSync()
+    }
+
+    suspend fun saveBusinessProfileAndSyncGroup(
+        profile: BusinessProfileEntity,
+        ownerId: String
+    ): WorkGroupEntity = withContext(Dispatchers.IO) {
+        val groupId = profile.companyGroupId.ifBlank { "wg_company_main" }
+        val groupName = profile.companyGroupName.ifBlank {
+            if (profile.companyName.isNotBlank()) "مجموعة موظفي ${profile.companyName}"
+            else "مجموعة كل الموظفين"
+        }
+        val cleanProfile = profile.copy(
+            id = "company_profile_main",
+            ownerId = ownerId.ifBlank { profile.ownerId.ifBlank { "me" } },
+            companyGroupId = groupId,
+            companyGroupName = groupName,
+            isSetupCompleted = profile.companyName.isNotBlank(),
+            updatedAt = System.currentTimeMillis()
+        )
+        db.businessHrDao().saveBusinessProfile(cleanProfile)
+
+        val existingGroup = db.workGroupDao().getWorkGroupById(groupId)
+        val group = WorkGroupEntity(
+            id = groupId,
+            name = groupName,
+            description = cleanProfile.customActivityLabel.ifBlank { cleanProfile.activityType },
+            ownerId = cleanProfile.ownerId,
+            isAccountingGroup = true,
+            isPrivate = true,
+            disableMemberDMs = false,
+            companyName = cleanProfile.companyName.ifBlank { groupName },
+            workType = "PHYSICAL_OPERATIONS",
+            createdAt = existingGroup?.createdAt ?: System.currentTimeMillis()
+        )
+        db.workGroupDao().insertWorkGroup(group)
+        ensureWorkGroupChat(
+            workGroup = group,
+            displayTitle = groupName,
+            initialSystemMessage = "تم إنشاء/تحديث مجموعة كل الموظفين (${groupName}) لإدارة المهام والتنبيهات"
+        )
+
+        val existingEmployees = db.hiddenSubAccountDao().getAllSubAccounts().first()
+        existingEmployees.filter { it.isActiveEmployee }.forEach { emp ->
+            syncEmployeeToCompanyGroup(emp, cleanProfile)
+        }
+
+        val currentMembers = db.workGroupDao().getGroupMembersSync(groupId)
+        currentMembers.forEach { member ->
+            db.workGroupDao().insertGroupMember(
+                member.copy(
+                    workingHoursStart = cleanProfile.workStartTime,
+                    workingHoursEnd = cleanProfile.workEndTime,
+                    workplaceLocation = cleanProfile.address.ifBlank { cleanProfile.companyName },
+                    workplaceLatitude = cleanProfile.hqLatitude,
+                    workplaceLongitude = cleanProfile.hqLongitude,
+                    geofencingRadiusMeters = cleanProfile.geofenceRadiusMeters.coerceIn(50, 5000)
+                )
+            )
+        }
+        group
+    }
+
+    suspend fun syncEmployeeToCompanyGroup(
+        employee: HiddenSubAccountEntity,
+        profile: BusinessProfileEntity? = null
+    ) = withContext(Dispatchers.IO) {
+        val activeProfile = profile ?: db.businessHrDao().getBusinessProfileSync()
+        val groupId = activeProfile?.companyGroupId?.ifBlank { "wg_company_main" } ?: "wg_company_main"
+        val existingGroup = db.workGroupDao().getWorkGroupById(groupId)
+        val groupName = activeProfile?.companyGroupName?.ifBlank { "مجموعة كل الموظفين" } ?: "مجموعة كل الموظفين"
+        if (existingGroup == null) {
+            val wg = WorkGroupEntity(
+                id = groupId,
+                name = groupName,
+                ownerId = activeProfile?.ownerId?.ifBlank { "me" } ?: "me",
+                isAccountingGroup = true,
+                isPrivate = true,
+                disableMemberDMs = false,
+                companyName = activeProfile?.companyName ?: groupName,
+                workType = "PHYSICAL_OPERATIONS"
+            )
+            db.workGroupDao().insertWorkGroup(wg)
+            ensureWorkGroupChat(wg, displayTitle = groupName)
+        }
+
+        val memberId = "gm_${employee.id}"
+        val existingMember = db.workGroupDao().getGroupMembersSync(groupId).firstOrNull { it.id == memberId }
+        val member = GroupMemberEntity(
+            id = memberId,
+            groupId = groupId,
+            userId = employee.id,
+            username = employee.displayName,
+            phone = employee.phone.orEmpty(),
+            roleLabel = employee.roleTitle.ifBlank { "موظف" },
+            status = if (employee.isActiveEmployee) "accepted" else "inactive",
+            workingHoursStart = activeProfile?.workStartTime ?: "09:00",
+            workingHoursEnd = activeProfile?.workEndTime ?: "17:00",
+            canPostAccounting = employee.permManageAccounting || employee.canCreateInvoices,
+            canExportReports = employee.canViewReports,
+            canEditRecords = employee.permManageProjects || employee.permAssignTasks,
+            canMessageDirectly = employee.permDirectChat,
+            isGroupAdmin = employee.permManageBusiness || employee.permManageStaff,
+            notes = "${employee.department} • @${employee.username}",
+            addedAt = existingMember?.addedAt ?: System.currentTimeMillis(),
+            workplaceLocation = activeProfile?.address?.ifBlank { activeProfile.companyName } ?: "مقر العمل",
+            workplaceLatitude = activeProfile?.hqLatitude,
+            workplaceLongitude = activeProfile?.hqLongitude,
+            geofencingEnabled = employee.geofenceEnforced && activeProfile?.hqLatitude != null && activeProfile.hqLongitude != null,
+            geofencingRadiusMeters = (activeProfile?.geofenceRadiusMeters ?: 250).coerceIn(50, 5000)
+        )
+        db.workGroupDao().insertGroupMember(member)
+    }
+
+    suspend fun insertPayrollAdjustment(adjustment: PayrollAdjustmentEntity) = withContext(Dispatchers.IO) {
+        db.businessHrDao().insertPayrollAdjustment(adjustment)
+    }
+
+    suspend fun deletePayrollAdjustment(id: String) = withContext(Dispatchers.IO) {
+        db.businessHrDao().deletePayrollAdjustment(id)
+    }
+
+    suspend fun insertEmployeeLeave(leave: EmployeeLeaveEntity) = withContext(Dispatchers.IO) {
+        db.businessHrDao().insertEmployeeLeave(leave)
+    }
+
+    suspend fun deleteEmployeeLeave(id: String) = withContext(Dispatchers.IO) {
+        db.businessHrDao().deleteEmployeeLeave(id)
+    }
 }
+
 
 

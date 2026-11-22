@@ -26,7 +26,19 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['INVOICE_CREATED', 'INVOICE_PAID', 'INVOICE_OVERDUE', 'INVOICE_CANCELLED', 'SYSTEM'],
+      enum: [
+        'INVOICE_CREATED',
+        'INVOICE_PAID',
+        'INVOICE_OVERDUE',
+        'INVOICE_CANCELLED',
+        'SYSTEM',
+        'GEOFENCE_ALERT',
+        'GPS_DISABLED_ALERT',
+        'TASK_ASSIGNED',
+        'TASK_COMPLETED',
+        'LEAVE_UPDATED',
+        'PAYROLL_UPDATED',
+      ],
       default: 'INVOICE_CREATED',
     },
     relatedInvoice: {

@@ -160,6 +160,79 @@ data class ApiNotificationsData(
     val unreadCount: Int = 0
 )
 
+@Serializable
+data class ApiBusinessProfileRequest(
+    val companyName: String,
+    val activityType: String,
+    val customActivityLabel: String = "",
+    val commercialRegistration: String = "",
+    val taxNumber: String = "",
+    val phone: String = "",
+    val address: String = "",
+    val currency: String = "EGP",
+    val hqLatitude: Double? = null,
+    val hqLongitude: Double? = null,
+    val geofenceRadiusMeters: Int = 250,
+    val companyGroupName: String = ""
+)
+
+@Serializable
+data class ApiEmployeePermissionsDto(
+    val manageBusiness: Boolean = false,
+    val manageStaff: Boolean = false,
+    val managePayroll: Boolean = false,
+    val manageProjects: Boolean = false,
+    val assignTasks: Boolean = false,
+    val manageAccounting: Boolean = true,
+    val createInvoices: Boolean = true,
+    val approveDiscounts: Boolean = false,
+    val viewReports: Boolean = false,
+    val directChat: Boolean = true
+)
+
+@Serializable
+data class ApiCreateEmployeeRequest(
+    val fullName: String,
+    val username: String,
+    val phone: String = "",
+    val password: String,
+    val roleTitle: String,
+    val department: String = "العمليات",
+    val baseSalary: Double = 0.0,
+    val salaryCurrency: String = "EGP",
+    val geofenceEnforced: Boolean = true,
+    val permissions: ApiEmployeePermissionsDto = ApiEmployeePermissionsDto()
+)
+
+@Serializable
+data class ApiEmployeeLoginRequest(
+    val username: String,
+    val password: String
+)
+
+@Serializable
+data class ApiAttendanceGeoRequest(
+    val employeeId: String? = null,
+    val gpsEnabled: Boolean,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+)
+
+@Serializable
+data class ApiCreateTaskRequest(
+    val projectId: String,
+    val projectName: String,
+    val workGroupId: String = "wg_company_main",
+    val title: String,
+    val description: String = "",
+    val timingMode: String = "HOURS",
+    val durationValue: Int = 1,
+    val assignees: List<String> = emptyList(),
+    val priority: String = "HIGH",
+    val financialAmount: Double = 0.0,
+    val financialNotes: String = ""
+)
+
 interface OozoxApiService {
     @GET("health")
     suspend fun getHealth(): Response<ApiEnvelope<ApiHealthData>>
@@ -213,4 +286,22 @@ interface OozoxApiService {
 
     @PATCH("notifications/{id}/read")
     suspend fun markNotificationRead(@Path("id") id: String): Response<ApiEnvelope<Unit>>
+
+    @retrofit2.http.PUT("business/profile")
+    suspend fun upsertBusinessProfile(@Body request: ApiBusinessProfileRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("hr/employees")
+    suspend fun createEmployee(@Body request: ApiCreateEmployeeRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("hr/employee-login")
+    suspend fun employeeLogin(@Body request: ApiEmployeeLoginRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("hr/attendance/check-in")
+    suspend fun checkInAttendance(@Body request: ApiAttendanceGeoRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("hr/attendance/heartbeat")
+    suspend fun sendAttendanceHeartbeat(@Body request: ApiAttendanceGeoRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("tasks")
+    suspend fun createWorkTask(@Body request: ApiCreateTaskRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
 }
