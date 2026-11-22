@@ -6,6 +6,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -47,13 +48,44 @@ data class ApiUserDto(
     val email: String = "",
     val phone: String = "",
     val role: String = "USER",
-    val avatar: String = ""
+    val avatar: String = "",
+    val preferredLanguage: String = "ar"
 )
 
 @Serializable
 data class ApiAuthData(
     val user: ApiUserDto? = null,
     val token: String = ""
+)
+
+@Serializable
+data class ApiSupportedLanguageDto(
+    val code: String = "",
+    val name: String = "",
+    val nativeName: String = "",
+    val flag: String = "",
+    val dir: String = "ltr"
+)
+
+@Serializable
+data class ApiLanguagesListData(
+    val version: String = "",
+    val defaultLanguage: String = "ar",
+    val languages: List<ApiSupportedLanguageDto> = emptyList()
+)
+
+@Serializable
+data class ApiLocalizationBundleData(
+    val language: String = "ar",
+    val dir: String = "ltr",
+    val version: String = "",
+    val count: Int = 0,
+    val strings: Map<String, String> = emptyMap()
+)
+
+@Serializable
+data class ApiUpdateLanguageRequest(
+    val language: String
 )
 
 @Serializable
@@ -131,6 +163,20 @@ data class ApiNotificationsData(
 interface OozoxApiService {
     @GET("health")
     suspend fun getHealth(): Response<ApiEnvelope<ApiHealthData>>
+
+    @GET("i18n/languages")
+    suspend fun getSupportedLanguages(): Response<ApiEnvelope<ApiLanguagesListData>>
+
+    @GET("i18n/{lang}")
+    suspend fun getLocalizationBundle(
+        @Path("lang") lang: String,
+        @Header("If-None-Match") ifNoneMatch: String? = null
+    ): Response<ApiEnvelope<ApiLocalizationBundleData>>
+
+    @PATCH("auth/language")
+    suspend fun updatePreferredLanguage(
+        @Body request: ApiUpdateLanguageRequest
+    ): Response<ApiEnvelope<ApiAuthData>>
 
     @POST("auth/register")
     suspend fun register(@Body request: ApiRegisterRequest): Response<ApiEnvelope<ApiAuthData>>

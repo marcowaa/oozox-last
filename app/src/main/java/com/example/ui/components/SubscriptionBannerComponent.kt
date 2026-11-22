@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -23,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.data.model.SubscriptionTier
 import com.example.data.model.UserEntity
 import com.example.ui.theme.*
 import com.example.util.*
@@ -34,8 +32,16 @@ fun SubscriptionStatusTopBanner(
     onOpenSubscriptions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val subDetails = remember(currentUser?.subscriptionTier, currentUser?.subscriptionEndTimestamp, currentUser?.subscriptionStartTimestamp) {
-        SubscriptionFeatureGate.evaluateSubscription(currentUser)
+    val currentLanguage = LocalAppLanguage.current
+    val catalogTick = Translations.catalogVersion
+    val subDetails = remember(
+        currentUser?.subscriptionTier,
+        currentUser?.subscriptionEndTimestamp,
+        currentUser?.subscriptionStartTimestamp,
+        currentLanguage,
+        catalogTick
+    ) {
+        SubscriptionFeatureGate.evaluateSubscription(currentUser, currentLanguage)
     }
 
     var isExpanded by remember { mutableStateOf(false) }
@@ -96,6 +102,7 @@ fun SubscriptionStatusTopBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .weight(1f)
+                        .heightIn(min = 48.dp)
                         .clickable { isExpanded = !isExpanded }
                 ) {
                     Box(
@@ -147,12 +154,18 @@ fun SubscriptionStatusTopBanner(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE) GoldDark else iconTint
                     ),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag("btn_banner_upgrade")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_banner_upgrade")
                 ) {
                     Text(
-                        text = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE) "الباقات" else "ترقية",
+                        text = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE) {
+                            tr("sub.banner_plans_btn")
+                        } else {
+                            tr("sub.banner_upgrade_btn")
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE) GoldLight else Color.Black
@@ -177,7 +190,7 @@ fun SubscriptionStatusTopBanner(
                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                     Text(
-                        text = "${subDetails.trialDaysRemaining}/60 يوم",
+                        text = trFmt("sub.trial_progress_fmt", "days" to subDetails.trialDaysRemaining),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (subDetails.trialDaysRemaining <= 5) StatusOrange else StatusGreen
@@ -199,7 +212,7 @@ fun SubscriptionStatusTopBanner(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "نظام التدرج الزمني للاشتراكات في OOZOX:",
+                        text = tr("sub.timeline_header"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -207,10 +220,10 @@ fun SubscriptionStatusTopBanner(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     val stages = listOf(
-                        Triple("1. أول 60 يوماً:", "فترة تجريبية مجانية بكامل المزايا", subDetails.phase == SubscriptionPhase.TRIAL_ACTIVE),
-                        Triple("2. الأيام 61 - 70:", "المرحلة الأولى: تقييد المحاسب الذكي والمزامنة السحابية", subDetails.phase == SubscriptionPhase.GRACE_WARNING_STAGE_1),
-                        Triple("3. الأيام 71 - 80:", "المرحلة الثانية: تقييد تصدير Excel وتدقيق الشكاوى", subDetails.phase == SubscriptionPhase.GRACE_WARNING_STAGE_2),
-                        Triple("4. بعد اليوم 80:", "تقييد المزايا المتقدمة حتى الترقية لباقة مدفوعة", subDetails.phase == SubscriptionPhase.BASE_RESTRICTED)
+                        Triple(tr("sub.stage1_range"), tr("sub.stage1_desc"), subDetails.phase == SubscriptionPhase.TRIAL_ACTIVE),
+                        Triple(tr("sub.stage2_range"), tr("sub.stage2_desc"), subDetails.phase == SubscriptionPhase.GRACE_WARNING_STAGE_1),
+                        Triple(tr("sub.stage3_range"), tr("sub.stage3_desc"), subDetails.phase == SubscriptionPhase.GRACE_WARNING_STAGE_2),
+                        Triple(tr("sub.stage4_range"), tr("sub.stage4_desc"), subDetails.phase == SubscriptionPhase.BASE_RESTRICTED)
                     )
 
                     stages.forEach { (title, desc, isCurrent) ->
@@ -247,6 +260,8 @@ fun FeatureGatedDialog(
     onDismiss: () -> Unit,
     onOpenSubscriptions: () -> Unit
 ) {
+    val currentLanguage = LocalAppLanguage.current
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -254,15 +269,13 @@ fun FeatureGatedDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
-                .wrapContentHeight(),
+                .wrapContentHeight()
+                .testTag("feature_gated_dialog"),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
             shadowElevation = 12.dp,
-            border = BorderStroke(
-                1.dp,
-                StatusOrange.copy(alpha = 0.5f)
-            )
+            border = BorderStroke(1.dp, StatusOrange.copy(alpha = 0.5f))
         ) {
             Column(
                 modifier = Modifier
@@ -270,7 +283,6 @@ fun FeatureGatedDialog(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -278,7 +290,8 @@ fun FeatureGatedDialog(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
@@ -297,13 +310,13 @@ fun FeatureGatedDialog(
 
                         Column {
                             Text(
-                                text = "ميزة مقيدة بالاشتراك",
+                                text = tr("sub.gated_title"),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = decision.feature.titleAr,
+                                text = decision.feature.localizedTitle(currentLanguage),
                                 fontSize = 11.sp,
                                 color = StatusOrange
                             )
@@ -312,11 +325,13 @@ fun FeatureGatedDialog(
 
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("feature_gated_close_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق",
+                            contentDescription = tr("common.close"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
@@ -330,7 +345,7 @@ fun FeatureGatedDialog(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = decision.restrictionMessage ?: "هذه الميزة تتطلب ترقية حسابك بعد انتهاء الفترة التجريبية المجانية.",
+                        text = decision.restrictionMessage ?: tr("sub.gated_default_msg"),
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 17.sp
@@ -346,12 +361,21 @@ fun FeatureGatedDialog(
                             modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.WorkspacePremium,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
-                                Text("الباقة المطلوبة لفتح الميزة:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
-                                    "${decision.suggestedTier.label} (${decision.suggestedTier.badgeText})",
+                                    tr("sub.required_tier"),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "${decision.suggestedTier.localizedLabel(currentLanguage)} (${decision.suggestedTier.localizedBadgeText(currentLanguage)})",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -373,9 +397,12 @@ fun FeatureGatedDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("feature_gated_dismiss_btn")
                     ) {
-                        Text("إغلاق", fontSize = 13.sp)
+                        Text(tr("common.close"), fontSize = 13.sp)
                     }
 
                     Button(
@@ -388,11 +415,14 @@ fun FeatureGatedDialog(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
-                        modifier = Modifier.weight(1.8f)
+                        modifier = Modifier
+                            .weight(1.8f)
+                            .heightIn(min = 48.dp)
+                            .testTag("feature_gated_browse_btn")
                     ) {
                         Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("استعراض الباقات", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                        Text(tr("sub.browse_plans"), fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                     }
                 }
             }

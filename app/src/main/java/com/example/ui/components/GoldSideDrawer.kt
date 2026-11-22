@@ -24,6 +24,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.UserEntity
 import com.example.ui.theme.GoldPrimary
 import com.example.ui.theme.adaptiveGoldPrimary
+import com.example.util.AppLanguage
+import com.example.util.LocalAppLanguage
+import com.example.util.Translations
+import com.example.util.tr
 
 enum class GoldDrawerSection(
     val titleAr: String,
@@ -59,7 +63,25 @@ enum class GoldDrawerSection(
         titleAr = "مركز فحص وبطاقات QR",
         subtitleAr = "مسح وتوليد رموز المشتريات",
         icon = Icons.Default.QrCode2
-    )
+    );
+
+    fun localizedTitle(lang: AppLanguage): String = when (this) {
+        MARKET -> Translations.get("gdrawer.sec_market", lang)
+        PORTFOLIO -> Translations.get("gdrawer.sec_portfolio", lang)
+        ALERTS -> Translations.get("gdrawer.sec_alerts", lang)
+        ZAKAT -> Translations.get("gdrawer.sec_zakat", lang)
+        ADVISOR -> Translations.get("gdrawer.sec_advisor", lang)
+        QR_CENTER -> Translations.get("gdrawer.sec_qr", lang)
+    }
+
+    fun localizedSubtitle(lang: AppLanguage): String = when (this) {
+        MARKET -> Translations.get("gdrawer.sec_market_sub", lang)
+        PORTFOLIO -> Translations.get("gdrawer.sec_portfolio_sub", lang)
+        ALERTS -> Translations.get("gdrawer.sec_alerts_sub", lang)
+        ZAKAT -> Translations.get("gdrawer.sec_zakat_sub", lang)
+        ADVISOR -> Translations.get("gdrawer.sec_advisor_sub", lang)
+        QR_CENTER -> Translations.get("gdrawer.sec_qr_sub", lang)
+    }
 }
 
 @Composable
@@ -75,6 +97,8 @@ fun GoldSideDrawerContent(
     onOpenQrGenerator: () -> Unit,
     onCloseDrawer: () -> Unit
 ) {
+    val lang = LocalAppLanguage.current
+
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.surface,
         drawerContentColor = MaterialTheme.colorScheme.onSurface,
@@ -103,7 +127,8 @@ fun GoldSideDrawerContent(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
@@ -121,13 +146,13 @@ fun GoldSideDrawerContent(
                         }
                         Column {
                             Text(
-                                text = "قسم الذهب والمصوغات",
+                                text = tr("gdrawer.title"),
                                 fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = currentUser?.name ?: "سوق المعادن النفيسة",
+                                text = currentUser?.name ?: tr("gdrawer.fallback_sub"),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -140,7 +165,7 @@ fun GoldSideDrawerContent(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق القائمة",
+                            contentDescription = tr("common.close"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -183,6 +208,7 @@ fun GoldSideDrawerContent(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                         .testTag("gold_drawer_item_${section.name.lowercase()}")
                 ) {
                     Row(
@@ -217,13 +243,13 @@ fun GoldSideDrawerContent(
 
                             Column {
                                 Text(
-                                    text = section.titleAr,
+                                    text = section.localizedTitle(lang),
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                                     color = if (isSelected) adaptiveGoldPrimary else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = section.subtitleAr,
+                                    text = section.localizedSubtitle(lang),
                                     fontSize = 10.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -265,7 +291,7 @@ fun GoldSideDrawerContent(
             // Quick Actions inside Drawer
             item {
                 Text(
-                    text = "اختصارات",
+                    text = tr("gdrawer.shortcuts"),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -276,7 +302,7 @@ fun GoldSideDrawerContent(
             item {
                 GoldDrawerQuickRow(
                     icon = Icons.Default.Storefront,
-                    title = "معرض وإدارة المتجر",
+                    title = tr("gdrawer.merchant_store"),
                     onClick = {
                         onCloseDrawer()
                         onOpenMerchantStore()
@@ -287,7 +313,7 @@ fun GoldSideDrawerContent(
             item {
                 GoldDrawerQuickRow(
                     icon = Icons.Default.AddCircleOutline,
-                    title = "تسجيل فاتورة شراء جديدة",
+                    title = tr("gdrawer.add_purchase"),
                     onClick = {
                         onCloseDrawer()
                         onAddPurchase()
@@ -312,7 +338,7 @@ fun GoldSideDrawerContent(
                     ) {
                         Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("مسح QR", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(tr("gdrawer.scan_qr"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     OutlinedButton(
@@ -327,7 +353,7 @@ fun GoldSideDrawerContent(
                     ) {
                         Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("توليد QR", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(tr("gdrawer.gen_qr"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -346,7 +372,9 @@ private fun GoldDrawerQuickRow(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
         border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
     ) {
         Row(
             modifier = Modifier

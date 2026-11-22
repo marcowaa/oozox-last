@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.GoldPrimary
+import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * Persistent connectivity status banner component that appears when the app loses network access,
@@ -72,7 +74,7 @@ fun PersistentConnectivityBanner(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CloudOff,
-                            contentDescription = "غير متصل بالإنترنت",
+                            contentDescription = tr("banner.offline_title"),
                             tint = Color(0xFFFB7185),
                             modifier = Modifier.size(20.dp)
                         )
@@ -84,7 +86,7 @@ fun PersistentConnectivityBanner(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "وضع العمل دون إنترنت (محلي ومخزن)",
+                                text = tr("banner.offline_mode_title"),
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -94,7 +96,7 @@ fun PersistentConnectivityBanner(
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
-                                    text = "Room Cache",
+                                    text = tr("banner.cached_badge"),
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GoldPrimary,
@@ -105,9 +107,9 @@ fun PersistentConnectivityBanner(
 
                         Text(
                             text = if (pendingSyncCount > 0) {
-                                "تم حفظ المحادثات والمشاريع محلياً • هناك $pendingSyncCount تغيير بانتظار المزامنة"
+                                trFmt("banner.pending_sync_fmt", "count" to pendingSyncCount)
                             } else {
-                                "تصفح المحادثات والمشاريع والبيانات مستمر من الذاكرة المحلية بأمان"
+                                tr("banner.cached_safe")
                             },
                             fontSize = 10.5.sp,
                             color = Color(0xFFCBD5E1),
@@ -127,7 +129,7 @@ fun PersistentConnectivityBanner(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
-                            contentDescription = "إعادة فحص الاتصال",
+                            contentDescription = tr("common.retry"),
                             tint = GoldPrimary,
                             modifier = Modifier.size(18.dp)
                         )

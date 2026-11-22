@@ -36,8 +36,11 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.UserEntity
 import com.example.ui.theme.StatusGreen
 import com.example.util.AppLanguage
+import com.example.util.LocalAppLanguage
 import com.example.util.ReliabilityRecord
 import com.example.util.ReportExporter
+import com.example.util.Translations
+import com.example.util.tr
 
 private fun parseCvHex(hex: String, fallback: Color = Color(0xFF0F172A)): Color =
     try {
@@ -61,8 +64,10 @@ fun CvTemplateMiniThumbnail(
     val headerBg = remember(template) { parseCvHex(template.headerBgHex, Color.White) }
     val accent = remember(template) { parseCvHex(template.accentHex, Color(0xFF0F172A)) }
     val secondary = remember(template) { parseCvHex(template.secondaryHex, Color(0xFF475569)) }
-    val shortName = remember(userName) { userName.ifBlank { "أحمد محمد" } }
-    val shortRole = remember(jobTitle) { jobTitle.ifBlank { "عضو معتمد" } }
+    val defaultName = tr("cv.default_name")
+    val defaultRole = tr("cv.certified_member")
+    val shortName = remember(userName, defaultName) { userName.ifBlank { defaultName } }
+    val shortRole = remember(jobTitle, defaultRole) { jobTitle.ifBlank { defaultRole } }
 
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -640,7 +645,6 @@ fun CvLivePreviewSheet(
     compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val isArabic = currentLanguage == AppLanguage.ARABIC
     val headerBg = remember(template) { parseCvHex(template.headerBgHex, Color.White) }
     val accent = remember(template) { parseCvHex(template.accentHex, Color(0xFF0F172A)) }
     val secondary = remember(template) { parseCvHex(template.secondaryHex, Color(0xFF475569)) }
@@ -656,9 +660,9 @@ fun CvLivePreviewSheet(
     }
 
     val roleText = user.jobTitle?.takeIf { it.isNotBlank() }
-        ?: if (isArabic) "عضو معتمد" else "Certified Professional"
+        ?: Translations.get("cv.certified_member", currentLanguage)
     val bioText = user.merchantBio?.takeIf { it.isNotBlank() }
-        ?: if (isArabic) "محترف متميز يمتلك خبرة عملية وسجلاً موثقاً من الالتزام والجودة." else "Distinguished professional dedicated to performance excellence and verified quality."
+        ?: Translations.get("cv.default_bio", currentLanguage)
     val skillsList = remember(user.skills) {
         user.skills?.split(",", "،", "\n")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
     }
@@ -729,7 +733,7 @@ fun CvLivePreviewSheet(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = if (isArabic) "ثقة $trustScore%" else "Trust $trustScore%",
+                                    text = Translations.format("cv.trust_badge_fmt", currentLanguage, "score" to trustScore),
                                     color = secondary,
                                     fontSize = if (compact) 9.sp else 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -740,7 +744,7 @@ fun CvLivePreviewSheet(
 
                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(
-                                    text = if (isArabic) "التواصل" else "CONTACT",
+                                    text = Translations.get("cv.contact_heading", currentLanguage),
                                     color = secondary,
                                     fontSize = if (compact) 8.sp else 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -764,7 +768,7 @@ fun CvLivePreviewSheet(
                             if (skillsList.isNotEmpty() && "SKILLS" in displayedSections) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
-                                        text = if (isArabic) "المهارات" else "SKILLS",
+                                        text = Translations.get("cv.sec_skills", currentLanguage),
                                         color = secondary,
                                         fontSize = if (compact) 8.sp else 10.sp,
                                         fontWeight = FontWeight.Bold
@@ -828,7 +832,7 @@ fun CvLivePreviewSheet(
                                     accent = accent,
                                     inkPrimary = inkPrimary,
                                     inkSecondary = inkSecondary,
-                                    isArabic = isArabic,
+                                    currentLanguage = currentLanguage,
                                     compact = compact,
                                     bioText = bioText,
                                     roleText = roleText,
@@ -955,7 +959,7 @@ fun CvLivePreviewSheet(
                                         color = accent
                                     ) {
                                         Text(
-                                            text = if (isArabic) "$trustScore% موثوق" else "$trustScore% Verified",
+                                            text = Translations.format("cv.verified_badge_fmt", currentLanguage, "score" to trustScore),
                                             color = Color.White,
                                             fontSize = if (compact) 8.5.sp else 10.sp,
                                             fontWeight = FontWeight.Bold,
@@ -1029,7 +1033,7 @@ fun CvLivePreviewSheet(
                                     accent = accent,
                                     inkPrimary = inkPrimary,
                                     inkSecondary = inkSecondary,
-                                    isArabic = isArabic,
+                                    currentLanguage = currentLanguage,
                                     compact = compact,
                                     bioText = bioText,
                                     roleText = roleText,
@@ -1059,7 +1063,7 @@ fun CvLivePreviewSheet(
                                                 accent = accent,
                                                 inkPrimary = inkPrimary,
                                                 inkSecondary = inkSecondary,
-                                                isArabic = isArabic,
+                                                currentLanguage = currentLanguage,
                                                 compact = compact,
                                                 bioText = bioText,
                                                 roleText = roleText,
@@ -1084,7 +1088,7 @@ fun CvLivePreviewSheet(
                                                 accent = accent,
                                                 inkPrimary = inkPrimary,
                                                 inkSecondary = inkSecondary,
-                                                isArabic = isArabic,
+                                                currentLanguage = currentLanguage,
                                                 compact = compact,
                                                 bioText = bioText,
                                                 roleText = roleText,
@@ -1108,7 +1112,7 @@ fun CvLivePreviewSheet(
                                     accent = accent,
                                     inkPrimary = inkPrimary,
                                     inkSecondary = inkSecondary,
-                                    isArabic = isArabic,
+                                    currentLanguage = currentLanguage,
                                     compact = compact,
                                     bioText = bioText,
                                     roleText = roleText,
@@ -1133,7 +1137,11 @@ fun CvLivePreviewSheet(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = if (isArabic) "موثق رقمياً عبر منصة OOZOX • ${template.nameAr}" else "Digitally Verified via OOZOX • ${template.nameEn}",
+                        text = Translations.format(
+                            "cv.footer_verified_fmt",
+                            currentLanguage,
+                            "template" to template.localizedName(currentLanguage)
+                        ),
                         color = inkMuted,
                         fontSize = if (compact) 8.sp else 9.sp,
                         textAlign = TextAlign.Center,
@@ -1153,7 +1161,7 @@ private fun PreviewCvSectionBlock(
     accent: Color,
     inkPrimary: Color,
     inkSecondary: Color,
-    isArabic: Boolean,
+    currentLanguage: AppLanguage,
     compact: Boolean,
     bioText: String,
     roleText: String,
@@ -1172,7 +1180,7 @@ private fun PreviewCvSectionBlock(
         "BIO" -> {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 PreviewSectionHeader(
-                    title = if (isArabic) "النبذة المهنية" else "PROFESSIONAL SUMMARY",
+                    title = Translations.get("cv.sec_bio", currentLanguage),
                     template = template,
                     accent = accent,
                     fontSize = titleFontSize
@@ -1191,13 +1199,18 @@ private fun PreviewCvSectionBlock(
         "EXPERIENCE" -> {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 PreviewSectionHeader(
-                    title = if (isArabic) "الخبرة والمسمى الوظيفي" else "EXPERIENCE & ROLE",
+                    title = Translations.get("cv.sec_experience", currentLanguage),
                     template = template,
                     accent = accent,
                     fontSize = titleFontSize
                 )
                 Text(
-                    text = if (isArabic) "• $roleText — $experienceYears سنوات خبرة" else "• $roleText — $experienceYears yrs experience",
+                    text = Translations.format(
+                        "cv.exp_years_fmt",
+                        currentLanguage,
+                        "role" to roleText,
+                        "years" to experienceYears
+                    ),
                     color = inkPrimary,
                     fontSize = bodyFontSize,
                     fontWeight = FontWeight.Medium
@@ -1208,7 +1221,7 @@ private fun PreviewCvSectionBlock(
         "RELIABILITY" -> {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 PreviewSectionHeader(
-                    title = if (isArabic) "سجل الموثوقية والالتزام" else "VERIFIED RELIABILITY",
+                    title = Translations.get("cv.sec_reliability", currentLanguage),
                     template = template,
                     accent = accent,
                     fontSize = titleFontSize
@@ -1220,11 +1233,11 @@ private fun PreviewCvSectionBlock(
                     } else {
                         listOf(
                             ReliabilityRecord(
-                                period = if (isArabic) "السجل العام" else "Overall",
+                                period = Translations.get("cv.rel_overall", currentLanguage),
                                 presenceRate = trustScore,
                                 locationCompliance = 100,
                                 punctuality = trustScore,
-                                overallRating = if (isArabic) "موثق" else "Verified"
+                                overallRating = Translations.get("cv.rel_verified", currentLanguage)
                             )
                         )
                     }
@@ -1240,9 +1253,9 @@ private fun PreviewCvSectionBlock(
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(if (isArabic) "الفترة" else "Period", fontSize = bodyFontSize, fontWeight = FontWeight.Bold, color = inkPrimary, modifier = Modifier.weight(1.3f))
-                            Text(if (isArabic) "الحضور" else "Presence", fontSize = bodyFontSize, fontWeight = FontWeight.Bold, color = inkPrimary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.Center)
-                            Text(if (isArabic) "الالتزام" else "Punctuality", fontSize = bodyFontSize, fontWeight = FontWeight.Bold, color = inkPrimary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.Center)
+                            Text(Translations.get("cv.col_period", currentLanguage), fontSize = bodyFontSize, fontWeight = FontWeight.Bold, color = inkPrimary, modifier = Modifier.weight(1.3f))
+                            Text(Translations.get("cv.col_presence", currentLanguage), fontSize = bodyFontSize, fontWeight = FontWeight.Bold, color = inkPrimary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.Center)
+                            Text(Translations.get("cv.col_punctuality", currentLanguage), fontSize = bodyFontSize, fontWeight = FontWeight.Bold, color = inkPrimary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.Center)
                         }
                         rowsToShow.forEach { rec ->
                             HorizontalDivider(color = Color(0xFFE2E8F0))
@@ -1260,9 +1273,14 @@ private fun PreviewCvSectionBlock(
                     }
                 } else {
                     val relLine = latestRel?.let {
-                        if (isArabic) "درجة الثقة $trustScore% • الحضور ${it.presenceRate}% • الالتزام ${it.punctuality}%"
-                        else "Trust $trustScore% • Presence ${it.presenceRate}% • Punctuality ${it.punctuality}%"
-                    } ?: if (isArabic) "درجة الثقة الفعلية الموثقة: $trustScore%" else "Verified Trust Score: $trustScore%"
+                        Translations.format(
+                            "cv.rel_metrics_fmt",
+                            currentLanguage,
+                            "trust" to trustScore,
+                            "presence" to it.presenceRate,
+                            "punctuality" to it.punctuality
+                        )
+                    } ?: Translations.format("cv.rel_summary_fallback_fmt", currentLanguage, "trust" to trustScore)
 
                     Surface(
                         shape = RoundedCornerShape(6.dp),
@@ -1284,10 +1302,13 @@ private fun PreviewCvSectionBlock(
         "SKILLS" -> {
             if (skillsList.isNotEmpty() || !compact) {
                 val items = if (skillsList.isNotEmpty()) skillsList.take(if (compact) 4 else 8)
-                else listOf(if (isArabic) "إدارة المشاريع" else "Project Management", if (isArabic) "التفاوض" else "Negotiation")
+                else listOf(
+                    Translations.get("cv.default_skill_pm", currentLanguage),
+                    Translations.get("cv.default_skill_neg", currentLanguage)
+                )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     PreviewSectionHeader(
-                        title = if (isArabic) "المهارات والتخصصات" else "SKILLS",
+                        title = Translations.get("cv.sec_skills", currentLanguage),
                         template = template,
                         accent = accent,
                         fontSize = titleFontSize
@@ -1330,7 +1351,7 @@ private fun PreviewCvSectionBlock(
             if (educationText != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     PreviewSectionHeader(
-                        title = if (isArabic) "المؤهلات العلمية" else "EDUCATION",
+                        title = Translations.get("cv.sec_education", currentLanguage),
                         template = template,
                         accent = accent,
                         fontSize = titleFontSize
@@ -1350,7 +1371,7 @@ private fun PreviewCvSectionBlock(
             if (storeText != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     PreviewSectionHeader(
-                        title = if (isArabic) "المتجر والنشاط التجاري" else "BUSINESS & STORE",
+                        title = Translations.get("cv.sec_store", currentLanguage),
                         template = template,
                         accent = accent,
                         fontSize = titleFontSize
@@ -1421,13 +1442,15 @@ fun FullCvPreviewDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val isArabic = currentLanguage == AppLanguage.ARABIC
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides currentLanguage.direction) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides currentLanguage.direction,
+            LocalAppLanguage provides currentLanguage
+        ) {
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -1454,7 +1477,7 @@ fun FullCvPreviewDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = if (isArabic) "معاينة السيرة الذاتية" else "CV Live Preview",
+                                    text = Translations.get("cv.live_preview_title", currentLanguage),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1474,15 +1497,15 @@ fun FullCvPreviewDialog(
                                 }
                             }
                             Text(
-                                text = "${selectedTemplate.nameAr} • ${selectedTemplate.descriptionAr}",
+                                text = "${selectedTemplate.localizedName(currentLanguage)} • ${selectedTemplate.localizedDescription(currentLanguage)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Default.Close, contentDescription = if (isArabic) "إغلاق" else "Close")
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = Translations.get("common.close", currentLanguage))
                         }
                     }
 
@@ -1516,7 +1539,7 @@ fun FullCvPreviewDialog(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
-                                    text = tpl.nameAr,
+                                    text = tpl.localizedName(currentLanguage),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1569,7 +1592,7 @@ fun FullCvPreviewDialog(
                                 .heightIn(min = 48.dp)
                                 .testTag("btn_close_full_cv_preview")
                         ) {
-                            Text(if (isArabic) "إغلاق" else "Close", fontWeight = FontWeight.SemiBold)
+                            Text(Translations.get("common.close", currentLanguage), fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
@@ -1591,7 +1614,7 @@ fun FullCvPreviewDialog(
                                 .heightIn(min = 48.dp)
                                 .testTag("btn_export_from_full_preview")
                         ) {
-                            Text(if (isArabic) "تصدير PDF" else "Export PDF", fontWeight = FontWeight.Bold)
+                            Text(Translations.get("cv.export_pdf", currentLanguage), fontWeight = FontWeight.Bold)
                         }
                     }
                 }

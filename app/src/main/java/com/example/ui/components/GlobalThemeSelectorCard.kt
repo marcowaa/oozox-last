@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.LocalAppTheme
 import com.example.ui.theme.AppThemePalette
 import com.example.ui.theme.GoldPrimary
+import com.example.util.AppLanguage
+import com.example.util.LocalAppLanguage
+import com.example.util.tr
 
 /**
  * Global Theme Palette Selector Card
@@ -37,6 +40,7 @@ fun GlobalThemeSelectorCard(
     val themeController = LocalAppTheme.current
     val currentPalette = themeController.currentPalette
     val isDark = themeController.isDarkTheme
+    val lang = LocalAppLanguage.current
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -73,13 +77,13 @@ fun GlobalThemeSelectorCard(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "ثيم وألوان التطبيق",
+                        text = tr("theme.selector_title"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "اختر السمة البصرية عالية التباين والوضوح",
+                        text = tr("theme.selector_sub"),
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -96,6 +100,7 @@ fun GlobalThemeSelectorCard(
                     val previewBg = if (isDark) palette.darkBgColor else palette.lightBgColor
                     val previewSurface = if (isDark) palette.darkSurfaceColor else palette.lightSurfaceColor
                     val previewPrimary = if (isDark) palette.primaryColor else palette.lightPrimaryColor
+                    val localizedName = palette.localizedTitle(lang)
 
                     Surface(
                         onClick = { themeController.setPalette(palette) },
@@ -107,6 +112,7 @@ fun GlobalThemeSelectorCard(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .testTag("theme_palette_option_${palette.id}")
                     ) {
                         Row(
@@ -141,16 +147,18 @@ fun GlobalThemeSelectorCard(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = palette.titleAr,
+                                        text = localizedName,
                                         fontSize = 13.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         color = if (isSelected) previewPrimary else MaterialTheme.colorScheme.onSurface
                                     )
-                                    Text(
-                                        text = palette.titleEn,
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (lang != AppLanguage.ENGLISH && localizedName != palette.titleEn) {
+                                        Text(
+                                            text = palette.titleEn,
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
 
@@ -164,7 +172,7 @@ fun GlobalThemeSelectorCard(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "محدد",
+                                        contentDescription = tr("common.selected"),
                                         tint = if (isDark) palette.onPrimaryDark else palette.onPrimaryLight,
                                         modifier = Modifier.size(16.dp)
                                     )

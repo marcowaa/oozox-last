@@ -179,7 +179,7 @@ fun ClientCardLivePreview(
                         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.55f))
                     ) {
                         Text(
-                            text = "$trustScore% ثقة",
+                            text = trFmt("card_studio.trust_pill_fmt", "score" to trustScore),
                             color = accentColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -306,7 +306,7 @@ fun ClientCardLivePreview(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "افتح الكارت في التطبيق أو الموقع",
+                                text = tr("card_studio.open_card_cta"),
                                 color = textColor,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
@@ -374,6 +374,7 @@ fun ClientCardStudioTabContent(
     completedDealsCount: Int = 0
 ) {
     val context = LocalContext.current
+    val currentLanguage = LocalAppLanguage.current
     var studioMode by remember { mutableIntStateOf(0) } // 0: Data, 1: Theme/Text, 2: Links & DeepLinks, 3: Social & Domain
     var showLandingModal by remember { mutableStateOf(false) }
     var pendingBgEditUri by remember { mutableStateOf<Uri?>(null) }
@@ -395,7 +396,7 @@ fun ClientCardStudioTabContent(
     if (pendingBgEditUri != null) {
         CoverPhotoEditorDialog(
             imageUri = pendingBgEditUri!!,
-            title = "ضبط خلفية الكارت",
+            title = tr("card_studio.bg_crop_title"),
             frameMode = ImageFrameAspectMode.BANNER,
             onSaveCroppedCover = { savedPath ->
                 val persisted = ClientCardPrefsStore.persistBackgroundPhoto(context, Uri.parse(savedPath), user.id)
@@ -432,10 +433,10 @@ fun ClientCardStudioTabContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                0 to "البيانات والنصوص",
-                1 to "الخلفية والخط",
-                2 to "الروابط والديب لينك",
-                3 to "السوشيال والموقع"
+                0 to tr("card_studio.tab_data"),
+                1 to tr("card_studio.tab_style"),
+                2 to tr("card_studio.tab_links"),
+                3 to tr("card_studio.tab_social")
             ).forEach { (idx, label) ->
                 FilterChip(
                     selected = studioMode == idx,
@@ -455,17 +456,17 @@ fun ClientCardStudioTabContent(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FilterChip(selected = config.includeStore, onClick = { onConfigChange(config.copy(includeStore = !config.includeStore)) }, label = { Text("المتجر", style = MaterialTheme.typography.labelSmall) })
-                    FilterChip(selected = config.includeBio, onClick = { onConfigChange(config.copy(includeBio = !config.includeBio)) }, label = { Text("النبذة", style = MaterialTheme.typography.labelSmall) })
-                    FilterChip(selected = config.includeReliability, onClick = { onConfigChange(config.copy(includeReliability = !config.includeReliability)) }, label = { Text("الموثوقية", style = MaterialTheme.typography.labelSmall) })
-                    FilterChip(selected = config.includePhone, onClick = { onConfigChange(config.copy(includePhone = !config.includePhone)) }, label = { Text("الهاتف", style = MaterialTheme.typography.labelSmall) })
+                    FilterChip(selected = config.includeStore, onClick = { onConfigChange(config.copy(includeStore = !config.includeStore)) }, label = { Text(tr("card_studio.chip_store"), style = MaterialTheme.typography.labelSmall) })
+                    FilterChip(selected = config.includeBio, onClick = { onConfigChange(config.copy(includeBio = !config.includeBio)) }, label = { Text(tr("card_studio.chip_bio"), style = MaterialTheme.typography.labelSmall) })
+                    FilterChip(selected = config.includeReliability, onClick = { onConfigChange(config.copy(includeReliability = !config.includeReliability)) }, label = { Text(tr("card_studio.chip_rel"), style = MaterialTheme.typography.labelSmall) })
+                    FilterChip(selected = config.includePhone, onClick = { onConfigChange(config.copy(includePhone = !config.includePhone)) }, label = { Text(tr("card_studio.chip_phone"), style = MaterialTheme.typography.labelSmall) })
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = config.displayName,
                         onValueChange = { onConfigChange(config.copy(displayName = it)) },
-                        label = { Text("الاسم على الكارت", style = MaterialTheme.typography.bodySmall) },
+                        label = { Text(tr("card_studio.field_name"), style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -474,7 +475,7 @@ fun ClientCardStudioTabContent(
                     OutlinedTextField(
                         value = config.roleTitle,
                         onValueChange = { onConfigChange(config.copy(roleTitle = it)) },
-                        label = { Text("المسمى أو التخصص", style = MaterialTheme.typography.bodySmall) },
+                        label = { Text(tr("card_studio.field_role"), style = MaterialTheme.typography.bodySmall) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -487,7 +488,7 @@ fun ClientCardStudioTabContent(
                         OutlinedTextField(
                             value = config.storeText,
                             onValueChange = { onConfigChange(config.copy(storeText = it)) },
-                            label = { Text("المتجر", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(tr("card_studio.chip_store"), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -496,7 +497,7 @@ fun ClientCardStudioTabContent(
                         OutlinedTextField(
                             value = config.phoneText,
                             onValueChange = { onConfigChange(config.copy(phoneText = it)) },
-                            label = { Text("الهاتف", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(tr("card_studio.chip_phone"), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -506,8 +507,8 @@ fun ClientCardStudioTabContent(
                     OutlinedTextField(
                         value = config.bioText,
                         onValueChange = { onConfigChange(config.copy(bioText = it)) },
-                        label = { Text("النبذة على الكارت", style = MaterialTheme.typography.bodySmall) },
-                        placeholder = { Text("نبذة قصيرة...", style = MaterialTheme.typography.bodySmall) },
+                        label = { Text(tr("card_studio.field_bio"), style = MaterialTheme.typography.bodySmall) },
+                        placeholder = { Text(tr("card_studio.field_bio_hint"), style = MaterialTheme.typography.bodySmall) },
                         minLines = 2,
                         maxLines = 3,
                         shape = RoundedCornerShape(12.dp),
@@ -542,11 +543,11 @@ fun ClientCardStudioTabContent(
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = 42.dp)
+                                    .heightIn(min = 48.dp)
                                     .testTag("btn_pick_card_bg_image")
                             ) {
                                 Text(
-                                    text = if (config.backgroundImageUri == null) "اختيار صورة خلفية" else "تغيير الخلفية",
+                                    text = if (config.backgroundImageUri == null) tr("card_studio.pick_bg") else tr("card_studio.change_bg"),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -556,9 +557,9 @@ fun ClientCardStudioTabContent(
                                 OutlinedButton(
                                     onClick = { onConfigChange(config.copy(backgroundImageUri = null)) },
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.heightIn(min = 42.dp)
+                                    modifier = Modifier.heightIn(min = 48.dp)
                                 ) {
-                                    Text("إزالة", style = MaterialTheme.typography.labelMedium)
+                                    Text(tr("card_studio.remove_bg"), style = MaterialTheme.typography.labelMedium)
                                 }
                             }
                         }
@@ -566,7 +567,7 @@ fun ClientCardStudioTabContent(
                         if (!config.backgroundImageUri.isNullOrBlank()) {
                             Column {
                                 Text(
-                                    text = "وضوح النص فوق الصورة (${(config.overlayAlpha * 100).toInt()}%)",
+                                    text = trFmt("card_studio.overlay_alpha_fmt", "pct" to (config.overlayAlpha * 100).toInt()),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -578,7 +579,7 @@ fun ClientCardStudioTabContent(
                             }
                         }
 
-                        Text("خلفيات جاهزة", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text(tr("card_studio.preset_bgs"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -616,7 +617,7 @@ fun ClientCardStudioTabContent(
                                                 .background(parseStudioHex(preset.startHex, Color.Black))
                                                 .border(1.dp, parseStudioHex(preset.defaultAccentHex, Color.Gray), CircleShape)
                                         )
-                                        Text(preset.titleAr, style = MaterialTheme.typography.labelSmall)
+                                        Text(preset.localizedTitle(currentLanguage), style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
@@ -628,9 +629,13 @@ fun ClientCardStudioTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("حجم النصوص", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text(tr("card_studio.font_size"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf(0 to "صغير", 1 to "متوسط", 2 to "كبير").forEach { (lvl, lbl) ->
+                                listOf(
+                                    0 to tr("card_studio.size_sm"),
+                                    1 to tr("card_studio.size_md"),
+                                    2 to tr("card_studio.size_lg")
+                                ).forEach { (lvl, lbl) ->
                                     FilterChip(
                                         selected = config.fontScaleLevel == lvl,
                                         onClick = { onConfigChange(config.copy(fontScaleLevel = lvl)) },
@@ -646,7 +651,7 @@ fun ClientCardStudioTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("لون النص", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text(tr("card_studio.text_color"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("#FFFFFF", "#F8FAFC", "#0F172A", "#FACC15", "#38BDF8", "#34D399").forEach { hex ->
                                     val selected = config.textColorHex.equals(hex, ignoreCase = true)
@@ -672,7 +677,7 @@ fun ClientCardStudioTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("لون الروابط والتمييز", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text(tr("card_studio.accent_color"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf("#D4AF37", "#38BDF8", "#34D399", "#F472B6", "#FB923C", "#1E3A8A").forEach { hex ->
                                     val selected = config.accentColorHex.equals(hex, ignoreCase = true)
@@ -708,11 +713,15 @@ fun ClientCardStudioTabContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "إضافة رابط أو كلمة ديب لينك",
+                            text = tr("card_studio.add_link_title"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+
+                        val appLinkDefaultKw = tr("card_studio.dl_app_kw")
+                        val domainLinkDefaultKw = tr("card_studio.dl_domain_kw")
+                        val waLinkDefaultKw = tr("card_studio.dl_wa_kw")
 
                         // Quick Deep Link Templates
                         Row(
@@ -724,39 +733,39 @@ fun ClientCardStudioTabContent(
                             AssistChip(
                                 onClick = {
                                     val item = ClientCardLinkItem(
-                                        keyword = "تواصل معي داخل التطبيق",
+                                        keyword = appLinkDefaultKw,
                                         url = "oozox://card/$handle",
                                         kind = ClientCardLinkKind.APP_DEEP_LINK
                                     )
                                     onConfigChange(config.copy(customLinks = config.customLinks + item))
                                 },
-                                label = { Text("+ ديب لينك التطبيق", style = MaterialTheme.typography.labelSmall) }
+                                label = { Text(tr("card_studio.dl_app_chip"), style = MaterialTheme.typography.labelSmall) }
                             )
                             AssistChip(
                                 onClick = {
                                     val item = ClientCardLinkItem(
-                                        keyword = "الكارت على موقع OOZOX",
+                                        keyword = domainLinkDefaultKw,
                                         url = domainCardUrl,
                                         kind = ClientCardLinkKind.DOMAIN_CARD
                                     )
                                     onConfigChange(config.copy(customLinks = config.customLinks + item))
                                 },
-                                label = { Text("+ دومين المشروع", style = MaterialTheme.typography.labelSmall) }
+                                label = { Text(tr("card_studio.dl_domain_chip"), style = MaterialTheme.typography.labelSmall) }
                             )
                             AssistChip(
                                 onClick = {
-                                    newLinkKeyword = "تواصل واتساب"
+                                    newLinkKeyword = waLinkDefaultKw
                                     newLinkUrl = "https://wa.me/${config.phoneText.filter { it.isDigit() }}"
                                     newLinkKind = ClientCardLinkKind.WHATSAPP
                                 },
-                                label = { Text("+ واتساب", style = MaterialTheme.typography.labelSmall) }
+                                label = { Text(tr("card_studio.dl_wa_chip"), style = MaterialTheme.typography.labelSmall) }
                             )
                         }
 
                         OutlinedTextField(
                             value = newLinkKeyword,
                             onValueChange = { newLinkKeyword = it },
-                            label = { Text("كلمة الرابط (مثال: متجرنا، واتساب)", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(tr("card_studio.link_kw_label"), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -771,7 +780,7 @@ fun ClientCardStudioTabContent(
                             OutlinedTextField(
                                 value = newLinkUrl,
                                 onValueChange = { newLinkUrl = it },
-                                label = { Text("الرابط أو oozox://", style = MaterialTheme.typography.bodySmall) },
+                                label = { Text(tr("card_studio.link_url_label"), style = MaterialTheme.typography.bodySmall) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(10.dp),
                                 textStyle = MaterialTheme.typography.bodySmall,
@@ -800,7 +809,7 @@ fun ClientCardStudioTabContent(
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) {
-                                Text("إضافة", fontWeight = FontWeight.Bold)
+                                Text(tr("card_studio.add_btn"), fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -834,11 +843,11 @@ fun ClientCardStudioTabContent(
                                         onClick = {
                                             onConfigChange(config.copy(customLinks = config.customLinks.filterNot { it.id == link.id }))
                                         },
-                                        modifier = Modifier.size(36.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
                                         Icon(
                                             Icons.Default.DeleteOutline,
-                                            contentDescription = "حذف الرابط",
+                                            contentDescription = tr("card_studio.delete_link_cd"),
                                             tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -863,7 +872,7 @@ fun ClientCardStudioTabContent(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "مشاركة كارت جمالي (صورة + روابط) على السوشيال ميديا",
+                            text = tr("card_studio.social_title"),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -896,10 +905,10 @@ fun ClientCardStudioTabContent(
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .heightIn(min = 42.dp)
+                                        .heightIn(min = 48.dp)
                                 ) {
                                     Text(
-                                        text = platform.labelAr,
+                                        text = platform.localizedLabel(currentLanguage),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1
@@ -911,36 +920,40 @@ fun ClientCardStudioTabContent(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                         Text(
-                            text = "روابط فتح الكارت وتحميل التطبيق عند النقر",
+                            text = tr("card_studio.landing_links_title"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
                         )
 
+                        val domainCopiedMsg = tr("card_studio.domain_copied")
+                        val deeplinkCopiedMsg = tr("card_studio.deeplink_copied")
+                        val downloadCopiedMsg = tr("card_studio.download_copied")
+
                         DomainLinkCopyRow(
-                            label = "رابط موقع المشروع:",
+                            label = tr("card_studio.domain_url_lbl"),
                             url = domainCardUrl,
                             onCopy = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 cm?.setPrimaryClip(ClipData.newPlainText("OOZOX Card Domain", domainCardUrl))
-                                Toast.makeText(context, "تم نسخ رابط الموقع", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, domainCopiedMsg, Toast.LENGTH_SHORT).show()
                             }
                         )
                         DomainLinkCopyRow(
-                            label = "ديب لينك التطبيق:",
+                            label = tr("card_studio.deeplink_lbl"),
                             url = appDeepLinkUrl,
                             onCopy = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 cm?.setPrimaryClip(ClipData.newPlainText("OOZOX Deep Link", appDeepLinkUrl))
-                                Toast.makeText(context, "تم نسخ رابط التطبيق", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, deeplinkCopiedMsg, Toast.LENGTH_SHORT).show()
                             }
                         )
                         DomainLinkCopyRow(
-                            label = "رابط تحميل التطبيق:",
+                            label = tr("card_studio.download_lbl"),
                             url = downloadUrl,
                             onCopy = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 cm?.setPrimaryClip(ClipData.newPlainText("OOZOX Download", downloadUrl))
-                                Toast.makeText(context, "تم نسخ رابط التحميل", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, downloadCopiedMsg, Toast.LENGTH_SHORT).show()
                             }
                         )
 
@@ -949,9 +962,9 @@ fun ClientCardStudioTabContent(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 42.dp)
+                                .heightIn(min = 48.dp)
                         ) {
-                            Text("معاينة ما يراه العميل عند النقر على الكارت", style = MaterialTheme.typography.labelMedium)
+                            Text(tr("card_studio.preview_visitor_btn"), style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
@@ -997,8 +1010,8 @@ private fun DomainLinkCopyRow(
                 )
             }
         }
-        IconButton(onClick = onCopy, modifier = Modifier.size(34.dp)) {
-            Icon(Icons.Default.ContentCopy, contentDescription = "نسخ", modifier = Modifier.size(16.dp))
+        IconButton(onClick = onCopy, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.Default.ContentCopy, contentDescription = tr("card_studio.copy_cd"), modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -1016,6 +1029,7 @@ fun VisitedDomainCardDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val currentLanguage = LocalAppLanguage.current
     val handle = user.username.ifBlank { user.id.take(8) }
     val domainUrl = remember(handle) { ClientCardDeepLinkRouter.domainCardUrl(handle) }
     val downloadUrl = remember(handle) { ClientCardDeepLinkRouter.domainDownloadUrl(handle) }
@@ -1024,7 +1038,7 @@ fun VisitedDomainCardDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        CompositionLocalProvider(LocalLayoutDirection provides currentLanguage.direction) {
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -1042,20 +1056,20 @@ fun VisitedDomainCardDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "بوابة الكارت الرقمي — OOZOX",
+                                text = tr("card_studio.portal_title"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "متاح عبر التطبيق أو موقع oozox.com",
+                                text = tr("card_studio.portal_sub"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(44.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق")
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = tr("common.close"))
                         }
                     }
 
@@ -1083,7 +1097,7 @@ fun VisitedDomainCardDialog(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("تحميل التطبيق", fontWeight = FontWeight.SemiBold)
+                            Text(tr("card_studio.download_app"), fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
@@ -1095,7 +1109,7 @@ fun VisitedDomainCardDialog(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("فتح في الموقع", fontWeight = FontWeight.Bold)
+                            Text(tr("card_studio.open_web"), fontWeight = FontWeight.Bold)
                         }
                     }
                 }

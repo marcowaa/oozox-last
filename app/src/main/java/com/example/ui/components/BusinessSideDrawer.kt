@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.HiddenSubAccountEntity
 import com.example.data.model.UserEntity
 import com.example.ui.theme.*
+import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * Dedicated, brand-aligned Side Navigation Drawer specifically for the Business Management Section.
@@ -85,7 +87,8 @@ fun BusinessSideDrawerContent(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
@@ -103,15 +106,19 @@ fun BusinessSideDrawerContent(
                         }
                         Column {
                             Text(
-                                text = "إدارة الأعمال والتاجر",
+                                text = tr("bdrawer.title"),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "خيارات وباقات التاجر والمطابقة",
+                                text = tr("bdrawer.subtitle"),
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -122,7 +129,7 @@ fun BusinessSideDrawerContent(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق القائمة",
+                            contentDescription = tr("common.close"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -153,7 +160,8 @@ fun BusinessSideDrawerContent(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -166,15 +174,23 @@ fun BusinessSideDrawerContent(
                             }
                             Column {
                                 Text(
-                                    text = currentUser?.name ?: "التاجر المعتمد",
+                                    text = currentUser?.name ?: tr("bdrawer.verified_merchant"),
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (activeSubAccount != null) "كاشير: ${activeSubAccount.displayName}" else "المهنة: $activeProfession",
+                                    text = if (activeSubAccount != null) {
+                                        trFmt("bdrawer.cashier_fmt", "name" to activeSubAccount.displayName)
+                                    } else {
+                                        trFmt("bdrawer.profession_fmt", "name" to activeProfession)
+                                    },
                                     fontSize = 11.sp,
-                                    color = if (activeSubAccount != null) OozoxTeal else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (activeSubAccount != null) OozoxTeal else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -185,11 +201,18 @@ fun BusinessSideDrawerContent(
                                 onOpenProfessionPicker()
                             },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .background(GoldPrimary.copy(alpha = 0.15f))
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = "تعديل المهنة", tint = GoldPrimary, modifier = Modifier.size(16.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(GoldPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = tr("bdrawer.edit_profession"), tint = GoldPrimary, modifier = Modifier.size(16.dp))
+                            }
                         }
                     }
                 }
@@ -231,13 +254,13 @@ fun BusinessSideDrawerContent(
                                 }
                                 Column {
                                     Text(
-                                        text = "تجربة بريميوم مجانية (شهرين)",
+                                        text = tr("bdrawer.trial_title"),
                                         fontSize = 12.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "متبقي $trialDaysRemaining يوماً من التجربة",
+                                        text = trFmt("bdrawer.trial_days_fmt", "days" to trialDaysRemaining),
                                         fontSize = 10.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -246,7 +269,7 @@ fun BusinessSideDrawerContent(
                         }
 
                         Text(
-                            text = "إضافة منتجات وفواتير ومبيعات وكاشير بلا حدود لتعزيز نشاطك التجاري.",
+                            text = tr("bdrawer.trial_desc"),
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 15.sp
@@ -259,10 +282,12 @@ fun BusinessSideDrawerContent(
                             },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.Black),
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(vertical = 6.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
                         ) {
-                            Text("عرض باقات الاشتراك VIP ↗", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text("${tr("bdrawer.view_vip_plans")} ↗", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -278,7 +303,9 @@ fun BusinessSideDrawerContent(
                     shape = RoundedCornerShape(14.dp),
                     color = OozoxTeal.copy(alpha = 0.12f),
                     border = BorderStroke(1.dp, OozoxTeal.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -303,13 +330,13 @@ fun BusinessSideDrawerContent(
                             }
                             Column {
                                 Text(
-                                    text = "التحقق من صحة الفاتورة 🛡️",
+                                    text = "${tr("bdrawer.verify_banner_title")} 🛡️",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "مطابقة العلامة المائية والرقم التسلسلي",
+                                    text = tr("bdrawer.verify_banner_sub"),
                                     fontSize = 10.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -321,10 +348,10 @@ fun BusinessSideDrawerContent(
                 }
             }
 
-            // Section: الأدوات المالية والإدارية المتقدمة
+            // Section: Quick Business Tools
             item {
                 Text(
-                    text = "الخدمات والإعدادات السريعة",
+                    text = tr("bdrawer.quick_section"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -336,8 +363,8 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.TableChart,
                     iconTint = Color(0xFF10B981),
-                    title = "شيت إكسل المحاسبي",
-                    subtitle = "تصدير الشيت الموحد واستيراد البيانات المحاسبية",
+                    title = tr("bdrawer.excel_title"),
+                    subtitle = tr("bdrawer.excel_sub"),
                     badge = "Excel",
                     onClick = {
                         onCloseDrawer()
@@ -350,9 +377,15 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.AccountBalanceWallet,
                     iconTint = GoldPrimary,
-                    title = "كشف الرصيد والعهد بأثر رجعي",
-                    subtitle = "أرصدة الموظفين، استلام الشفتات، وتدقيق الخزينة",
-                    badge = if (pendingShiftsCount > 0) "$pendingShiftsCount بانتظار الاعتماد" else if (complaintsCount > 0) "$complaintsCount شكاوى" else null,
+                    title = tr("bdrawer.retro_title"),
+                    subtitle = tr("bdrawer.retro_sub"),
+                    badge = if (pendingShiftsCount > 0) {
+                        trFmt("bdrawer.pending_shifts_fmt", "count" to pendingShiftsCount)
+                    } else if (complaintsCount > 0) {
+                        trFmt("bdrawer.complaints_fmt", "count" to complaintsCount)
+                    } else {
+                        null
+                    },
                     onClick = {
                         onCloseDrawer()
                         onOpenRetroactiveLedger()
@@ -364,8 +397,8 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.CorporateFare,
                     iconTint = GoldPrimary,
-                    title = "المركز المحاسبي للشركات",
-                    subtitle = "اليومية العامة ودفاتر الحسابات",
+                    title = tr("bdrawer.company_hub_title"),
+                    subtitle = tr("bdrawer.company_hub_sub"),
                     badge = "PRO",
                     onClick = {
                         onCloseDrawer()
@@ -378,9 +411,9 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.Assessment,
                     iconTint = Color(0xFF8B5CF6),
-                    title = "تقرير نهاية اليوم للمالك",
-                    subtitle = "ملخص المبيعات والخزينة والمخزون",
-                    badge = "يومي",
+                    title = tr("bdrawer.eod_title"),
+                    subtitle = tr("bdrawer.eod_sub"),
+                    badge = tr("bdrawer.eod_badge"),
                     onClick = {
                         onCloseDrawer()
                         onOpenEndOfDayReport()
@@ -392,8 +425,8 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.Payments,
                     iconTint = Color(0xFF14B8A6),
-                    title = "إدارة وسائل الدفع",
-                    subtitle = "فودافون كاش، إنستاباي، وبطاقات الدفع",
+                    title = tr("bdrawer.pay_title"),
+                    subtitle = tr("bdrawer.pay_sub"),
                     badge = null,
                     onClick = {
                         onCloseDrawer()
@@ -406,9 +439,9 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.LockClock,
                     iconTint = Color(0xFFEF4444),
-                    title = "تسليم الشفت وتقفيل العهدة",
-                    subtitle = "تسجيل النقدية ومطابقة البضائع باليد",
-                    badge = if (activeSubAccount != null) "شفت نشط" else null,
+                    title = tr("bdrawer.shift_title"),
+                    subtitle = tr("bdrawer.shift_sub"),
+                    badge = if (activeSubAccount != null) tr("bdrawer.active_shift") else null,
                     onClick = {
                         onCloseDrawer()
                         onOpenShiftHandover()
@@ -420,8 +453,8 @@ fun BusinessSideDrawerContent(
                 DrawerActionTile(
                     icon = Icons.Default.Badge,
                     iconTint = Color(0xFF0EA5E9),
-                    title = "تسجيل دخول كاشير / موظف",
-                    subtitle = "التبديل بين ورديات الموظفين والمبيعات",
+                    title = tr("bdrawer.cashier_login_title"),
+                    subtitle = tr("bdrawer.cashier_login_sub"),
                     badge = null,
                     onClick = {
                         onCloseDrawer()
@@ -448,7 +481,9 @@ private fun DrawerActionTile(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
     ) {
         Row(
             modifier = Modifier

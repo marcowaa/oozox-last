@@ -46,7 +46,9 @@ import com.example.ui.theme.RealGoldAmber
 import com.example.ui.viewmodel.MainViewModel
 import com.example.util.DatabaseIntegrityChecker
 import com.example.util.DatabaseVersionManager
+import com.example.util.LocalAppLanguage
 import com.example.util.OfflineSyncManager
+import com.example.util.tr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -284,7 +286,7 @@ fun GlobalThemeToggleButton(
         ) { targetIsDark ->
             Icon(
                 imageVector = if (targetIsDark) Icons.Default.DarkMode else Icons.Default.LightMode,
-                contentDescription = if (targetIsDark) "التبديل إلى الوضع الفاتح" else "التبديل إلى الوضع الداكن",
+                contentDescription = if (targetIsDark) tr("theme.switch_to_light") else tr("theme.switch_to_dark"),
                 tint = defaultTint,
                 modifier = Modifier
                     .size(18.dp)
@@ -346,7 +348,7 @@ fun GlobalThemeToggleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "مظهر التطبيق ووضع الشاشة",
+                    text = tr("theme.card_title"),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -361,7 +363,7 @@ fun GlobalThemeToggleCard(
                     )
                 ) {
                     Text(
-                        text = if (isDark) "الوضع الداكن" else "الوضع الفاتح ️",
+                        text = if (isDark) tr("dark_mode") else tr("light_mode"),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (isDark) GoldLight else Color(0xFF92400E),
@@ -398,13 +400,13 @@ fun GlobalThemeToggleCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "التبديل بين الداكن والفاتح",
+                            text = tr("theme.switch_label"),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (isDark) "واجهة مريحة للعينين في الإضاءة المنخفضة" else "واجهة نهارية مشرقة عالية الوضوح",
+                            text = if (isDark) tr("theme.switch_dark_sub") else tr("theme.switch_light_sub"),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -445,7 +447,7 @@ fun GlobalThemeToggleCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "الوضع الداكن",
+                            text = tr("dark_mode"),
                             fontSize = 12.sp,
                             fontWeight = if (isDark) FontWeight.Bold else FontWeight.Medium,
                             color = if (isDark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
@@ -479,7 +481,7 @@ fun GlobalThemeToggleCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "الوضع الفاتح ️",
+                            text = tr("light_mode"),
                             fontSize = 12.sp,
                             fontWeight = if (!isDark) FontWeight.Bold else FontWeight.Medium,
                             color = if (!isDark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
@@ -502,6 +504,7 @@ fun GlobalFontScaleCard(
     val themeController = LocalAppTheme.current
     val currentScale = themeController.fontScale
     val isDark = themeController.isDarkTheme
+    val currentLang = LocalAppLanguage.current
     val primaryAccent = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary
 
     Card(
@@ -540,13 +543,13 @@ fun GlobalFontScaleCard(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "حجم الخط ونصوص التطبيق",
+                        text = tr("font_scale.card_title"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "تكبير النصوص لسهولة القراءة ودعم ضعاف النظر",
+                        text = tr("font_scale.card_sub"),
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -572,20 +575,20 @@ fun GlobalFontScaleCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "معاينة فورية:",
+                            text = tr("font_scale.preview_label"),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = primaryAccent
                         )
                         Text(
-                            text = currentScale.subtitle,
+                            text = currentScale.localizedTitle(currentLang),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Text(
-                        text = "الذهب عيار 21: 3,450 ج.م | الرصيد: 125,000 ج.م",
+                        text = tr("font_scale.preview_sample"),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -631,13 +634,13 @@ fun GlobalFontScaleCard(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Column {
                                     Text(
-                                        text = scale.titleAr,
+                                        text = scale.localizedTitle(currentLang),
                                         fontSize = 13.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         color = if (isSelected) (if (isDark) GoldLight else Color(0xFF0F172A)) else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = scale.descriptionAr,
+                                        text = scale.localizedDescription(currentLang),
                                         fontSize = 10.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

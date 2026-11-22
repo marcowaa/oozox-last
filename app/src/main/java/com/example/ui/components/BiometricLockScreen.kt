@@ -35,12 +35,14 @@ import androidx.fragment.app.FragmentActivity
 import com.example.ui.theme.*
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
+import com.example.util.Translations
+import com.example.util.tr
 
 @Composable
 fun BiometricLockScreen(
     correctPin: String,
-    userName: String = "المستخدم",
-    userTypeLabel: String = "حساب مالي موثق",
+    userName: String = "",
+    userTypeLabel: String = "",
     isBiometricEnabled: Boolean = true,
     onUnlocked: () -> Unit
 ) {
@@ -49,6 +51,9 @@ fun BiometricLockScreen(
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isPinModeOnly by remember { mutableStateOf(!isBiometricEnabled) }
+
+    val resolvedUserName = userName.ifBlank { tr("lock.default_user") }
+    val resolvedUserType = userTypeLabel.ifBlank { tr("lock.verified_account") }
 
     val biometricStatus = remember(context) {
         BiometricHelper.checkBiometricStatus(context)
@@ -63,10 +68,10 @@ fun BiometricLockScreen(
             errorMessage = null
             BiometricHelper.authenticate(
                 activity = activity,
-                title = "تأمين البيانات المالية لمنصة OOZOX",
-                subtitle = "المصادقة ببصمة الإصبع أو التعرف على الوجه",
-                description = "مرحباً $userName، يرجى تأكيد الهوية لفتح المحفظة وبيانات تداول الذهب",
-                negativeButtonText = "استخدام رمز PIN",
+                title = Translations.getFromContext(context, "lock.prompt_title"),
+                subtitle = Translations.getFromContext(context, "lock.prompt_sub"),
+                description = Translations.formatFromContext(context, "lock.prompt_desc_fmt", "name" to resolvedUserName),
+                negativeButtonText = Translations.getFromContext(context, "lock.use_pin"),
                 onSuccess = {
                     onUnlocked()
                 },
@@ -79,7 +84,7 @@ fun BiometricLockScreen(
                     }
                 },
                 onFailed = {
-                    errorMessage = "فشلت المصادقة البيومترية، يرجى المحاولة مجدداً أو إدخال رمز PIN"
+                    errorMessage = Translations.getFromContext(context, "lock.biometric_failed")
                 }
             )
         }
@@ -127,7 +132,7 @@ fun BiometricLockScreen(
                 onUnlocked()
             } else if (newPin.length >= correctPin.length.coerceAtLeast(4)) {
                 // Wrong PIN attempt
-                errorMessage = "رمز PIN غير صحيح، يرجى المحاولة مجدداً"
+                errorMessage = Translations.getFromContext(context, "lock.pin_incorrect")
                 vibratePhone()
                 enteredPin = ""
             }
@@ -189,7 +194,7 @@ fun BiometricLockScreen(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Shield,
-                            contentDescription = "حماية أمنية",
+                            contentDescription = tr("security_biometric"),
                             tint = adaptiveGoldPrimary,
                             modifier = Modifier.size(38.dp)
                         )
@@ -199,7 +204,7 @@ fun BiometricLockScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "منصة OOZOX المالية",
+                    text = tr("lock.brand_title"),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = adaptiveGoldPrimary,
@@ -207,7 +212,7 @@ fun BiometricLockScreen(
                 )
 
                 Text(
-                    text = "بيانات الذهب والمحفظة مشفرة ومؤمنة ️",
+                    text = tr("lock.brand_sub"),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -226,7 +231,7 @@ fun BiometricLockScreen(
                         Icon(Icons.Default.Person, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "$userName • $userTypeLabel",
+                            text = "$resolvedUserName • $resolvedUserType",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -278,7 +283,7 @@ fun BiometricLockScreen(
                     }
                 } else {
                     Text(
-                        text = if (canUseBiometrics) "أدخل رمز PIN أو استخدم بصمة الإصبع والوجه" else "أدخل رمز PIN السري للمتابعة",
+                        text = if (canUseBiometrics) tr("lock.hint_bio_pin") else tr("lock.hint_pin_only"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -301,12 +306,12 @@ fun BiometricLockScreen(
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Fingerprint, contentDescription = "بصمة", tint = adaptiveGoldPrimary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Fingerprint, contentDescription = tr("security_biometric"), tint = adaptiveGoldPrimary, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Icon(Icons.Default.Face, contentDescription = "وجه", tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Face, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "فتح فوري بالبصمة أو الوجه",
+                                text = tr("lock.unlock_bio_btn"),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = adaptiveGoldPrimary
@@ -353,7 +358,7 @@ fun BiometricLockScreen(
                                             Box(contentAlignment = Alignment.Center) {
                                                 Icon(
                                                     imageVector = Icons.Default.Fingerprint,
-                                                    contentDescription = "بصمة الإصبع",
+                                                    contentDescription = tr("security_biometric"),
                                                     tint = adaptiveGoldPrimary,
                                                     modifier = Modifier.size(32.dp)
                                                 )
@@ -376,7 +381,7 @@ fun BiometricLockScreen(
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = Icons.Default.Backspace,
-                                                contentDescription = "حذف",
+                                                contentDescription = tr("common.delete"),
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(24.dp)
                                             )

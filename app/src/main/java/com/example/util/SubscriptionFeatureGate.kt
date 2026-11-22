@@ -4,96 +4,108 @@ import com.example.data.model.SubscriptionTier
 import com.example.data.model.UserEntity
 
 enum class SubscriptionPhase(
-    val titleAr: String,
-    val descriptionAr: String,
+    val titleKey: String,
+    val descriptionKey: String,
     val alertLevel: String // "SUCCESS", "INFO", "WARNING", "DANGER"
 ) {
     TRIAL_ACTIVE(
-        titleAr = "الفترة التجريبية المجانية الشاملة (60 يوماً)",
-        descriptionAr = "متاح لك استخدام كافة ميزات المنصة والذكاء الاصطناعي والحسابات المشفرة بدون أي قيود.",
+        titleKey = "sub.phase_trial_title",
+        descriptionKey = "sub.phase_trial_desc",
         alertLevel = "SUCCESS"
     ),
     GRACE_WARNING_STAGE_1(
-        titleAr = "المرحلة الأولى: انتهاء التجربة وحجب الذكاء الاصطناعي",
-        descriptionAr = "انتهت فترة الـ 60 يوماً التجريبية. تم تقييد المحاسب الذكي وفحص الموازين والمزامنة السحابية. يرجى الترقية.",
+        titleKey = "sub.phase_stage1_title",
+        descriptionKey = "sub.phase_stage1_desc",
         alertLevel = "WARNING"
     ),
     GRACE_WARNING_STAGE_2(
-        titleAr = "المرحلة الثانية: حجب التصدير والخزائن المشفرة",
-        descriptionAr = "تنبيه المرحلة الثانية: تم تقييد تصدير تقارير Excel و PDF وإنشاء الخزائن السرية الجديدة ونظام تدقيق العجز.",
+        titleKey = "sub.phase_stage2_title",
+        descriptionKey = "sub.phase_stage2_desc",
         alertLevel = "DANGER"
     ),
     BASE_RESTRICTED(
-        titleAr = "الحجب الكامل للمزايا المدفوعة",
-        descriptionAr = "تم حجب جميع الميزات المتقدمة لانتهاء فترة التجربة والتدرج. يمكنك الترقية الآن للاستمرار بكامل الصلاحيات.",
+        titleKey = "sub.phase_restricted_title",
+        descriptionKey = "sub.phase_restricted_desc",
         alertLevel = "DANGER"
     ),
     PAID_ACTIVE(
-        titleAr = "اشتراك مدفوع نشط ⚡",
-        descriptionAr = "حسابك مفعل بخطة مدفوعة وتتمتع بكافة المزايا المخصصة لباقاتك.",
+        titleKey = "sub.phase_paid_active_title",
+        descriptionKey = "sub.phase_paid_active_desc",
         alertLevel = "SUCCESS"
     ),
     PAID_EXPIRED(
-        titleAr = "انتهى الاشتراك المدفوع",
-        descriptionAr = "انتهت مدة اشتراكك الحالي. يرجى التجديد لمواصلة الاستفادة من الميزات المتقدمة.",
+        titleKey = "sub.phase_paid_expired_title",
+        descriptionKey = "sub.phase_paid_expired_desc",
         alertLevel = "WARNING"
-    )
+    );
+
+    fun localizedTitle(language: AppLanguage = Translations.activeLanguage(null)): String =
+        Translations.get(titleKey, language)
+
+    fun localizedDescription(language: AppLanguage = Translations.activeLanguage(null)): String =
+        Translations.get(descriptionKey, language)
 }
 
 enum class AppFeature(
-    val titleAr: String,
-    val descriptionAr: String,
+    val titleKey: String,
+    val descriptionKey: String,
     val minimumTier: SubscriptionTier,
     val iconName: String
 ) {
     GEMINI_AI_AND_OCR(
-        titleAr = "المحاسب الذكي وفحص موازين الذهب بالـ AI",
-        descriptionAr = "تحليل الفواتير الذكي، فحص موازين الصاغة بالكاميرا، والدردشة مع المحاسب الآلي.",
+        titleKey = "sub.feat_ai_title",
+        descriptionKey = "sub.feat_ai_desc",
         minimumTier = SubscriptionTier.DIAMOND_VIP,
         iconName = "Psychology"
     ),
     CONTEXTUAL_AI_CHAT_TRANSLATION(
-        titleAr = "الترجمة السياقية الفورية والنطق الصوتي بالذكاء الاصطناعي",
-        descriptionAr = "ترجمة المحادثات والرسائل وفق سياق المعنى وليس ترجمة حرفية مع النطق الصوتي التلقائي والتعرف اللغوي.",
+        titleKey = "sub.feat_translate_title",
+        descriptionKey = "sub.feat_translate_desc",
         minimumTier = SubscriptionTier.SILVER_TRADER,
         iconName = "Translate"
     ),
     GOOGLE_DRIVE_CLOUD_BACKUP(
-        titleAr = "النسخ الاحتياطي السحابي المشفر (Google Drive)",
-        descriptionAr = "ترحيل وتأمين نسخ الخزائن السرية والحسابات الفرعية على السحابة واستعادتها برقم الهاتف.",
+        titleKey = "sub.feat_backup_title",
+        descriptionKey = "sub.feat_backup_desc",
         minimumTier = SubscriptionTier.DIAMOND_VIP,
         iconName = "CloudSync"
     ),
     ADVANCED_EXCEL_PDF_EXPORT(
-        titleAr = "تصدير تقارير المحاسبة والقيود (Excel & PDF)",
-        descriptionAr = "استخراج اليومية الأمريكية، أستاذ الحسابات، وتقارير مبيعات وجرد الصاغة لملفات قابلة للطباعة.",
+        titleKey = "sub.feat_export_title",
+        descriptionKey = "sub.feat_export_desc",
         minimumTier = SubscriptionTier.SILVER_TRADER,
         iconName = "FileDownload"
     ),
     SECRET_SUB_ACCOUNTS_AND_VAULTS(
-        titleAr = "الخزائن السرية والحسابات الفرعية المشفرة",
-        descriptionAr = "إنشاء وإدارة حسابات مخفية بكلمات مرور سرية تفتح من شريط البحث ولا ترسل إشعارات.",
+        titleKey = "sub.feat_vaults_title",
+        descriptionKey = "sub.feat_vaults_desc",
         minimumTier = SubscriptionTier.SILVER_TRADER,
         iconName = "Security"
     ),
     FINANCIAL_COMPLAINTS_AND_AUDIT(
-        titleAr = "نظام الشكاوى المالية وتدقيق العجز بأثر رجعي",
-        descriptionAr = "تقديم شكاوى تدقيق الحسابات وإعادة احتساب الفروقات في القيود اليومية آلياً.",
+        titleKey = "sub.feat_complaints_title",
+        descriptionKey = "sub.feat_complaints_desc",
         minimumTier = SubscriptionTier.GOLD_ENTERPRISE,
         iconName = "FactCheck"
     ),
     WORKGROUPS_AND_RBAC(
-        titleAr = "إدارة مجموعات العمل وصلاحيات الموظفين",
-        descriptionAr = "تأسيس أقسام متفرعة للمؤسسة، تتبع الحضور والانصراف وصلاحيات القيود المحاسبية للموظفين.",
+        titleKey = "sub.feat_workgroups_title",
+        descriptionKey = "sub.feat_workgroups_desc",
         minimumTier = SubscriptionTier.GOLD_ENTERPRISE,
         iconName = "Groups"
     ),
     BASIC_ACCOUNTING_AND_CHATS(
-        titleAr = "الدردشات الفردية وتسجيل العمليات الأساسية",
-        descriptionAr = "محادثات فورية، تسجيل صفقات البيع والشراء والأسعار الحية للذهب والفضة.",
+        titleKey = "sub.feat_basic_title",
+        descriptionKey = "sub.feat_basic_desc",
         minimumTier = SubscriptionTier.FREE_TRIAL,
         iconName = "Forum"
-    )
+    );
+
+    fun localizedTitle(language: AppLanguage = Translations.activeLanguage(null)): String =
+        Translations.get(titleKey, language)
+
+    fun localizedDescription(language: AppLanguage = Translations.activeLanguage(null)): String =
+        Translations.get(descriptionKey, language)
 }
 
 data class FeatureAccessDecision(
@@ -125,7 +137,10 @@ object SubscriptionFeatureGate {
     const val GRACE_STAGE_1_DAYS = 10L // Days 61 to 70
     const val GRACE_STAGE_2_DAYS = 10L // Days 71 to 80
 
-    fun evaluateSubscription(user: UserEntity?): SubscriptionDetails {
+    fun evaluateSubscription(
+        user: UserEntity?,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): SubscriptionDetails {
         if (user == null) {
             return SubscriptionDetails(
                 tier = SubscriptionTier.FREE_TRIAL,
@@ -136,8 +151,8 @@ object SubscriptionFeatureGate {
                 daysPastTrial = 0L,
                 daysPastPaidExpiry = 0L,
                 trialProgressRatio = 1.0f,
-                alertTitle = SubscriptionPhase.TRIAL_ACTIVE.titleAr,
-                alertMessage = "فترة تجريبية مجانية لمدة 60 يوماً بكامل المزايا.",
+                alertTitle = SubscriptionPhase.TRIAL_ACTIVE.localizedTitle(language),
+                alertMessage = Translations.get("sub.trial_default_msg", language),
                 daysUntilNextPhase = 60L
             )
         }
@@ -145,6 +160,8 @@ object SubscriptionFeatureGate {
         val now = System.currentTimeMillis()
         val currentTier = SubscriptionTier.entries.find { it.name == user.subscriptionTier } ?: SubscriptionTier.FREE_TRIAL
         val isPaidTier = currentTier != SubscriptionTier.FREE_TRIAL
+        val tierLabel = currentTier.localizedLabel(language)
+        val tierBadge = currentTier.localizedBadgeText(language)
 
         if (isPaidTier) {
             val isPaidActive = user.subscriptionEndTimestamp > now
@@ -159,8 +176,8 @@ object SubscriptionFeatureGate {
                     daysPastTrial = 0L,
                     daysPastPaidExpiry = 0L,
                     trialProgressRatio = 1.0f,
-                    alertTitle = "باقتك: ${currentTier.label} (${currentTier.badgeText}) ⚡",
-                    alertMessage = "حسابك نشط ومفعل حتى ${formatDate(user.subscriptionEndTimestamp)} (متبقي $remainingPaidDays يوماً).",
+                    alertTitle = Translations.format("sub.paid_active_full_fmt", language, "tier" to tierLabel, "badge" to tierBadge),
+                    alertMessage = Translations.format("sub.paid_active_until_fmt", language, "date" to formatDate(user.subscriptionEndTimestamp, language), "days" to remainingPaidDays),
                     daysUntilNextPhase = remainingPaidDays
                 )
             } else {
@@ -174,22 +191,19 @@ object SubscriptionFeatureGate {
                     daysPastTrial = 0L,
                     daysPastPaidExpiry = daysExpired,
                     trialProgressRatio = 0.0f,
-                    alertTitle = "انتهى اشتراك ${currentTier.label} منذ $daysExpired يوم",
-                    alertMessage = "انتهت فترة الاشتراك المدفوع. يرجى تجديد باقتك لمواصلة استخدام المزايا الحصرية.",
+                    alertTitle = Translations.format("sub.paid_expired_fmt", language, "tier" to tierLabel, "days" to daysExpired),
+                    alertMessage = Translations.get("sub.paid_expired_msg", language),
                     daysUntilNextPhase = 0L
                 )
             }
         }
 
         // --- FREE TRIAL CALCULATION (60 Days + Gradual Restriction) ---
-        val trialStart = if (user.subscriptionStartTimestamp > 0) user.subscriptionStartTimestamp else user.createdAt
         val trialEnd = user.subscriptionEndTimestamp
         val trialTotalMs = (TRIAL_DURATION_DAYS * 24L * 3600L * 1000L).coerceAtLeast(1L)
-
         val diffToTrialEnd = trialEnd - now
 
         if (diffToTrialEnd > 0) {
-            // Still in the 60-day full free trial!
             val daysRemaining = (diffToTrialEnd / (1000L * 3600 * 24)).coerceAtLeast(1L)
             val progress = (diffToTrialEnd.toFloat() / trialTotalMs.toFloat()).coerceIn(0.0f, 1.0f)
             return SubscriptionDetails(
@@ -201,8 +215,8 @@ object SubscriptionFeatureGate {
                 daysPastTrial = 0L,
                 daysPastPaidExpiry = 0L,
                 trialProgressRatio = progress,
-                alertTitle = "🎁 تجربة مجانية شاملة: متبقي $daysRemaining يوماً",
-                alertMessage = "تتمتع بكامل ميزات المنصة المدفوعة والذكاء الاصطناعي مجاناً لمدة شهرين (60 يوماً).",
+                alertTitle = Translations.format("sub.trial_active_hero", language, "days" to daysRemaining),
+                alertMessage = Translations.get("sub.trial_default_msg", language),
                 daysUntilNextPhase = daysRemaining
             )
         }
@@ -213,7 +227,6 @@ object SubscriptionFeatureGate {
 
         return when {
             daysElapsedSinceExpired < GRACE_STAGE_1_DAYS -> {
-                // Phase 1: Days 1 to 10 after trial end (Days 61..70 from start)
                 val daysRemainingInStage = GRACE_STAGE_1_DAYS - daysElapsedSinceExpired
                 SubscriptionDetails(
                     tier = SubscriptionTier.FREE_TRIAL,
@@ -224,13 +237,12 @@ object SubscriptionFeatureGate {
                     daysPastTrial = daysElapsedSinceExpired,
                     daysPastPaidExpiry = 0L,
                     trialProgressRatio = 0.0f,
-                    alertTitle = "⚠️ تنبيه التدرج (المرحلة 1): انتهت الـ 60 يوماً التجريبية",
-                    alertMessage = "تم تقييد الذكاء الاصطناعي والمزامنة السحابية. متبقي $daysRemainingInStage يوماً قبل حجب التقارير والخزائن.",
+                    alertTitle = Translations.format("sub.stage1_alert_fmt", language, "days" to daysRemainingInStage),
+                    alertMessage = Translations.format("sub.stage1_full_msg_fmt", language, "days" to daysRemainingInStage),
                     daysUntilNextPhase = daysRemainingInStage
                 )
             }
             daysElapsedSinceExpired < (GRACE_STAGE_1_DAYS + GRACE_STAGE_2_DAYS) -> {
-                // Phase 2: Days 11 to 20 after trial end (Days 71..80 from start)
                 val daysInStage2 = daysElapsedSinceExpired - GRACE_STAGE_1_DAYS
                 val daysRemainingInStage = GRACE_STAGE_2_DAYS - daysInStage2
                 SubscriptionDetails(
@@ -242,13 +254,12 @@ object SubscriptionFeatureGate {
                     daysPastTrial = daysElapsedSinceExpired,
                     daysPastPaidExpiry = 0L,
                     trialProgressRatio = 0.0f,
-                    alertTitle = "🚨 تنبيه التدرج (المرحلة 2): تقييد التقارير والخزائن السرية",
-                    alertMessage = "تم حجب تصدير Excel ونظام تدقيق العجز والخزائن الجديدة. متبقي $daysRemainingInStage يوماً قبل الحجب الشامل.",
+                    alertTitle = Translations.format("sub.stage2_alert_fmt", language, "days" to daysRemainingInStage),
+                    alertMessage = Translations.format("sub.stage2_full_msg_fmt", language, "days" to daysRemainingInStage),
                     daysUntilNextPhase = daysRemainingInStage
                 )
             }
             else -> {
-                // Base Restricted: After Day 80
                 SubscriptionDetails(
                     tier = SubscriptionTier.FREE_TRIAL,
                     phase = SubscriptionPhase.BASE_RESTRICTED,
@@ -258,16 +269,22 @@ object SubscriptionFeatureGate {
                     daysPastTrial = daysElapsedSinceExpired,
                     daysPastPaidExpiry = 0L,
                     trialProgressRatio = 0.0f,
-                    alertTitle = "🔒 تم حجب المزايا المتقدمة بالكامل",
-                    alertMessage = "انتهت فترة التجربة والتدرج الزمني. اشترك في إحدى الباقات للاستمتاع بكافة مزايا إدارة الأعمال.",
+                    alertTitle = SubscriptionPhase.BASE_RESTRICTED.localizedTitle(language),
+                    alertMessage = Translations.get("sub.base_restricted_full_msg", language),
                     daysUntilNextPhase = 0L
                 )
             }
         }
     }
 
-    fun checkFeatureAccess(user: UserEntity?, feature: AppFeature): FeatureAccessDecision {
-        val sub = evaluateSubscription(user)
+    fun checkFeatureAccess(
+        user: UserEntity?,
+        feature: AppFeature,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): FeatureAccessDecision {
+        val sub = evaluateSubscription(user, language)
+        val featureName = feature.localizedTitle(language)
+        val minTierName = feature.minimumTier.localizedLabel(language)
 
         // 1. Paid Active tier checks
         if (sub.phase == SubscriptionPhase.PAID_ACTIVE) {
@@ -284,7 +301,7 @@ object SubscriptionFeatureGate {
                     isAllowed = false,
                     feature = feature,
                     currentPhase = sub.phase,
-                    restrictionMessage = "هذه الميزة تتطلب الترقية إلى باقة '${feature.minimumTier.label}' أو أعلى.",
+                    restrictionMessage = Translations.format("sub.tier_required_msg_fmt", language, "tier" to minTierName),
                     suggestedTier = feature.minimumTier
                 )
             }
@@ -306,14 +323,14 @@ object SubscriptionFeatureGate {
                     isAllowed = false,
                     feature = feature,
                     currentPhase = sub.phase,
-                    restrictionMessage = "تم حجب ميزات المحاسب الذكي وفحص الموازين بالذكاء الاصطناعي لانتهاء فترة الـ 60 يوماً المجانية. اشترك في باقة VIP للمتابعة.",
+                    restrictionMessage = Translations.get("sub.gate_ai_msg", language),
                     suggestedTier = SubscriptionTier.DIAMOND_VIP
                 )
                 AppFeature.GOOGLE_DRIVE_CLOUD_BACKUP -> FeatureAccessDecision(
                     isAllowed = false,
                     feature = feature,
                     currentPhase = sub.phase,
-                    restrictionMessage = "تم حجب المزامنة السحابية التلقائية في Google Drive. يرجى الترقية إلى باقة VIP.",
+                    restrictionMessage = Translations.get("sub.gate_backup_msg", language),
                     suggestedTier = SubscriptionTier.DIAMOND_VIP
                 )
                 else -> FeatureAccessDecision(isAllowed = true, feature = feature, currentPhase = sub.phase)
@@ -331,7 +348,7 @@ object SubscriptionFeatureGate {
                     isAllowed = false,
                     feature = feature,
                     currentPhase = sub.phase,
-                    restrictionMessage = "تم حجب '${feature.titleAr}' ضمن المرحلة الثانية للتدرج بعد انتهاء التجربة المجانية.",
+                    restrictionMessage = Translations.format("sub.gate_stage2_fmt", language, "feature" to featureName),
                     suggestedTier = feature.minimumTier
                 )
                 else -> FeatureAccessDecision(isAllowed = true, feature = feature, currentPhase = sub.phase)
@@ -346,18 +363,18 @@ object SubscriptionFeatureGate {
                 isAllowed = false,
                 feature = feature,
                 currentPhase = sub.phase,
-                restrictionMessage = "تم حجب '${feature.titleAr}' بالكامل. اشترك الآن في باقة '${feature.minimumTier.label}' لمواصلة الاستخدام.",
+                restrictionMessage = Translations.format("sub.gate_restricted_fmt", language, "feature" to featureName, "tier" to minTierName),
                 suggestedTier = feature.minimumTier
             )
         }
     }
 
-    private fun formatDate(timestamp: Long): String {
+    private fun formatDate(timestamp: Long, language: AppLanguage): String {
         return try {
-            val sdf = java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.getDefault())
+            val sdf = java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale(language.code))
             sdf.format(java.util.Date(timestamp))
-        } catch (e: Exception) {
-            "قريباً"
+        } catch (_: Exception) {
+            Translations.get("sub.soon", language)
         }
     }
 }

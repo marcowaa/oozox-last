@@ -20,30 +20,30 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
-enum class AppNavDestination(val titleAr: String, val titleEn: String) {
-    CHATS("المحادثات", "Chats"),
-    PROJECTS("المشاريع", "Projects"),
-    BUSINESS("إدارة الأعمال", "Business"),
-    INVOICES("الفواتير والقيود", "Invoices"),
-    GOLD("الذهب والمعادن", "Gold Market"),
-    STORE("المتجر", "Store"),
-    ADMIN("لوحة الإدارة", "Admin"),
-    PROFILE("حسابي", "Profile"),
-    ACCOUNTING_HUB("المركز المحاسبي", "Accounting Hub");
+enum class AppNavDestination(val key: String) {
+    CHATS("nav.chats"),
+    PROJECTS("nav.projects"),
+    BUSINESS("nav.business"),
+    INVOICES("nav.invoices"),
+    GOLD("nav.gold"),
+    STORE("nav.store"),
+    ADMIN("nav.admin"),
+    PROFILE("nav.profile"),
+    ACCOUNTING_HUB("nav.accounting_hub");
 
-    fun label(lang: AppLanguage): String =
-        if (lang == AppLanguage.ARABIC || lang == AppLanguage.URDU || lang == AppLanguage.PERSIAN) titleAr else titleEn
+    fun label(lang: AppLanguage = Translations.activeLanguage(null)): String =
+        Translations.get(key, lang)
 }
 
-enum class HubModalType(val titleAr: String, val titleEn: String) {
-    INVOICE_COMPLAINTS("شكاوى الفواتير", "Invoice Disputes"),
-    RETROACTIVE_COMPLAINT("تسوية رجعية", "Retroactive Claim"),
-    DEFICIT_INSPECTOR("فحص العجز", "Deficit Audit"),
-    ADD_RECORD("قيد يومي جديد", "New Entry"),
-    SECRET_VAULT_AUTH("فتح الخزينة", "Unlock Vault");
+enum class HubModalType(val key: String) {
+    INVOICE_COMPLAINTS("nav.modal_disputes"),
+    RETROACTIVE_COMPLAINT("nav.modal_retro"),
+    DEFICIT_INSPECTOR("nav.modal_deficit"),
+    ADD_RECORD("nav.modal_add_record"),
+    SECRET_VAULT_AUTH("nav.modal_unlock_vault");
 
-    fun label(lang: AppLanguage): String =
-        if (lang == AppLanguage.ARABIC || lang == AppLanguage.URDU || lang == AppLanguage.PERSIAN) titleAr else titleEn
+    fun label(lang: AppLanguage = Translations.activeLanguage(null)): String =
+        Translations.get(key, lang)
 }
 
 sealed class SuggestedAssistantAction {
@@ -100,7 +100,7 @@ sealed class AccountingVoiceCommand {
     ) : AccountingVoiceCommand()
 
     data class ExportReport(
-        val format: String, // "EXCEL", "EXCEL_UNIFIED", or "PDF"
+        val format: String,
         val message: String,
         val spokenReply: String
     ) : AccountingVoiceCommand()
@@ -128,8 +128,22 @@ class AccountingSpeechToTextEngine(private val context: Context) {
     companion object {
         private const val TAG = "AccountingSpeechEngine"
 
-        private fun isRtlLang(lang: AppLanguage): Boolean =
-            lang == AppLanguage.ARABIC || lang == AppLanguage.URDU || lang == AppLanguage.PERSIAN
+        fun speechLocaleFor(language: AppLanguage): String = when (language) {
+            AppLanguage.ARABIC -> "ar-EG"
+            AppLanguage.ENGLISH -> "en-US"
+            AppLanguage.FRENCH -> "fr-FR"
+            AppLanguage.SPANISH -> "es-ES"
+            AppLanguage.TURKISH -> "tr-TR"
+            AppLanguage.GERMAN -> "de-DE"
+            AppLanguage.CHINESE -> "zh-CN"
+            AppLanguage.HINDI -> "hi-IN"
+            AppLanguage.RUSSIAN -> "ru-RU"
+            AppLanguage.JAPANESE -> "ja-JP"
+            AppLanguage.PORTUGUESE -> "pt-BR"
+            AppLanguage.ITALIAN -> "it-IT"
+            AppLanguage.URDU -> "ur-PK"
+            AppLanguage.PERSIAN -> "fa-IR"
+        }
 
         private fun normalizeArabic(input: String): String =
             input.trim()
@@ -141,7 +155,7 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                 .replace("ى", "ي")
 
         /**
-         * Pure, testable command & explanation interpreter with live financial awareness.
+         * Pure, testable command & explanation interpreter with live financial awareness across all 14 languages.
          */
         fun interpretCommand(
             rawText: String,
@@ -150,11 +164,10 @@ class AccountingSpeechToTextEngine(private val context: Context) {
             groups: List<WorkGroupEntity>,
             unifiedSummary: UnifiedBusinessAccountingSummary? = null,
             pendingComplaintsCount: Int = 0,
-            language: AppLanguage = AppLanguage.ARABIC
+            language: AppLanguage = Translations.activeLanguage(null)
         ): AccountingVoiceCommand {
             val trimmed = rawText.trim()
             val norm = normalizeArabic(trimmed)
-            val isAr = isRtlLang(language)
 
             val summary = SimpleExcelEngine.computeSummary(
                 records = records,
@@ -184,9 +197,8 @@ class AccountingSpeechToTextEngine(private val context: Context) {
             // 1. Explanations (with real live figures & 1-tap module shortcut)
             if (wantsExplanation) {
                 return buildExplanationResponse(
-                    trimmed = trimmed,
                     norm = norm,
-                    isAr = isAr,
+                    language = language,
                     activeProfile = activeProfile,
                     summary = summary,
                     netBalance = netBalance,
@@ -202,21 +214,21 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                 return AccountingVoiceCommand.OpenHubModal(
                     modalType = HubModalType.INVOICE_COMPLAINTS,
                     title = HubModalType.INVOICE_COMPLAINTS.label(language),
-                    spokenReply = if (isAr) "تم فتح نافذة شكاوى الفواتير والمراجعة." else "Opening invoice disputes."
+                    spokenReply = Translations.get("speech.open_disputes_reply", language)
                 )
             }
             if (norm.contains("باثر رجعي") || norm.contains("اثر رجعي") || norm.contains("تسويه رجعيه") || norm.contains("شكوي رجعيه") || norm.contains("retro")) {
                 return AccountingVoiceCommand.OpenHubModal(
                     modalType = HubModalType.RETROACTIVE_COMPLAINT,
                     title = HubModalType.RETROACTIVE_COMPLAINT.label(language),
-                    spokenReply = if (isAr) "تم فتح نافذة التسوية والشكوى بأثر رجعي." else "Opening retroactive settlement."
+                    spokenReply = Translations.get("speech.open_retro_reply", language)
                 )
             }
             if (norm.contains("فحص العجز") || norm.contains("تدقيق العجز") || norm.contains("inspect deficit") || norm.contains("audit deficit")) {
                 return AccountingVoiceCommand.OpenHubModal(
                     modalType = HubModalType.DEFICIT_INSPECTOR,
                     title = HubModalType.DEFICIT_INSPECTOR.label(language),
-                    spokenReply = if (isAr) "تم فتح مدقق قيود العجز." else "Opening deficit inspector."
+                    spokenReply = Translations.get("speech.open_deficit_reply", language)
                 )
             }
 
@@ -224,19 +236,21 @@ class AccountingSpeechToTextEngine(private val context: Context) {
             if (wantsOpen || norm.startsWith("قسم ")) {
                 detectAppDestination(norm)?.let { dest ->
                     if (dest != AppNavDestination.ACCOUNTING_HUB) {
+                        val destLabel = dest.label(language)
                         return AccountingVoiceCommand.OpenAppScreen(
                             destination = dest,
-                            title = dest.label(language),
-                            spokenReply = if (isAr) "تم فتح قسم ${dest.titleAr}." else "Opening ${dest.titleEn}."
+                            title = destLabel,
+                            spokenReply = Translations.format("speech.open_dest_reply_fmt", language, "dest" to destLabel)
                         )
                     }
                 }
             }
             if (norm == "الذهب" || norm == "قسم الذهب" || norm == "gold" || norm == "open gold") {
+                val goldLabel = AppNavDestination.GOLD.label(language)
                 return AccountingVoiceCommand.OpenAppScreen(
                     destination = AppNavDestination.GOLD,
-                    title = AppNavDestination.GOLD.label(language),
-                    spokenReply = if (isAr) "تم فتح قسم الذهب." else "Opening Gold Market."
+                    title = goldLabel,
+                    spokenReply = Translations.format("speech.open_dest_reply_fmt", language, "dest" to goldLabel)
                 )
             }
 
@@ -247,24 +261,27 @@ class AccountingSpeechToTextEngine(private val context: Context) {
 
             // 5. Export Commands
             if (norm.contains("اكسل موحد") || norm.contains("اكسل شامل") || norm.contains("شيت موحد") || norm.contains("unified excel")) {
+                val msg = Translations.get("speech.export_unified_msg", language)
                 return AccountingVoiceCommand.ExportReport(
                     format = "EXCEL_UNIFIED",
-                    message = if (isAr) "جاري تجهيز الشيت المحاسبي الموحد..." else "Exporting unified workbook...",
-                    spokenReply = if (isAr) "جاري تصدير الشيت المحاسبي الموحد." else "Exporting unified Excel workbook."
+                    message = msg,
+                    spokenReply = msg
                 )
             }
             if (norm.contains("اكسل") || norm.contains("excel") || norm.contains("شيت")) {
+                val msg = Translations.get("speech.export_excel_msg", language)
                 return AccountingVoiceCommand.ExportReport(
                     format = "EXCEL",
-                    message = if (isAr) "جاري تصدير كشف اليومية..." else "Exporting journal sheet...",
-                    spokenReply = if (isAr) "جاري تصدير ملف الإكسل." else "Exporting Excel sheet."
+                    message = msg,
+                    spokenReply = msg
                 )
             }
             if (norm.contains("pdf") || norm.contains("بي دي اف") || norm.contains("طباعه")) {
+                val msg = Translations.get("speech.export_pdf_msg", language)
                 return AccountingVoiceCommand.ExportReport(
                     format = "PDF",
-                    message = if (isAr) "جاري تجهيز التقرير الرسمي PDF..." else "Generating PDF report...",
-                    spokenReply = if (isAr) "جاري تجهيز تقرير PDF." else "Generating PDF report."
+                    message = msg,
+                    spokenReply = msg
                 )
             }
 
@@ -273,17 +290,19 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                 norm.contains("صافي") || norm.contains("معانا كام") || norm.contains("في الخزنه") ||
                 norm.contains("balance") || norm.contains("cashflow") || norm.contains("treasury")
             ) {
-                val formattedBal = GoldUtils.formatCurrency(netBalance)
-                val detailsStr = if (isAr) {
-                    "وارد: ${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)} • صادر: ${GoldUtils.formatCurrency(summary.totalOutgoing)} • عجز: ${GoldUtils.formatCurrency(totalDeficit)}"
-                } else {
-                    "Inflow: ${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)} • Outflow: ${GoldUtils.formatCurrency(summary.totalOutgoing)} • Deficit: ${GoldUtils.formatCurrency(totalDeficit)}"
-                }
+                val formattedBal = GoldUtils.formatCurrency(netBalance, language)
+                val detailsStr = Translations.format(
+                    "speech.balance_details_fmt",
+                    language,
+                    "inflow" to GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming, language),
+                    "outflow" to GoldUtils.formatCurrency(summary.totalOutgoing, language),
+                    "deficit" to GoldUtils.formatCurrency(totalDeficit, language)
+                )
                 return AccountingVoiceCommand.BalanceQuery(
-                    title = if (isAr) "رصيد الخزينة الصافي" else "Net Treasury Balance",
+                    title = Translations.get("speech.balance_title", language),
                     answer = formattedBal,
                     details = detailsStr,
-                    spokenReply = if (isAr) "صافي الخزينة الحالي $formattedBal" else "Current net treasury is $formattedBal"
+                    spokenReply = Translations.format("speech.balance_spoken_fmt", language, "bal" to formattedBal)
                 )
             }
 
@@ -292,29 +311,32 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                 norm.contains("فروقات") || norm.contains("فروق") || norm.contains("deficit") || norm.contains("dispute")
             ) {
                 val answerStr = if (totalDeficit > 0.0 || pendingComplaintsCount > 0) {
-                    if (isAr) {
-                        "إجمالي العجز: ${GoldUtils.formatCurrency(totalDeficit)} ($openDeficitCount قيد) • شكاوى معلقة: $pendingComplaintsCount"
-                    } else {
-                        "Total Deficit: ${GoldUtils.formatCurrency(totalDeficit)} ($openDeficitCount rows) • Open Disputes: $pendingComplaintsCount"
-                    }
+                    Translations.format(
+                        "speech.deficit_ans_fmt",
+                        language,
+                        "total" to GoldUtils.formatCurrency(totalDeficit, language),
+                        "count" to openDeficitCount,
+                        "pending" to pendingComplaintsCount
+                    )
                 } else {
-                    if (isAr) "لا يوجد عجز أو شكاوى معلقة حالياً" else "Zero deficits or open disputes"
+                    Translations.get("speech.deficit_zero", language)
                 }
                 return AccountingVoiceCommand.DeficitQuery(
-                    title = if (isAr) "فحص العجز والشكاوى" else "Deficits & Disputes",
+                    title = Translations.get("speech.deficit_title", language),
                     answer = answerStr,
                     totalDeficit = totalDeficit,
                     complaintsCount = summary.totalComplaints + pendingComplaintsCount,
                     spokenReply = answerStr,
                     suggestedAction = SuggestedAssistantAction.OpenHubModal(
                         modalType = if (pendingComplaintsCount > 0) HubModalType.INVOICE_COMPLAINTS else HubModalType.DEFICIT_INSPECTOR,
-                        label = if (isAr) "مراجعة التفاصيل" else "Inspect Now"
+                        label = Translations.get("speech.inspect_now", language)
                     )
                 )
             }
 
             // 8. Accounting Entry Recording (amount / weight / verbs)
-            val parsed = SmartVoiceAccountingParser.parseVoiceAccountingText(trimmed, activeProfile?.name ?: "الخزينة")
+            val treasuryScope = activeProfile?.name ?: Translations.get("acct.main_treasury", language)
+            val parsed = SmartVoiceAccountingParser.parseVoiceAccountingText(trimmed, treasuryScope)
             if (parsed.amount > 0.0 || parsed.weightGrams > 0.0 ||
                 norm.contains("سجل") || norm.contains("مصروف") || norm.contains("قيد") ||
                 norm.contains("قبض") || norm.contains("صرف") || norm.contains("ادفع") || norm.contains("دفعه")
@@ -323,7 +345,7 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                     return AccountingVoiceCommand.OpenHubModal(
                         modalType = HubModalType.ADD_RECORD,
                         title = HubModalType.ADD_RECORD.label(language),
-                        spokenReply = if (isAr) "تم فتح نموذج قيد جديد." else "Opening new journal entry."
+                        spokenReply = Translations.get("speech.open_new_entry_reply", language)
                     )
                 }
 
@@ -334,28 +356,37 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                 val candidateEntity = DailyAccountingRecordEntity(
                     id = UUID.randomUUID().toString(),
                     groupId = targetGroup?.id ?: "general_hub",
-                    subGroupId = targetGroup?.companyName ?: "إدارة الحسابات",
+                    subGroupId = targetGroup?.companyName ?: Translations.get("acct.hub_title", language),
                     profileId = activeProfile?.id,
                     entryDate = todayStr,
                     staffId = "ai_voice_stt",
-                    staffName = if (parsed.counterPartyName.isNotBlank()) parsed.counterPartyName else (activeProfile?.name ?: "المساعد الذكي"),
-                    staffRole = "محاسب ذكي",
+                    staffName = if (parsed.counterPartyName.isNotBlank()) {
+                        parsed.counterPartyName
+                    } else {
+                        activeProfile?.name ?: Translations.get("acct.assistant_title", language)
+                    },
+                    staffRole = Translations.get("speech.smart_accountant_role", language),
                     dailyRevenue = if (isCredit && parsed.operationCategory != "مصروفات") parsed.amount else 0.0,
                     incomingAmount = if (isCredit) parsed.amount else 0.0,
                     outgoingAmount = if (!isCredit) parsed.amount else 0.0,
                     deficitAmount = 0.0,
                     complaintsCount = 0,
-                    notes = "[أمر صوتي] ${parsed.rawSpokenText} (${parsed.suggestedTag})",
+                    notes = Translations.format(
+                        "speech.voice_tag_fmt",
+                        language,
+                        "raw" to parsed.rawSpokenText,
+                        "tag" to parsed.suggestedTag
+                    ),
                     isEncrypted = true,
                     timestamp = System.currentTimeMillis()
                 )
 
-                val opLabel = if (isCredit) "إيراد وقبض" else "مصروف ومدفوعات"
-                val reviewVoiceReadback = if (isAr) {
-                    "قيد $opLabel بقيمة ${parsed.amount.toInt()} جنيه بتصنيف ${parsed.suggestedTag}"
-                } else {
-                    "Draft ${if (isCredit) "inflow" else "outflow"} entry for ${parsed.amount.toInt()} (${parsed.suggestedTag})"
-                }
+                val reviewVoiceReadback = Translations.format(
+                    if (isCredit) "speech.draft_inflow_fmt" else "speech.draft_outflow_fmt",
+                    language,
+                    "amount" to GoldUtils.formatCurrency(parsed.amount, language),
+                    "tag" to parsed.suggestedTag
+                )
 
                 return AccountingVoiceCommand.RecordTransaction(
                     parsedVoiceRecord = parsed,
@@ -366,7 +397,7 @@ class AccountingSpeechToTextEngine(private val context: Context) {
 
             // 9. Executive Financial Summary & Live Smart Assistant Advice
             val liveSummary = buildLiveExecutiveBriefing(
-                isAr = isAr,
+                language = language,
                 summary = summary,
                 netBalance = netBalance,
                 unifiedSummary = unifiedSummary,
@@ -380,7 +411,7 @@ class AccountingSpeechToTextEngine(private val context: Context) {
                 spokenReply = liveSummary.lineSequence().firstOrNull().orEmpty(),
                 suggestedAction = SuggestedAssistantAction.OpenHubSection(
                     sectionIndex = 1,
-                    label = if (isAr) "فتح اليومية" else "Open Journal"
+                    label = Translations.get("speech.open_journal", language)
                 )
             )
         }
@@ -398,28 +429,34 @@ class AccountingSpeechToTextEngine(private val context: Context) {
         }
 
         private fun detectHubSection(norm: String, lang: AppLanguage): AccountingVoiceCommand.SectionNavigation? {
-            val isAr = isRtlLang(lang)
-            return when {
+            val secKey = when {
                 norm.contains("اليوميه") || norm.contains("الدفتر") || norm.contains("القيود") || norm.contains("journal") || norm.contains("ledger") ->
-                    AccountingVoiceCommand.SectionNavigation(1, AccountingI18n.get("sec_ledger", lang), if (isAr) "تم فتح دفتر اليومية." else "Opened Journal.")
+                    1 to "sec_ledger"
                 norm.contains("الشركات") || norm.contains("المجموعات") || norm.contains("الاقسام") || norm.contains("الفروع") || norm.contains("companies") || norm.contains("entities") ->
-                    AccountingVoiceCommand.SectionNavigation(2, AccountingI18n.get("sec_groups", lang), if (isAr) "تم فتح الشركات والأقسام." else "Opened Entities.")
+                    2 to "sec_groups"
                 norm.contains("الموظفين") || norm.contains("الورديات") || norm.contains("الحضور") || norm.contains("staff") || norm.contains("shifts") ->
-                    AccountingVoiceCommand.SectionNavigation(3, AccountingI18n.get("sec_staff", lang), if (isAr) "تم فتح الموظفين والورديات." else "Opened Staff & Shifts.")
+                    3 to "sec_staff"
                 norm.contains("الخزائن") || norm.contains("الخزينه السريه") || norm.contains("المخفيه") || norm.contains("vault") ->
-                    AccountingVoiceCommand.SectionNavigation(0, AccountingI18n.get("sec_vaults", lang), if (isAr) "تم فتح الخزائن السرية." else "Opened Secret Vaults.")
+                    0 to "sec_vaults"
                 norm.contains("نسخ") || norm.contains("سحاب") || norm.contains("مزامن") || norm.contains("cloud") || norm.contains("backup") ->
-                    AccountingVoiceCommand.SectionNavigation(4, AccountingI18n.get("sec_backup", lang), if (isAr) "تم فتح النسخ السحابي." else "Opened Cloud Backup.")
+                    4 to "sec_backup"
                 norm.contains("الرئيسي") || norm.contains("المؤشرات") || norm.contains("داشبورد") || norm.contains("dashboard") || norm.contains("overview") ->
-                    AccountingVoiceCommand.SectionNavigation(-1, AccountingI18n.get("sec_dashboard", lang), if (isAr) "تم فتح المؤشرات الرئيسية." else "Opened Overview.")
+                    -1 to "sec_dashboard"
                 else -> null
-            }
+            } ?: return null
+
+            val (index, key) = secKey
+            val sectionTitle = AccountingI18n.get(key, lang)
+            return AccountingVoiceCommand.SectionNavigation(
+                sectionIndex = index,
+                sectionTitle = sectionTitle,
+                spokenReply = Translations.format("speech.sec_opened_fmt", lang, "section" to sectionTitle)
+            )
         }
 
         private fun buildExplanationResponse(
-            trimmed: String,
             norm: String,
-            isAr: Boolean,
+            language: AppLanguage,
             activeProfile: HiddenProfileEntity?,
             summary: CompanyAccountingSummary,
             netBalance: Double,
@@ -430,130 +467,133 @@ class AccountingSpeechToTextEngine(private val context: Context) {
         ): AccountingVoiceCommand.ExplainOrAnswer {
             return when {
                 norm.contains("خزينه") || norm.contains("خزائن") || norm.contains("مخفي") || norm.contains("سري") || norm.contains("vault") -> {
-                    val ans = if (isAr) {
-                        "الخزائن السرية هي مساحات مالية مستقلة بكلمة مرور، تفصل قيود كل نشاط أو شريك عن الخزينة العامة مع نفس أدوات اليومية والتصدير."
-                    } else {
-                        "Secret Vaults isolate ledgers, entities, and Excel/PDF reports per sub-entity behind an encrypted PIN."
-                    }
+                    val ans = Translations.get("speech.exp_vaults_ans", language)
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "شرح الخزائن السرية" else "About Secret Vaults",
+                        title = Translations.get("speech.exp_vaults_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubSection(0, if (isAr) "فتح الخزائن" else "Open Vaults")
+                        suggestedAction = SuggestedAssistantAction.OpenHubSection(0, Translations.get("speech.exp_vaults_btn", language))
                     )
                 }
                 norm.contains("رجعي") || norm.contains("تسويه") || norm.contains("عهد") || norm.contains("retro") -> {
-                    val ans = if (isAr) {
-                        "التسوية بأثر رجعي تتيح قيد فرق عهدة أو خطأ فاتورة قديم على عهدة الموظف مع حفظ الإثبات وتحديث صافي الرصيد تلقائياً."
-                    } else {
-                        "Retroactive Claims reconcile past shift or cash discrepancies directly against staff custody ledgers."
-                    }
+                    val ans = Translations.get("speech.exp_retro_ans", language)
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "التسوية بأثر رجعي" else "Retroactive Claims",
+                        title = Translations.get("speech.exp_retro_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubModal(HubModalType.RETROACTIVE_COMPLAINT, if (isAr) "فتح التسوية" else "Open Claim")
+                        suggestedAction = SuggestedAssistantAction.OpenHubModal(
+                            HubModalType.RETROACTIVE_COMPLAINT,
+                            Translations.get("speech.exp_retro_btn", language)
+                        )
                     )
                 }
                 norm.contains("عجز") || norm.contains("شكوي") || norm.contains("شكاو") || norm.contains("نزاع") || norm.contains("deficit") || norm.contains("dispute") -> {
-                    val ans = if (isAr) {
-                        "العجز المسجل حالياً: ${GoldUtils.formatCurrency(summary.totalDeficit)} في $openDeficitCount قيد، مع $pendingComplaintsCount شكاوى معلقة. يمكنك فحص القيود أو التحقيق الجنائي في تسليم الشفت مباشرة."
-                    } else {
-                        "Current recorded deficit is ${GoldUtils.formatCurrency(summary.totalDeficit)} across $openDeficitCount entries, with $pendingComplaintsCount open disputes."
-                    }
+                    val ans = Translations.format(
+                        "speech.exp_deficit_ans_fmt",
+                        language,
+                        "total" to GoldUtils.formatCurrency(summary.totalDeficit, language),
+                        "count" to openDeficitCount,
+                        "pending" to pendingComplaintsCount
+                    )
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "شرح العجز والشكاوى" else "Deficits & Disputes",
+                        title = Translations.get("speech.deficit_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubModal(HubModalType.INVOICE_COMPLAINTS, if (isAr) "مراجعة الشكاوى" else "Open Disputes")
+                        suggestedAction = SuggestedAssistantAction.OpenHubModal(
+                            HubModalType.INVOICE_COMPLAINTS,
+                            Translations.get("speech.exp_deficit_btn", language)
+                        )
                     )
                 }
                 norm.contains("يوميه") || norm.contains("قيد") || norm.contains("دفتر") || norm.contains("journal") || norm.contains("ledger") -> {
-                    val ans = if (isAr) {
-                        "دفتر اليومية يجمع الوارد (${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)}) والصادر (${GoldUtils.formatCurrency(summary.totalOutgoing)}) عبر ${summary.recordsCount} قيد، مع تصدير واستيراد إكسل وPDF."
-                    } else {
-                        "Daily Journal tracks inflow (${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)}) and outflow (${GoldUtils.formatCurrency(summary.totalOutgoing)}) across ${summary.recordsCount} entries."
-                    }
+                    val ans = Translations.format(
+                        "speech.exp_journal_ans_fmt",
+                        language,
+                        "inflow" to GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming, language),
+                        "outflow" to GoldUtils.formatCurrency(summary.totalOutgoing, language),
+                        "count" to summary.recordsCount
+                    )
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "شرح دفتر اليومية" else "Daily Journal",
+                        title = Translations.get("speech.exp_journal_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubSection(1, if (isAr) "فتح اليومية" else "Open Journal")
+                        suggestedAction = SuggestedAssistantAction.OpenHubSection(1, Translations.get("speech.open_journal", language))
                     )
                 }
                 norm.contains("موظف") || norm.contains("وردي") || norm.contains("حضور") || norm.contains("شفت") || norm.contains("staff") || norm.contains("shift") -> {
-                    val ans = if (isAr) {
-                        "قسم الموظفين يضبط ساعات الورديات، صلاحيات ترحيل القيود، التتبع الجغرافي، وسجل الحضور والانصراف الفوري."
-                    } else {
-                        "Staff & Shifts manages work hours, geofenced clock-in/out logs, and accounting posting permissions."
-                    }
+                    val ans = Translations.get("speech.exp_staff_ans", language)
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "الموظفون والورديات" else "Staff & Shifts",
+                        title = Translations.get("speech.exp_staff_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubSection(3, if (isAr) "فتح الموظفين" else "Open Staff")
+                        suggestedAction = SuggestedAssistantAction.OpenHubSection(3, Translations.get("speech.exp_staff_btn", language))
                     )
                 }
                 norm.contains("شرك") || norm.contains("مجموع") || norm.contains("فرع") || norm.contains("اقسام") || norm.contains("entities") || norm.contains("compan") -> {
-                    val ans = if (isAr) {
-                        "لديك حالياً $groupsCount شركة/قسم. كل كيان له قناة رسمية، تحكم في منع الخاص، وأرصدة وارد وصادر منفصلة."
-                    } else {
-                        "You have $groupsCount entities/branches with dedicated ledgers, privacy locks, and per-entity Excel export."
-                    }
+                    val ans = Translations.format("speech.exp_entities_ans_fmt", language, "count" to groupsCount)
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "الشركات والأقسام" else "Entities & Branches",
+                        title = Translations.get("speech.exp_entities_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubSection(2, if (isAr) "فتح الشركات" else "Open Entities")
+                        suggestedAction = SuggestedAssistantAction.OpenHubSection(2, Translations.get("speech.exp_entities_btn", language))
                     )
                 }
                 norm.contains("اكسل") || norm.contains("excel") || norm.contains("شيت") || norm.contains("pdf") -> {
-                    val ans = if (isAr) {
-                        "الشيت الموحد يدمج قيود اليومية والمشاريع والفواتير وهاشتاجات الشات في ملف CSV جاهز لإكسل مع الحسابات المجمعة."
-                    } else {
-                        "Unified Excel combines daily entries, projects, invoices, and chat ledgers into a single executive workbook."
-                    }
+                    val ans = Translations.get("speech.exp_reports_ans", language)
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "التقارير الموحدة" else "Unified Reports",
+                        title = Translations.get("speech.exp_reports_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.ExportReport("EXCEL_UNIFIED", if (isAr) "تصدير إكسل" else "Export Excel")
+                        suggestedAction = SuggestedAssistantAction.ExportReport(
+                            "EXCEL_UNIFIED",
+                            Translations.get("speech.export_excel_btn", language)
+                        )
                     )
                 }
                 norm.contains("ذهب") || norm.contains("gold") -> {
-                    val ans = if (isAr) {
-                        "قسم الذهب يعرض الأسعار الحية للعيارات 24/21/18، حاسبة المصنعية، فحص QR، الزكاة، وسجل الفواتير."
-                    } else {
-                        "Gold Market tracks live 24K/21K/18K rates, craftsmanship calculator, QR authenticity, and portfolio."
-                    }
+                    val ans = Translations.get("speech.exp_gold_ans", language)
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "قسم الذهب" else "Gold Market",
+                        title = AppNavDestination.GOLD.label(language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenAppScreen(AppNavDestination.GOLD, if (isAr) "فتح الذهب" else "Open Gold")
+                        suggestedAction = SuggestedAssistantAction.OpenAppScreen(
+                            AppNavDestination.GOLD,
+                            Translations.get("speech.open_gold_btn", language)
+                        )
                     )
                 }
                 else -> {
-                    val combinedStr = unifiedSummary?.let { " | الصافي الموحد: ${GoldUtils.formatCurrency(it.combinedNetPosition)}" } ?: ""
-                    val ans = if (isAr) {
-                        val scope = activeProfile?.name ?: "الخزينة العامة"
-                        "ملخص ($scope):\n• صافي الرصيد: ${GoldUtils.formatCurrency(netBalance)}\n• الوارد: ${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)} | الصادر: ${GoldUtils.formatCurrency(summary.totalOutgoing)}\n• العجز: ${GoldUtils.formatCurrency(summary.totalDeficit)} | الشكاوى: $pendingComplaintsCount$combinedStr"
-                    } else {
-                        val scope = activeProfile?.name ?: "Main Treasury"
-                        "Summary ($scope):\n• Net Balance: ${GoldUtils.formatCurrency(netBalance)}\n• Inflow: ${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)} | Outflow: ${GoldUtils.formatCurrency(summary.totalOutgoing)}\n• Deficit: ${GoldUtils.formatCurrency(summary.totalDeficit)} | Disputes: $pendingComplaintsCount"
-                    }
+                    val combinedStr = unifiedSummary?.let {
+                        " " + Translations.format(
+                            "speech.exec_combined_suffix_fmt",
+                            language,
+                            "net" to GoldUtils.formatCurrency(it.combinedNetPosition, language)
+                        )
+                    } ?: ""
+                    val scope = activeProfile?.name ?: Translations.get("acct.main_treasury", language)
+                    val ans = Translations.format(
+                        "speech.exec_summary_body_fmt",
+                        language,
+                        "scope" to scope,
+                        "net" to GoldUtils.formatCurrency(netBalance, language),
+                        "inflow" to GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming, language),
+                        "outflow" to GoldUtils.formatCurrency(summary.totalOutgoing, language),
+                        "deficit" to GoldUtils.formatCurrency(summary.totalDeficit, language),
+                        "pending" to pendingComplaintsCount,
+                        "combined" to combinedStr
+                    )
                     AccountingVoiceCommand.ExplainOrAnswer(
-                        title = if (isAr) "التحليل المالي التنفيذي" else "Executive Summary",
+                        title = Translations.get("speech.exec_summary_title", language),
                         answer = ans,
                         spokenReply = ans,
-                        suggestedAction = SuggestedAssistantAction.OpenHubSection(-1, if (isAr) "عرض المؤشرات" else "Overview")
+                        suggestedAction = SuggestedAssistantAction.OpenHubSection(-1, Translations.get("speech.overview_btn", language))
                     )
                 }
             }
         }
 
         private fun buildLiveExecutiveBriefing(
-            isAr: Boolean,
+            language: AppLanguage,
             summary: CompanyAccountingSummary,
             netBalance: Double,
             unifiedSummary: UnifiedBusinessAccountingSummary?,
@@ -564,34 +604,58 @@ class AccountingSpeechToTextEngine(private val context: Context) {
             val topEntity = records.groupBy { it.subGroupId ?: it.staffName }
                 .maxByOrNull { (_, list) -> list.sumOf { it.dailyRevenue + it.incomingAmount } }
                 ?.key
-            return if (isAr) {
-                buildString {
-                    appendLine("صافي الخزينة: ${GoldUtils.formatCurrency(netBalance)}")
-                    appendLine("• الإيراد والوارد: ${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)}")
-                    appendLine("• الصادر والمصروف: ${GoldUtils.formatCurrency(summary.totalOutgoing)}")
-                    if (summary.totalDeficit > 0 || pendingComplaintsCount > 0) {
-                        appendLine("• تنبيه: عجز ${GoldUtils.formatCurrency(summary.totalDeficit)} و $pendingComplaintsCount شكاوى")
-                    }
-                    if (!topEntity.isNullOrBlank()) {
-                        appendLine("• الأعلى نشاطاً: $topEntity (${groups.size} كيانات)")
-                    }
-                    unifiedSummary?.let {
-                        append("• الموقف الموحد: ${GoldUtils.formatCurrency(it.combinedNetPosition)}")
-                    }
-                }.trim()
-            } else {
-                buildString {
-                    appendLine("Net Treasury: ${GoldUtils.formatCurrency(netBalance)}")
-                    appendLine("• Inflow: ${GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming)}")
-                    appendLine("• Outflow: ${GoldUtils.formatCurrency(summary.totalOutgoing)}")
-                    if (summary.totalDeficit > 0 || pendingComplaintsCount > 0) {
-                        appendLine("• Alert: Deficit ${GoldUtils.formatCurrency(summary.totalDeficit)}, $pendingComplaintsCount open disputes")
-                    }
-                    unifiedSummary?.let {
-                        append("• Enterprise Net: ${GoldUtils.formatCurrency(it.combinedNetPosition)}")
-                    }
-                }.trim()
-            }
+            return buildString {
+                appendLine(
+                    Translations.format(
+                        "speech.briefing_net_fmt",
+                        language,
+                        "net" to GoldUtils.formatCurrency(netBalance, language)
+                    )
+                )
+                appendLine(
+                    Translations.format(
+                        "speech.briefing_inflow_fmt",
+                        language,
+                        "amt" to GoldUtils.formatCurrency(summary.totalRevenue + summary.totalIncoming, language)
+                    )
+                )
+                appendLine(
+                    Translations.format(
+                        "speech.briefing_outflow_fmt",
+                        language,
+                        "amt" to GoldUtils.formatCurrency(summary.totalOutgoing, language)
+                    )
+                )
+                if (summary.totalDeficit > 0 || pendingComplaintsCount > 0) {
+                    appendLine(
+                        Translations.format(
+                            "speech.briefing_alert_fmt",
+                            language,
+                            "deficit" to GoldUtils.formatCurrency(summary.totalDeficit, language),
+                            "pending" to pendingComplaintsCount
+                        )
+                    )
+                }
+                if (!topEntity.isNullOrBlank()) {
+                    appendLine(
+                        Translations.format(
+                            "speech.briefing_top_fmt",
+                            language,
+                            "entity" to topEntity,
+                            "count" to groups.size
+                        )
+                    )
+                }
+                unifiedSummary?.let {
+                    append(
+                        Translations.format(
+                            "speech.briefing_unified_fmt",
+                            language,
+                            "net" to GoldUtils.formatCurrency(it.combinedNetPosition, language)
+                        )
+                    )
+                }
+            }.trim()
         }
     }
 
@@ -661,16 +725,16 @@ class AccountingSpeechToTextEngine(private val context: Context) {
 
             override fun onError(error: Int) {
                 val msg = when (error) {
-                    SpeechRecognizer.ERROR_AUDIO -> "خطأ في الميكروفون"
-                    SpeechRecognizer.ERROR_CLIENT -> "تعذر الاتصال بالمساعد"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "فعل صلاحية الميكروفون"
-                    SpeechRecognizer.ERROR_NETWORK -> "تحقق من اتصال الإنترنت"
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "انتهت مهلة الشبكة"
-                    SpeechRecognizer.ERROR_NO_MATCH -> "لم يلتقط أمراً واضحاً"
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "المتعرف مشغول"
-                    SpeechRecognizer.ERROR_SERVER -> "تعذر المعالجة"
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "لم يُسمع صوت"
-                    else -> "تعذر التقاط الصوت ($error)"
+                    SpeechRecognizer.ERROR_AUDIO -> Translations.getFromContext(context, "speech.err_audio")
+                    SpeechRecognizer.ERROR_CLIENT -> Translations.getFromContext(context, "speech.err_client")
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> Translations.getFromContext(context, "speech.err_perm")
+                    SpeechRecognizer.ERROR_NETWORK -> Translations.getFromContext(context, "speech.err_network")
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> Translations.getFromContext(context, "speech.err_timeout")
+                    SpeechRecognizer.ERROR_NO_MATCH -> Translations.getFromContext(context, "speech.err_nomatch")
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> Translations.getFromContext(context, "speech.err_busy")
+                    SpeechRecognizer.ERROR_SERVER -> Translations.getFromContext(context, "speech.err_server")
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> Translations.getFromContext(context, "speech.err_speech_timeout")
+                    else -> Translations.formatFromContext(context, "speech.err_generic_fmt", "code" to error)
                 }
                 Log.w(TAG, "Speech error code $error: $msg")
                 _errorMessage.value = msg
@@ -712,7 +776,7 @@ class AccountingSpeechToTextEngine(private val context: Context) {
     }
 
     fun startListening(
-        languageCode: String = "ar-EG",
+        languageCode: String? = null,
         onPartial: ((String) -> Unit)? = null,
         onFinal: ((String) -> Unit)? = null
     ) {
@@ -722,6 +786,10 @@ class AccountingSpeechToTextEngine(private val context: Context) {
         _partialText.value = ""
         _errorMessage.value = null
 
+        val activeLang = Translations.activeLanguage(context)
+        val effectiveLocale = languageCode?.takeIf { it.isNotBlank() } ?: speechLocaleFor(activeLang)
+        val speakPrompt = Translations.get("speech.prompt_speak_now", activeLang)
+
         mainHandler.post {
             try {
                 if (speechRecognizer == null) {
@@ -730,20 +798,20 @@ class AccountingSpeechToTextEngine(private val context: Context) {
 
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageCode)
-                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, languageCode)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, effectiveLocale)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, effectiveLocale)
+                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, effectiveLocale)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                     putExtra("android.speech.extra.DICTATION_MODE", true)
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "تحدث الآن...")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, speakPrompt)
                 }
 
                 _isListening.value = true
                 speechRecognizer?.startListening(intent)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start listening", e)
-                _errorMessage.value = "تعذر بدء التسجيل الصوتي"
+                _errorMessage.value = Translations.get("speech.err_start_failed", activeLang)
                 _isListening.value = false
             }
         }
@@ -794,7 +862,7 @@ class AccountingSpeechToTextEngine(private val context: Context) {
         groups: List<WorkGroupEntity>,
         unifiedSummary: UnifiedBusinessAccountingSummary? = null,
         pendingComplaintsCount: Int = 0,
-        language: AppLanguage = AppLanguage.ARABIC
+        language: AppLanguage = Translations.activeLanguage(context)
     ): AccountingVoiceCommand = interpretCommand(
         rawText = rawText,
         activeProfile = activeProfile,

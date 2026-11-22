@@ -38,6 +38,26 @@ enum class AppFontScale(
     LARGE(1.30f, "كبير وواضح (130%)", "نصوص وأرقام بارزة وعريضة", "كبير"),
     EXTRA_LARGE(1.45f, "فائق الوضوح (145%)", "مخصص لضعاف النظر وكبار السن", "فائق");
 
+    fun localizedTitle(language: com.example.util.AppLanguage): String {
+        val key = when (this) {
+            STANDARD -> "font_scale.standard_t"
+            COMFORTABLE -> "font_scale.comfortable_t"
+            LARGE -> "font_scale.large_t"
+            EXTRA_LARGE -> "font_scale.xlarge_t"
+        }
+        return com.example.util.Translations.get(key, language)
+    }
+
+    fun localizedDescription(language: com.example.util.AppLanguage): String {
+        val key = when (this) {
+            STANDARD -> "font_scale.standard_d"
+            COMFORTABLE -> "font_scale.comfortable_d"
+            LARGE -> "font_scale.large_d"
+            EXTRA_LARGE -> "font_scale.xlarge_d"
+        }
+        return com.example.util.Translations.get(key, language)
+    }
+
     companion object {
         fun fromName(name: String?): AppFontScale =
             entries.find { it.name.equals(name, ignoreCase = true) } ?: STANDARD

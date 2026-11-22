@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.theme.GoldPrimary
 import com.example.util.OfflineSyncManager
+import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * GlobalConnectivityBanner component that observes network state changes and displays
@@ -83,7 +85,7 @@ fun GlobalConnectivityBanner(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CloudOff,
-                            contentDescription = "غير متصل بالإنترنت",
+                            contentDescription = tr("banner.offline_title"),
                             tint = Color(0xFFE11D48),
                             modifier = Modifier.size(18.dp)
                         )
@@ -95,7 +97,7 @@ fun GlobalConnectivityBanner(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "أنت غير متصل بالإنترنت",
+                                text = tr("banner.offline_title"),
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = bannerPrimaryText
@@ -105,7 +107,7 @@ fun GlobalConnectivityBanner(
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
-                                    text = "بيانات مخزنة (Cached)",
+                                    text = tr("banner.cached_badge"),
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = accentTint,
@@ -116,9 +118,9 @@ fun GlobalConnectivityBanner(
 
                         Text(
                             text = if (pendingSyncCount > 0) {
-                                "تعرض البيانات المخزنة محلياً • هناك $pendingSyncCount تعديل سيتم رفعه تلقائياً فور الاتصال"
+                                trFmt("banner.pending_sync_fmt", "count" to pendingSyncCount)
                             } else {
-                                "تعرض البيانات المخزنة محلياً بأمان وسرعة"
+                                tr("banner.cached_safe")
                             },
                             fontSize = 10.5.sp,
                             color = bannerSecondaryText,
@@ -138,7 +140,7 @@ fun GlobalConnectivityBanner(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
-                            contentDescription = "إعادة المحاولة",
+                            contentDescription = tr("common.retry"),
                             tint = accentTint,
                             modifier = Modifier.size(18.dp)
                         )

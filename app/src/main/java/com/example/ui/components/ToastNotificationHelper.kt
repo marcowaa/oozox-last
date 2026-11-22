@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.ui.theme.*
+import com.example.util.Translations
+import com.example.util.tr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.asSharedFlow
@@ -99,11 +101,17 @@ object ToastNotificationBus {
         updateDescription: String,
         onAction: (() -> Unit)? = null
     ) {
+        val msg = Translations.formatFromContext(
+            null,
+            "toast.project_update_fmt",
+            "project" to projectName,
+            "desc" to updateDescription
+        )
         showToast(
-            message = "🏗️ تحديث مشروع ($projectName): $updateDescription",
+            message = "🏗️ $msg",
             type = AppToastType.INFO,
             durationMillis = 4200L,
-            actionLabel = "عرض",
+            actionLabel = Translations.getFromContext(null, "common.view"),
             onAction = onAction
         )
     }
@@ -118,7 +126,7 @@ object ToastNotificationBus {
             message = "$senderName: $snippet",
             type = AppToastType.SUCCESS,
             durationMillis = 4000L,
-            actionLabel = "رد",
+            actionLabel = Translations.getFromContext(null, "common.reply"),
             onAction = onAction
         )
     }
@@ -274,7 +282,7 @@ fun ToastNotificationPill(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "إغلاق",
+                    contentDescription = tr("common.close"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )

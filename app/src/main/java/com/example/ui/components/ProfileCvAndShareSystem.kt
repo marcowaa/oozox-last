@@ -44,8 +44,10 @@ import com.example.data.model.UserEntity
 import com.example.data.model.UserType
 import com.example.ui.theme.StatusGreen
 import com.example.util.AppLanguage
+import com.example.util.LocalAppLanguage
 import com.example.util.ReliabilityRecord
 import com.example.util.ReportExporter
+import com.example.util.Translations
 
 enum class CvVisualLayout {
     ATS_SINGLE_CLASSIC,
@@ -219,6 +221,55 @@ enum class CvTemplateSpec(
         descriptionAr = "يعرض النشاط التجاري والمتجر وتقييمات العملاء"
     );
 
+    fun localizedName(language: AppLanguage): String = Translations.get(
+        when (this) {
+            ATS_CLASSIC -> "cv.tpl_ats_classic_name"
+            ATS_EXECUTIVE -> "cv.tpl_ats_exec_name"
+            ATS_TECH_ENGINEERING -> "cv.tpl_ats_tech_name"
+            ATS_FINANCE_AUDIT -> "cv.tpl_ats_fin_name"
+            EXECUTIVE_MODERN -> "cv.tpl_exec_mod_name"
+            NORDIC_MINIMAL -> "cv.tpl_nordic_name"
+            CORPORATE_NAVY -> "cv.tpl_corp_navy_name"
+            GOLD_PRESTIGE -> "cv.tpl_prestige_name"
+            CREATIVE_GRID -> "cv.tpl_creative_name"
+            COMPACT_ONE_PAGE -> "cv.tpl_compact_name"
+            ACADEMIC_RESEARCH -> "cv.tpl_academic_name"
+            COMMERCE_PORTFOLIO -> "cv.tpl_commerce_name"
+        },
+        language
+    )
+
+    fun localizedCategory(language: AppLanguage): String = Translations.get(
+        when (this) {
+            ATS_CLASSIC, ATS_EXECUTIVE, ATS_TECH_ENGINEERING, ATS_FINANCE_AUDIT -> "cv.cat_ats"
+            EXECUTIVE_MODERN, CORPORATE_NAVY -> "cv.cat_exec"
+            NORDIC_MINIMAL, CREATIVE_GRID -> "cv.cat_modern"
+            GOLD_PRESTIGE -> "cv.cat_luxury"
+            COMPACT_ONE_PAGE -> "cv.cat_compact"
+            ACADEMIC_RESEARCH -> "cv.cat_academic"
+            COMMERCE_PORTFOLIO -> "cv.cat_commerce"
+        },
+        language
+    )
+
+    fun localizedDescription(language: AppLanguage): String = Translations.get(
+        when (this) {
+            ATS_CLASSIC -> "cv.tpl_ats_classic_desc"
+            ATS_EXECUTIVE -> "cv.tpl_ats_exec_desc"
+            ATS_TECH_ENGINEERING -> "cv.tpl_ats_tech_desc"
+            ATS_FINANCE_AUDIT -> "cv.tpl_ats_fin_desc"
+            EXECUTIVE_MODERN -> "cv.tpl_exec_mod_desc"
+            NORDIC_MINIMAL -> "cv.tpl_nordic_desc"
+            CORPORATE_NAVY -> "cv.tpl_corp_navy_desc"
+            GOLD_PRESTIGE -> "cv.tpl_prestige_desc"
+            CREATIVE_GRID -> "cv.tpl_creative_desc"
+            COMPACT_ONE_PAGE -> "cv.tpl_compact_desc"
+            ACADEMIC_RESEARCH -> "cv.tpl_academic_desc"
+            COMMERCE_PORTFOLIO -> "cv.tpl_commerce_desc"
+        },
+        language
+    )
+
     companion object {
         fun fromId(id: String?): CvTemplateSpec =
             entries.firstOrNull { it.id == id } ?: ATS_CLASSIC
@@ -245,14 +296,13 @@ fun EditProfileProfessionalDialog(
         skills: String?
     ) -> Unit
 ) {
-    val isArabic = currentLanguage == AppLanguage.ARABIC
     var editName by remember { mutableStateOf(user.name) }
     var editUsername by remember { mutableStateOf(user.username) }
     var editStoreName by remember { mutableStateOf(user.traderShopName ?: "") }
     var editJobTitle by remember {
         mutableStateOf(
             user.jobTitle?.takeIf { it.isNotBlank() }
-                ?: if (isArabic) "رجل أعمال ومستثمر" else "Businessman & Investor"
+                ?: Translations.get("profile.prof_businessman", currentLanguage)
         )
     }
     var editEducation by remember { mutableStateOf(user.education ?: "") }
@@ -261,34 +311,19 @@ fun EditProfileProfessionalDialog(
     var editError by remember { mutableStateOf<String?>(null) }
     var jobDropdownExpanded by remember { mutableStateOf(false) }
 
-    val professionOptions = remember(isArabic) {
-        if (isArabic) {
-            listOf(
-                "رجل أعمال ومستثمر",
-                "تاجر وصاحب متجر",
-                "مدير شركة ومؤسسة",
-                "مقاول ومطور عقاري",
-                "مدير مالي ومحاسب",
-                "مهندس واستشاري",
-                "مطور برمجيات وتقنية",
-                "تاجر ذهب ومجوهرات",
-                "مسوق ومطور أعمال",
-                "عمل حر ومستقل"
-            )
-        } else {
-            listOf(
-                "Businessman & Investor",
-                "Merchant & Store Owner",
-                "Company Director",
-                "Contractor & Real Estate Developer",
-                "Financial Manager & Accountant",
-                "Engineer & Consultant",
-                "Software & Tech Specialist",
-                "Gold & Jewelry Trader",
-                "Business Development Manager",
-                "Freelancer & Independent"
-            )
-        }
+    val professionOptions = remember(currentLanguage, Translations.catalogVersion) {
+        listOf(
+            Translations.get("profile.prof_businessman", currentLanguage),
+            Translations.get("profile.prof_merchant", currentLanguage),
+            Translations.get("profile.prof_director", currentLanguage),
+            Translations.get("profile.prof_contractor", currentLanguage),
+            Translations.get("profile.prof_accountant", currentLanguage),
+            Translations.get("profile.prof_engineer", currentLanguage),
+            Translations.get("profile.prof_tech", currentLanguage),
+            Translations.get("profile.prof_gold", currentLanguage),
+            Translations.get("profile.prof_bd", currentLanguage),
+            Translations.get("profile.prof_freelance", currentLanguage)
+        )
     }
 
     val inferredUserType = remember(editJobTitle) {
@@ -315,7 +350,10 @@ fun EditProfileProfessionalDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides currentLanguage.direction) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides currentLanguage.direction,
+            LocalAppLanguage provides currentLanguage
+        ) {
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -359,13 +397,13 @@ fun EditProfileProfessionalDialog(
                             }
                             Column {
                                 Text(
-                                    text = if (isArabic) "تعديل الملف الشخصي" else "Edit Profile",
+                                    text = Translations.get("profile.edit_title", currentLanguage),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (isArabic) "تحديث البيانات الشخصية والمهنية" else "Update personal & CV details",
+                                    text = Translations.get("profile.edit_subtitle", currentLanguage),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -378,7 +416,7 @@ fun EditProfileProfessionalDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = if (isArabic) "إغلاق" else "Close",
+                                contentDescription = Translations.get("common.close", currentLanguage),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -396,7 +434,7 @@ fun EditProfileProfessionalDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = if (isArabic) "الهوية الأساسية" else "Identity",
+                            text = Translations.get("profile.sec_identity", currentLanguage),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -405,8 +443,8 @@ fun EditProfileProfessionalDialog(
                         OutlinedTextField(
                             value = editName,
                             onValueChange = { editName = it; editError = null },
-                            label = { Text(if (isArabic) "الاسم الكامل" else "Full Name", style = MaterialTheme.typography.bodySmall) },
-                            placeholder = { Text(if (isArabic) "مثال: أحمد محمد" else "e.g. John Doe", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(Translations.get("profile.full_name", currentLanguage), style = MaterialTheme.typography.bodySmall) },
+                            placeholder = { Text(Translations.get("profile.full_name_hint", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             textStyle = fieldTextStyle,
                             colors = fieldColors,
@@ -425,7 +463,7 @@ fun EditProfileProfessionalDialog(
                         OutlinedTextField(
                             value = editUsername,
                             onValueChange = { editUsername = it.filter { ch -> ch.isLetterOrDigit() || ch == '_' }; editError = null },
-                            label = { Text(if (isArabic) "اسم المستخدم" else "Username", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(Translations.get("profile.username_label", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                             placeholder = { Text("username", style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             textStyle = fieldTextStyle.copy(textDirection = TextDirection.Ltr),
@@ -443,7 +481,7 @@ fun EditProfileProfessionalDialog(
                         )
 
                         Text(
-                            text = if (isArabic) "النشاط والمتجر" else "Profession & Store",
+                            text = Translations.get("profile.sec_business", currentLanguage),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -458,7 +496,7 @@ fun EditProfileProfessionalDialog(
                             OutlinedTextField(
                                 value = editJobTitle,
                                 onValueChange = { editJobTitle = it },
-                                label = { Text(if (isArabic) "المسمى الوظيفي" else "Job Title", style = MaterialTheme.typography.bodySmall) },
+                                label = { Text(Translations.get("profile.job_title", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                                 singleLine = true,
                                 textStyle = fieldTextStyle,
                                 colors = fieldColors,
@@ -496,8 +534,8 @@ fun EditProfileProfessionalDialog(
                         OutlinedTextField(
                             value = editStoreName,
                             onValueChange = { editStoreName = it },
-                            label = { Text(if (isArabic) "اسم المتجر" else "Store Name", style = MaterialTheme.typography.bodySmall) },
-                            placeholder = { Text(if (isArabic) "متجر النخبة" else "Horizon Store", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(Translations.get("profile.store_name", currentLanguage), style = MaterialTheme.typography.bodySmall) },
+                            placeholder = { Text(Translations.get("profile.store_hint", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             textStyle = fieldTextStyle,
                             colors = fieldColors,
@@ -514,7 +552,7 @@ fun EditProfileProfessionalDialog(
                         )
 
                         Text(
-                            text = if (isArabic) "السيرة والمؤهلات" else "Bio & Credentials",
+                            text = Translations.get("profile.sec_credentials", currentLanguage),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -525,8 +563,8 @@ fun EditProfileProfessionalDialog(
                         OutlinedTextField(
                             value = editBio,
                             onValueChange = { editBio = it },
-                            label = { Text(if (isArabic) "النبذة المهنية" else "Bio", style = MaterialTheme.typography.bodySmall) },
-                            placeholder = { Text(if (isArabic) "نبذة مختصرة عن خبرتك..." else "Short summary...", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(Translations.get("profile.bio_label", currentLanguage), style = MaterialTheme.typography.bodySmall) },
+                            placeholder = { Text(Translations.get("profile.bio_hint", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                             minLines = 2,
                             maxLines = 4,
                             textStyle = fieldTextStyle,
@@ -538,8 +576,8 @@ fun EditProfileProfessionalDialog(
                         OutlinedTextField(
                             value = editEducation,
                             onValueChange = { editEducation = it },
-                            label = { Text(if (isArabic) "المؤهل العلمي" else "Education", style = MaterialTheme.typography.bodySmall) },
-                            placeholder = { Text(if (isArabic) "بكالوريوس هندسة" else "B.Sc. Engineering", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(Translations.get("profile.edu_label", currentLanguage), style = MaterialTheme.typography.bodySmall) },
+                            placeholder = { Text(Translations.get("profile.edu_hint", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             textStyle = fieldTextStyle,
                             colors = fieldColors,
@@ -558,8 +596,8 @@ fun EditProfileProfessionalDialog(
                         OutlinedTextField(
                             value = editSkills,
                             onValueChange = { editSkills = it },
-                            label = { Text(if (isArabic) "المهارات" else "Skills", style = MaterialTheme.typography.bodySmall) },
-                            placeholder = { Text(if (isArabic) "الإدارة، التفاوض، المبيعات" else "Management, Sales", style = MaterialTheme.typography.bodySmall) },
+                            label = { Text(Translations.get("profile.skills_label", currentLanguage), style = MaterialTheme.typography.bodySmall) },
+                            placeholder = { Text(Translations.get("profile.skills_hint", currentLanguage), style = MaterialTheme.typography.bodySmall) },
                             singleLine = true,
                             textStyle = fieldTextStyle,
                             colors = fieldColors,
@@ -608,15 +646,15 @@ fun EditProfileProfessionalDialog(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text(if (isArabic) "إلغاء" else "Cancel", fontWeight = FontWeight.SemiBold)
+                            Text(Translations.get("common.cancel", currentLanguage), fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
                             onClick = {
                                 if (editName.isBlank()) {
-                                    editError = if (isArabic) "يرجى إدخال الاسم" else "Please enter name"
+                                    editError = Translations.get("profile.err_enter_name", currentLanguage)
                                 } else if (editUsername.isBlank()) {
-                                    editError = if (isArabic) "يرجى إدخال اسم المستخدم" else "Please enter username"
+                                    editError = Translations.get("profile.err_enter_username", currentLanguage)
                                 } else {
                                     onSave(
                                         editName.trim(),
@@ -636,7 +674,7 @@ fun EditProfileProfessionalDialog(
                                 .heightIn(min = 48.dp)
                                 .testTag("btn_save_profile_edits")
                         ) {
-                            Text(if (isArabic) "حفظ" else "Save", fontWeight = FontWeight.Bold)
+                            Text(Translations.get("common.save", currentLanguage), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -659,14 +697,14 @@ fun CvSectionCustomizerDialog(
     reliabilityRecords: List<ReliabilityRecord> = emptyList(),
     trustScore: Int = 95
 ) {
-    val allSections = remember {
+    val allSections = remember(currentLanguage, Translations.catalogVersion) {
         listOf(
-            "BIO" to "النبذة المهنية",
-            "EXPERIENCE" to "الخبرة والمسمى الوظيفي",
-            "RELIABILITY" to "سجل الموثوقية والالتزام الفعلي",
-            "SKILLS" to "المهارات والتخصصات",
-            "EDUCATION" to "المؤهلات العلمية",
-            "STORE" to "المتجر والنشاط التجاري"
+            "BIO" to Translations.get("cv.sec_bio", currentLanguage),
+            "EXPERIENCE" to Translations.get("cv.sec_experience", currentLanguage),
+            "RELIABILITY" to Translations.get("cv.sec_reliability", currentLanguage),
+            "SKILLS" to Translations.get("cv.sec_skills", currentLanguage),
+            "EDUCATION" to Translations.get("cv.sec_education", currentLanguage),
+            "STORE" to Translations.get("cv.sec_store", currentLanguage)
         )
     }
 
@@ -684,7 +722,10 @@ fun CvSectionCustomizerDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides currentLanguage.direction) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides currentLanguage.direction,
+            LocalAppLanguage provides currentLanguage
+        ) {
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -726,19 +767,19 @@ fun CvSectionCustomizerDialog(
                             }
                             Column {
                                 Text(
-                                    text = "تخصيص السيرة الذاتية",
+                                    text = Translations.get("cv.customizer_title", currentLanguage),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "اختر القالب ورتب الأقسام",
+                                    text = Translations.get("cv.customizer_sub", currentLanguage),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Close, contentDescription = Translations.get("common.close", currentLanguage), modifier = Modifier.size(20.dp))
                         }
                     }
 
@@ -757,7 +798,7 @@ fun CvSectionCustomizerDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "القالب: ${currentTemplate.nameAr}",
+                                text = Translations.format("cv.template_fmt", currentLanguage, "name" to currentTemplate.localizedName(currentLanguage)),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -765,7 +806,7 @@ fun CvSectionCustomizerDialog(
                             TextButton(onClick = { showPreviewModal = true }) {
                                 Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("معاينة الشكل", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                Text(Translations.get("cv.preview_shape", currentLanguage), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                             }
                         }
 
@@ -797,12 +838,12 @@ fun CvSectionCustomizerDialog(
                                         CvTemplateMiniThumbnail(
                                             template = tpl,
                                             userName = user.name,
-                                            jobTitle = user.jobTitle ?: "عضو معتمد",
+                                            jobTitle = user.jobTitle ?: Translations.get("cv.certified_member", currentLanguage),
                                             isSelected = isSelected,
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         Text(
-                                            text = tpl.nameAr,
+                                            text = tpl.localizedName(currentLanguage),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
@@ -818,7 +859,7 @@ fun CvSectionCustomizerDialog(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                         Text(
-                            text = "ترتيب وظهور الأقسام",
+                            text = Translations.get("cv.section_order", currentLanguage),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -837,7 +878,11 @@ fun CvSectionCustomizerDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
                                         Surface(
                                             shape = CircleShape,
                                             color = MaterialTheme.colorScheme.primaryContainer,
@@ -855,11 +900,13 @@ fun CvSectionCustomizerDialog(
                                         Text(
                                             text = label,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
 
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                         IconButton(
                                             onClick = {
                                                 if (index > 0) {
@@ -870,9 +917,9 @@ fun CvSectionCustomizerDialog(
                                                 }
                                             },
                                             enabled = index > 0,
-                                            modifier = Modifier.size(36.dp)
+                                            modifier = Modifier.size(48.dp)
                                         ) {
-                                            Icon(Icons.Default.ArrowUpward, contentDescription = "لأعلى", modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.ArrowUpward, contentDescription = Translations.get("cv.move_up", currentLanguage), modifier = Modifier.size(18.dp))
                                         }
                                         IconButton(
                                             onClick = {
@@ -884,20 +931,20 @@ fun CvSectionCustomizerDialog(
                                                 }
                                             },
                                             enabled = index < activeSections.size - 1,
-                                            modifier = Modifier.size(36.dp)
+                                            modifier = Modifier.size(48.dp)
                                         ) {
-                                            Icon(Icons.Default.ArrowDownward, contentDescription = "لأسفل", modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.ArrowDownward, contentDescription = Translations.get("cv.move_down", currentLanguage), modifier = Modifier.size(18.dp))
                                         }
                                         if (activeSections.size > 1) {
                                             IconButton(
                                                 onClick = {
                                                     activeSections = activeSections.filterNot { it == key }
                                                 },
-                                                modifier = Modifier.size(36.dp)
+                                                modifier = Modifier.size(48.dp)
                                             ) {
                                                 Icon(
                                                     Icons.Default.VisibilityOff,
-                                                    contentDescription = "إخفاء",
+                                                    contentDescription = Translations.get("cv.hide_sec", currentLanguage),
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier.size(17.dp)
                                                 )
@@ -911,7 +958,7 @@ fun CvSectionCustomizerDialog(
                         val hiddenSections = allSections.filter { pair -> activeSections.none { it == pair.first } }
                         if (hiddenSections.isNotEmpty()) {
                             Text(
-                                text = "أقسام مخفية (اضغط للإضافة)",
+                                text = Translations.get("cv.hidden_sections", currentLanguage),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -947,7 +994,7 @@ fun CvSectionCustomizerDialog(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("إلغاء", fontWeight = FontWeight.SemiBold)
+                            Text(Translations.get("common.cancel", currentLanguage), fontWeight = FontWeight.SemiBold)
                         }
                         Button(
                             onClick = {
@@ -960,7 +1007,7 @@ fun CvSectionCustomizerDialog(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("حفظ", fontWeight = FontWeight.Bold)
+                            Text(Translations.get("common.save", currentLanguage), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1017,8 +1064,14 @@ fun ProfileShareAndCvHubDialog(
     }
 
     val reliabilitySummary = reliabilityRecords.firstOrNull()?.let {
-        "الحضور ${it.presenceRate}% • الالتزام ${it.punctuality}% • الموقع ${it.locationCompliance}%"
-    } ?: "درجة الثقة والموثوقية: $trustScore%"
+        Translations.format(
+            "cv.rel_bar_fmt",
+            currentLanguage,
+            "presence" to it.presenceRate,
+            "punctuality" to it.punctuality,
+            "location" to it.locationCompliance
+        )
+    } ?: Translations.format("cv.rel_summary_fallback_fmt", currentLanguage, "trust" to trustScore)
 
     val cardText = remember(cardConfig, user.username, trustScore, reliabilitySummary, projectsCount, completedDealsCount, user.skills) {
         com.example.util.ClientCardRenderer.buildSocialCaption(
@@ -1036,7 +1089,10 @@ fun ProfileShareAndCvHubDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides currentLanguage.direction) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides currentLanguage.direction,
+            LocalAppLanguage provides currentLanguage
+        ) {
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -1079,19 +1135,19 @@ fun ProfileShareAndCvHubDialog(
                             }
                             Column {
                                 Text(
-                                    text = "مركز المشاركة والسيرة",
+                                    text = Translations.get("cv.hub_title", currentLanguage),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "رابط موثق • كارت عميل • 12 قالب",
+                                    text = Translations.get("cv.hub_sub", currentLanguage),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Close, contentDescription = Translations.get("common.close", currentLanguage), modifier = Modifier.size(20.dp))
                         }
                     }
 
@@ -1103,20 +1159,20 @@ fun ProfileShareAndCvHubDialog(
                         Tab(
                             selected = activeTab == 0,
                             onClick = { activeTab = 0 },
-                            modifier = Modifier.height(44.dp),
-                            text = { Text("رابط السيرة", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                            modifier = Modifier.height(48.dp),
+                            text = { Text(Translations.get("cv.tab_link", currentLanguage), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
                         )
                         Tab(
                             selected = activeTab == 1,
                             onClick = { activeTab = 1 },
-                            modifier = Modifier.height(44.dp),
-                            text = { Text("كارت العميل", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                            modifier = Modifier.height(48.dp),
+                            text = { Text(Translations.get("cv.tab_card", currentLanguage), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
                         )
                         Tab(
                             selected = activeTab == 2,
                             onClick = { activeTab = 2 },
-                            modifier = Modifier.height(44.dp),
-                            text = { Text("القوالب (12)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                            modifier = Modifier.height(48.dp),
+                            text = { Text(Translations.get("cv.tab_templates", currentLanguage), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
                         )
                     }
 
@@ -1141,14 +1197,23 @@ fun ProfileShareAndCvHubDialog(
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = StatusGreen, modifier = Modifier.size(16.dp))
                                             Text(
-                                                text = "سيرة ذاتية موثقة بأعمال وتقييمات حقيقية",
+                                                text = Translations.get("cv.verified_cv_badge", currentLanguage),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = StatusGreen
                                             )
                                         }
                                         Text(
-                                            text = "• ${user.name} (@${user.username}) • ${user.jobTitle ?: "عضو معتمد"}\n• درجة الثقة الفعلية: $trustScore%\n• $reliabilitySummary\n• القالب: ${selectedTemplate.nameAr}",
+                                            text = Translations.format(
+                                                "cv.summary_card_fmt",
+                                                currentLanguage,
+                                                "name" to user.name,
+                                                "username" to user.username,
+                                                "role" to (user.jobTitle ?: Translations.get("cv.certified_member", currentLanguage)),
+                                                "trust" to trustScore,
+                                                "relSummary" to reliabilitySummary,
+                                                "template" to selectedTemplate.localizedName(currentLanguage)
+                                            ),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             lineHeight = 18.sp
@@ -1157,7 +1222,7 @@ fun ProfileShareAndCvHubDialog(
                                 }
 
                                 Text(
-                                    text = "صلاحية الرابط",
+                                    text = Translations.get("cv.link_expiry", currentLanguage),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1167,7 +1232,12 @@ fun ProfileShareAndCvHubDialog(
                                         .horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    listOf(24 to "24 ساعة", 72 to "3 أيام", 168 to "7 أيام", 720 to "30 يوماً").forEach { (hrs, lbl) ->
+                                    listOf(
+                                        24 to Translations.get("cv.exp_24h", currentLanguage),
+                                        72 to Translations.get("cv.exp_3d", currentLanguage),
+                                        168 to Translations.get("cv.exp_7d", currentLanguage),
+                                        720 to Translations.get("cv.exp_30d", currentLanguage)
+                                    ).forEach { (hrs, lbl) ->
                                         FilterChip(
                                             selected = selectedExpiryHours == hrs,
                                             onClick = { selectedExpiryHours = hrs },
@@ -1201,13 +1271,13 @@ fun ProfileShareAndCvHubDialog(
                                             onClick = {
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                                 clipboard?.setPrimaryClip(ClipData.newPlainText("CV Link", publicCvUrl))
-                                                Toast.makeText(context, "تم نسخ الرابط", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, Translations.get("cv.link_copied", currentLanguage), Toast.LENGTH_SHORT).show()
                                             },
                                             modifier = Modifier
-                                                .size(44.dp)
+                                                .size(48.dp)
                                                 .testTag("btn_copy_public_cv_link")
                                         ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = "نسخ الرابط", modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.ContentCopy, contentDescription = Translations.get("cv.copy_link", currentLanguage), modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -1219,23 +1289,23 @@ fun ProfileShareAndCvHubDialog(
                                 ) {
                                     TextButton(onClick = {
                                         tokenSeed = java.util.UUID.randomUUID().toString().take(10)
-                                        Toast.makeText(context, "تم تحديث الرابط", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, Translations.get("cv.link_refreshed", currentLanguage), Toast.LENGTH_SHORT).show()
                                     }) {
                                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("رابط جديد", style = MaterialTheme.typography.labelSmall)
+                                        Text(Translations.get("cv.new_link", currentLanguage), style = MaterialTheme.typography.labelSmall)
                                     }
 
                                     TextButton(onClick = { showFullPreview = true }) {
                                         Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("معاينة القالب", style = MaterialTheme.typography.labelSmall)
+                                        Text(Translations.get("cv.preview_tpl", currentLanguage), style = MaterialTheme.typography.labelSmall)
                                     }
 
                                     TextButton(onClick = onOpenSectionCustomizer) {
                                         Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("الأقسام", style = MaterialTheme.typography.labelSmall)
+                                        Text(Translations.get("cv.sections_btn", currentLanguage), style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
@@ -1275,13 +1345,13 @@ fun ProfileShareAndCvHubDialog(
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "معاينة: ${selectedTemplate.nameAr}",
+                                                    text = Translations.format("cv.preview_prefix_fmt", currentLanguage, "name" to selectedTemplate.localizedName(currentLanguage)),
                                                     style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
-                                                    text = selectedTemplate.descriptionAr,
+                                                    text = selectedTemplate.localizedDescription(currentLanguage),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 1,
@@ -1294,7 +1364,7 @@ fun ProfileShareAndCvHubDialog(
                                             ) {
                                                 Icon(Icons.Default.ZoomIn, contentDescription = null, modifier = Modifier.size(15.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("تكبير", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                                Text(Translations.get("cv.zoom", currentLanguage), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                             }
                                         }
 
@@ -1322,14 +1392,14 @@ fun ProfileShareAndCvHubDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "قوالب السيرة الذاتية",
+                                        text = Translations.get("cv.templates_heading", currentLanguage),
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold
                                     )
                                     FilterChip(
                                         selected = atsOnlyFilter,
                                         onClick = { atsOnlyFilter = !atsOnlyFilter },
-                                        label = { Text("ATS فقط", style = MaterialTheme.typography.labelSmall) },
+                                        label = { Text(Translations.get("cv.ats_only", currentLanguage), style = MaterialTheme.typography.labelSmall) },
                                         leadingIcon = if (atsOnlyFilter) {
                                             { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
                                         } else null
@@ -1375,7 +1445,7 @@ fun ProfileShareAndCvHubDialog(
                                                         CvTemplateMiniThumbnail(
                                                             template = tpl,
                                                             userName = user.name,
-                                                            jobTitle = user.jobTitle ?: "عضو معتمد",
+                                                            jobTitle = user.jobTitle ?: Translations.get("cv.certified_member", currentLanguage),
                                                             isSelected = isSelected,
                                                             modifier = Modifier.fillMaxWidth()
                                                         )
@@ -1387,7 +1457,7 @@ fun ProfileShareAndCvHubDialog(
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
                                                                 Text(
-                                                                    text = tpl.nameAr,
+                                                                    text = tpl.localizedName(currentLanguage),
                                                                     style = MaterialTheme.typography.labelLarge,
                                                                     fontWeight = FontWeight.Bold,
                                                                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
@@ -1401,7 +1471,7 @@ fun ProfileShareAndCvHubDialog(
                                                                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                                                                 ) {
                                                                     Text(
-                                                                        text = tpl.categoryAr,
+                                                                        text = tpl.localizedCategory(currentLanguage),
                                                                         style = MaterialTheme.typography.labelSmall,
                                                                         fontSize = 10.sp,
                                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1410,7 +1480,7 @@ fun ProfileShareAndCvHubDialog(
                                                                 }
                                                             }
                                                             Text(
-                                                                text = tpl.descriptionAr,
+                                                                text = tpl.localizedDescription(currentLanguage),
                                                                 style = MaterialTheme.typography.labelSmall,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                                 minLines = 2,
@@ -1460,24 +1530,26 @@ fun ProfileShareAndCvHubDialog(
                                         .weight(1f)
                                         .heightIn(min = 48.dp)
                                 ) {
-                                    Text("تصدير PDF", fontWeight = FontWeight.SemiBold)
+                                    Text(Translations.get("cv.export_pdf", currentLanguage), fontWeight = FontWeight.SemiBold)
                                 }
 
                                 Button(
                                     onClick = {
-                                        val shareMessage = buildString {
-                                            appendLine("السيرة الذاتية الموثقة — ${user.name}")
-                                            appendLine("التخصص: ${user.jobTitle ?: "عضو معتمد"}")
-                                            appendLine("درجة الثقة: $trustScore% ($reliabilitySummary)")
-                                            appendLine("القالب: ${selectedTemplate.nameAr}")
-                                            appendLine("رابط التحقق المباشر:")
-                                            append(publicCvUrl)
-                                        }
+                                        val shareMessage = Translations.format(
+                                            "cv.share_msg_fmt",
+                                            currentLanguage,
+                                            "name" to user.name,
+                                            "role" to (user.jobTitle ?: Translations.get("cv.certified_member", currentLanguage)),
+                                            "trust" to trustScore,
+                                            "relSummary" to reliabilitySummary,
+                                            "template" to selectedTemplate.localizedName(currentLanguage),
+                                            "url" to publicCvUrl
+                                        )
                                         val intent = Intent(Intent.ACTION_SEND).apply {
                                             type = "text/plain"
                                             putExtra(Intent.EXTRA_TEXT, shareMessage)
                                         }
-                                        context.startActivity(Intent.createChooser(intent, "مشاركة رابط السيرة الذاتية"))
+                                        context.startActivity(Intent.createChooser(intent, Translations.get("cv.share_chooser", currentLanguage)))
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
@@ -1485,7 +1557,7 @@ fun ProfileShareAndCvHubDialog(
                                         .heightIn(min = 48.dp)
                                         .testTag("btn_confirm_share_cv")
                                 ) {
-                                    Text("مشاركة الرابط", fontWeight = FontWeight.Bold)
+                                    Text(Translations.get("cv.share_link_btn", currentLanguage), fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -1494,14 +1566,14 @@ fun ProfileShareAndCvHubDialog(
                                     onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                         clipboard?.setPrimaryClip(ClipData.newPlainText("Client Card", cardText))
-                                        Toast.makeText(context, "تم نسخ الكارت والروابط", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, Translations.get("cv.card_copied", currentLanguage), Toast.LENGTH_SHORT).show()
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
                                         .weight(1f)
                                         .heightIn(min = 48.dp)
                                 ) {
-                                    Text("نسخ الكارت", fontWeight = FontWeight.SemiBold)
+                                    Text(Translations.get("cv.copy_card_btn", currentLanguage), fontWeight = FontWeight.SemiBold)
                                 }
 
                                 Button(
@@ -1522,7 +1594,7 @@ fun ProfileShareAndCvHubDialog(
                                         .weight(1f)
                                         .heightIn(min = 48.dp)
                                 ) {
-                                    Text("مشاركة الكارت", fontWeight = FontWeight.Bold)
+                                    Text(Translations.get("cv.share_card_btn", currentLanguage), fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -1534,7 +1606,7 @@ fun ProfileShareAndCvHubDialog(
                                         .weight(1f)
                                         .heightIn(min = 48.dp)
                                 ) {
-                                    Text("معاينة كاملة", fontWeight = FontWeight.SemiBold)
+                                    Text(Translations.get("cv.full_preview_btn", currentLanguage), fontWeight = FontWeight.SemiBold)
                                 }
 
                                 Button(
@@ -1554,7 +1626,7 @@ fun ProfileShareAndCvHubDialog(
                                         .weight(1f)
                                         .heightIn(min = 48.dp)
                                 ) {
-                                    Text("تصدير PDF", fontWeight = FontWeight.Bold)
+                                    Text(Translations.get("cv.export_pdf", currentLanguage), fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

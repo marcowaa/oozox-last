@@ -27,8 +27,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ProjectEntity
+import com.example.data.model.ProjectType
 import com.example.ui.theme.*
 import com.example.util.GoldUtils
+import com.example.util.LocalAppLanguage
+import com.example.util.Translations
+import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * Filter and view options for the custom Projects Side Drawer.
@@ -68,6 +73,7 @@ fun ProjectsSideDrawerContent(
     onCloseDrawer: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val lang = LocalAppLanguage.current
 
     val totalCapital = remember(projects) { projects.sumOf { it.estimatedCapital } }
     val totalExpenses = remember(projects) { projects.sumOf { it.totalExpenses } }
@@ -103,7 +109,8 @@ fun ProjectsSideDrawerContent(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
@@ -121,15 +128,19 @@ fun ProjectsSideDrawerContent(
                         }
                         Column {
                             Text(
-                                text = "إعدادات وقائمة المشاريع",
+                                text = tr("pdrawer.title"),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "تخصيص العرض والتصفية والأدوات",
+                                text = tr("pdrawer.subtitle"),
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -140,7 +151,7 @@ fun ProjectsSideDrawerContent(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق القائمة",
+                            contentDescription = tr("common.close"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -161,18 +172,20 @@ fun ProjectsSideDrawerContent(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("إنشاء مشروع جديد", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(tr("pdrawer.create_btn"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
 
                 // Section 2: Financial KPIs Summary
                 item {
                     Text(
-                        text = "ملخص المؤشرات المالية:",
+                        text = tr("pdrawer.kpi_title"),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -195,7 +208,7 @@ fun ProjectsSideDrawerContent(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("إجمالي رأس المال", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("pdrawer.total_capital"), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     if (isBiometricLocked) "•••••• 🔒" else GoldUtils.formatCurrency(totalCapital),
                                     fontSize = 12.5.sp,
@@ -208,7 +221,7 @@ fun ProjectsSideDrawerContent(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("المصروفات الفعلية", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("pdrawer.actual_expenses"), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     if (isBiometricLocked) "•••••• 🔒" else GoldUtils.formatCurrency(totalExpenses),
                                     fontSize = 12.5.sp,
@@ -221,7 +234,7 @@ fun ProjectsSideDrawerContent(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("معدل الاستهلاك", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("pdrawer.burn_rate"), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     "$overallBurnRate%",
                                     fontSize = 12.5.sp,
@@ -236,7 +249,7 @@ fun ProjectsSideDrawerContent(
                 // Section 3: View Toggles (Analytics Charts)
                 item {
                     Text(
-                        text = "خيارات العرض والأدوات:",
+                        text = tr("pdrawer.display_tools"),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -248,6 +261,7 @@ fun ProjectsSideDrawerContent(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .clickable { onToggleAnalytics() }
                     ) {
                         Row(
@@ -257,7 +271,8 @@ fun ProjectsSideDrawerContent(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Analytics,
@@ -267,13 +282,13 @@ fun ProjectsSideDrawerContent(
                                 )
                                 Column {
                                     Text(
-                                        text = "اللوحة البيانية والتحليلات",
+                                        text = tr("pdrawer.analytics_title"),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (showAnalytics) "معروضة في الشاشة" else "مخفية لراحة العين",
+                                        text = if (showAnalytics) tr("pdrawer.analytics_shown") else tr("pdrawer.analytics_hidden"),
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -296,6 +311,7 @@ fun ProjectsSideDrawerContent(
                         border = BorderStroke(1.dp, if (isBiometricLocked) Color(0xFFEF4444).copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .clickable { onToggleBiometricLock() }
                     ) {
                         Row(
@@ -305,7 +321,8 @@ fun ProjectsSideDrawerContent(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
                                 Icon(
                                     imageVector = if (isBiometricLocked) Icons.Default.Fingerprint else Icons.Default.LockOpen,
@@ -315,13 +332,13 @@ fun ProjectsSideDrawerContent(
                                 )
                                 Column {
                                     Text(
-                                        text = "القفل البيومتري للميزانيات",
+                                        text = tr("pdrawer.biometric_title"),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (isBiometricLocked) "مغلق ومحمي بالبصمة" else "البيانات المالية مكشوفة",
+                                        text = if (isBiometricLocked) tr("pdrawer.biometric_locked") else tr("pdrawer.biometric_open"),
                                         fontSize = 10.sp,
                                         color = if (isBiometricLocked) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -342,7 +359,7 @@ fun ProjectsSideDrawerContent(
                 // Section 5: Filter by Status
                 item {
                     Text(
-                        text = "تصفية حسب الحالة:",
+                        text = tr("pdrawer.filter_status"),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -350,25 +367,35 @@ fun ProjectsSideDrawerContent(
                     Spacer(modifier = Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         availableStatuses.forEach { statusText ->
-                            val isSelected = (selectedStatusFilter == null && statusText == "الكل") || selectedStatusFilter == statusText
+                            val isAllStatus = statusText == "الكل" || statusText.equals("ALL", ignoreCase = true)
+                            val isSelected = (selectedStatusFilter == null && isAllStatus) || selectedStatusFilter == statusText
+                            val localizedStatus = when (statusText) {
+                                "الكل", "ALL" -> Translations.get("pdrawer.status_all", lang)
+                                "نشط", "ACTIVE" -> Translations.get("pdrawer.status_active", lang)
+                                "تحت الميزانية", "UNDER_BUDGET" -> Translations.get("pdrawer.status_under_budget", lang)
+                                "تجاوز الميزانية", "OVER_BUDGET" -> Translations.get("pdrawer.status_over_budget", lang)
+                                "قيد التأسيس", "FOUNDING" -> Translations.get("pdrawer.status_founding", lang)
+                                else -> statusText
+                            }
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
                                 border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onSelectStatusFilter(if (statusText == "الكل" || isSelected) null else statusText)
+                                        onSelectStatusFilter(if (isAllStatus || isSelected) null else statusText)
                                     }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = statusText,
+                                        text = localizedStatus,
                                         fontSize = 12.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -391,7 +418,7 @@ fun ProjectsSideDrawerContent(
                 if (availableTypes.isNotEmpty()) {
                     item {
                         Text(
-                            text = "تصفية حسب القسم / النوع:",
+                            text = tr("pdrawer.filter_type"),
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -405,18 +432,19 @@ fun ProjectsSideDrawerContent(
                                 border = if (isAllSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         onSelectTypeFilter(null)
                                     }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "كل الأقسام (${projects.size})",
+                                        text = trFmt("pdrawer.all_depts_fmt", "count" to projects.size),
                                         fontSize = 12.sp,
                                         fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isAllSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -434,24 +462,26 @@ fun ProjectsSideDrawerContent(
 
                             availableTypes.forEach { type ->
                                 val isSelected = selectedTypeFilter == type
+                                val localizedType = ProjectType.entries.find { it.name.equals(type, ignoreCase = true) }?.localizedLabel(lang) ?: type
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
                                     border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                     modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onSelectTypeFilter(if (isSelected) null else type)
-                                    }
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onSelectTypeFilter(if (isSelected) null else type)
+                                        }
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = type,
+                                            text = localizedType,
                                             fontSize = 12.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -474,7 +504,7 @@ fun ProjectsSideDrawerContent(
                 // Section 7: Offline Sync & Room Backup Actions
                 item {
                     Text(
-                        text = "المزامنة والنسخ الاحتياطي:",
+                        text = tr("pdrawer.sync_backup"),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -493,16 +523,18 @@ fun ProjectsSideDrawerContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isNetworkOnline) "متصل - مزامنة فورية" else "وضع غير متصل (أوفلاين)",
+                                    text = if (isNetworkOnline) tr("pdrawer.sync_online") else tr("pdrawer.sync_offline"),
                                     fontSize = 11.sp,
                                     color = if (isNetworkOnline) MaterialTheme.colorScheme.primary else Color(0xFFD97706),
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 TextButton(
                                     onClick = onTriggerSync,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
-                                    Text("مزامنة الآن ⟳", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text(tr("pdrawer.sync_now_arrow"), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                                 }
                             }
 
@@ -511,16 +543,18 @@ fun ProjectsSideDrawerContent(
                                 enabled = !isBackingUp,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
                                 shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                             ) {
                                 if (isBackingUp) {
                                     CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("جاري النسخ...", fontSize = 11.sp, color = Color.White)
+                                    Text(tr("pdrawer.backing_up"), fontSize = 11.sp, color = Color.White)
                                 } else {
                                     Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("رفع نسخة احتياطية", fontSize = 11.5.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text(tr("pdrawer.upload_backup"), fontSize = 11.5.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
 

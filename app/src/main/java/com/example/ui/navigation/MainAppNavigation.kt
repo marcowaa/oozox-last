@@ -62,6 +62,7 @@ import com.example.util.LocalAppLanguage
 import com.example.util.NotificationHelper
 import com.example.util.OfflineSyncManager
 import com.example.util.Translations
+import com.example.util.tr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,8 +239,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                     if (currentUser != null && currentUser?.appLockEnabled == true && !currentUser?.appLockPin.isNullOrBlank() && !isAppUnlocked) {
                         BiometricLockScreen(
                             correctPin = currentUser?.appLockPin ?: "",
-                            userName = currentUser?.name ?: "المستخدم",
-                            userTypeLabel = if (currentUser?.type == UserType.GOLD_TRADER.name) "تاجر وأعمال معتمد" else "رجل أعمال ومستثمر",
+                            userName = currentUser?.name ?: tr("lock.default_user"),
+                            userTypeLabel = if (currentUser?.type == UserType.GOLD_TRADER.name) tr("drawer.verified_trader") else tr("drawer.role_investor"),
                             isBiometricEnabled = currentUser?.biometricAuthEnabled ?: true,
                             onUnlocked = {
                                 isAppUnlocked = true
@@ -626,7 +627,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                                                 color = MaterialTheme.colorScheme.onSurface
                                                             )
                                                             Text(
-                                                                text = "Luxury Edition",
+                                                                text = tr("nav.luxury_edition"),
                                                                 fontSize = 11.sp,
                                                                 color = MaterialTheme.colorScheme.primary
                                                             )
@@ -634,11 +635,11 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                                     }
                                                     IconButton(
                                                         onClick = { isDesktopSidebarOpen = false },
-                                                        modifier = Modifier.size(32.dp)
+                                                        modifier = Modifier.minimumInteractiveComponentSize()
                                                     ) {
                                                         Icon(
                                                             imageVector = AppIcons.MenuClose,
-                                                            contentDescription = "Collapse Sidebar",
+                                                            contentDescription = tr("nav.collapse_sidebar"),
                                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                             modifier = Modifier.size(20.dp)
                                                         )
@@ -743,14 +744,14 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                                     Spacer(modifier = Modifier.width(10.dp))
                                                     Column(modifier = Modifier.weight(1f)) {
                                                         Text(
-                                                            text = currentUser?.name ?: "المستخدم",
+                                                            text = currentUser?.name ?: tr("lock.default_user"),
                                                             fontSize = 12.sp,
                                                             fontWeight = FontWeight.Bold,
                                                             color = MaterialTheme.colorScheme.onSurface,
                                                             maxLines = 1
                                                         )
                                                         Text(
-                                                            text = if (currentUser?.type == UserType.GOLD_TRADER.name) "تاجر معتمد" else "مستثمر",
+                                                            text = if (currentUser?.type == UserType.GOLD_TRADER.name) tr("drawer.certified_merchant") else tr("drawer.investor_label"),
                                                             fontSize = 10.sp,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
@@ -1012,7 +1013,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Menu,
-                                            contentDescription = "Open Sidebar",
+                                            contentDescription = tr("drawer.open_sidebar"),
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.padding(8.dp).size(20.dp)
                                         )
@@ -1061,7 +1062,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                             ChatEntity(
                                 id = route.chatId,
                                 contactId = "ai_bot",
-                                contactName = "المحاسب المالي",
+                                contactName = tr("drawer.ai_title"),
                                 contactType = UserType.GOLD_TRADER.name,
                                 contactVerified = true
                             )
@@ -1069,7 +1070,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                             ChatEntity(
                                 id = route.chatId,
                                 contactId = route.chatId,
-                                contactName = "محادثة",
+                                contactName = tr("drawer.default_chat_name"),
                                 contactType = "",
                                 contactVerified = false
                             )
@@ -1292,7 +1293,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         onAddAccountingEntry = { title, amount, isIncome, category ->
                             viewModel.addProjectAccountingEntry(
                                 projectId = route.projectId,
-                                projectName = project?.name ?: "مشروع",
+                                projectName = project?.name ?: Translations.get("drawer.project_default_name", currentLanguage),
                                 title = title,
                                 amount = amount,
                                 isIncome = isIncome,
@@ -1310,7 +1311,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         onAddTask = { title, desc, assignee, priority, dueDate, cost ->
                             viewModel.addProjectTask(
                                 projectId = route.projectId,
-                                projectName = project?.name ?: "مشروع",
+                                projectName = project?.name ?: Translations.get("drawer.project_default_name", currentLanguage),
                                 title = title,
                                 description = desc,
                                 assignedToName = assignee,
@@ -1368,10 +1369,10 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text("القريبون مني (رادار التجار)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                                title = { Text(tr("drawer.nearby_radar_title"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
                                 navigationIcon = {
                                     IconButton(onClick = { navController.popBackStack() }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = adaptiveGoldPrimary)
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("drawer.back"), tint = adaptiveGoldPrimary)
                                     }
                                 },
                                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1419,10 +1420,10 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         isLoading = adminConfig == null,
                         onBackClick = { navController.popBackStack() },
                         onApproveTrader = { reqId ->
-                            viewModel.updateTraderRequestStatus(reqId, TraderStatus.APPROVED, "تم الاعتماد بواسطة المسؤول")
+                            viewModel.updateTraderRequestStatus(reqId, TraderStatus.APPROVED, Translations.get("drawer.admin_approved_note", currentLanguage))
                         },
                         onRejectTrader = { reqId ->
-                            viewModel.updateTraderRequestStatus(reqId, TraderStatus.REJECTED, "تم الرفض")
+                            viewModel.updateTraderRequestStatus(reqId, TraderStatus.REJECTED, Translations.get("drawer.admin_rejected_note", currentLanguage))
                         },
                         onSaveConfig = { appName, appLogoUri, adminPin, geminiKey, geminiModel, aiPrompt, notifUrl, notifKey, news, goldUrl, goldKey, intervalSec, enc, voice, prompt, bio ->
                             viewModel.updateAdminConfig(appName, appLogoUri, adminPin, geminiKey, geminiModel, aiPrompt, notifUrl, notifKey, news, goldUrl, goldKey, intervalSec, enc, voice, prompt, bio)
@@ -1506,7 +1507,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                             } else {
                                 val targetContact = allContacts.find { it.id == merchantId } ?: ContactEntity(
                                     id = merchantId,
-                                    name = "متجر الصائغ المعتمد",
+                                    name = Translations.get("drawer.verified_gold_shop", currentLanguage),
                                     phone = "",
                                     type = UserType.GOLD_TRADER.name,
                                     isVerified = true
@@ -1559,7 +1560,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                 cashbackRefund = 0.0,
                                 traderHashtag = shop,
                                 sellerShopName = shop,
-                                sellerLocation = "مسجل عبر التطبيق",
+                                sellerLocation = Translations.get("drawer.recorded_via_app", currentLanguage),
                                 scalePhotoUri = null
                             )
                         },
@@ -1581,7 +1582,11 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                 },
                 onImportContacts = {
                     viewModel.importDeviceContacts(context) { count ->
-                        Toast.makeText(context, "تم استيراد وحفظ $count جهة اتصال بنجاح في حسابك", Toast.LENGTH_LONG).show()
+                        Toast.makeText(
+                            context,
+                            Translations.format("drawer.imported_contacts_fmt", currentLanguage, "count" to count),
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 },
                 onDismiss = { showNewChatDialog = false }
@@ -1637,7 +1642,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
 
         if (showFinancialAccountantDialog) {
             val targetChatId = activeChatForSmartAccountant?.id
-            val chatName = activeChatForSmartAccountant?.contactName ?: "جميع الحسابات والقيود"
+            val chatName = activeChatForSmartAccountant?.contactName ?: tr("drawer.all_accounts_scope")
             FinancialAccountantDialog(
                 chatName = chatName,
                 accounts = remember(allChatAccounts, targetChatId) {
@@ -1762,7 +1767,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                 user = matchedUser,
                 config = cardConfig,
                 trustScore = if (matchedUser.id == currentUser?.id) 98 else 96,
-                reliabilitySummary = "بطاقة عميل موثقة عبر OOZOX",
+                reliabilitySummary = tr("drawer.domain_card_verified"),
                 onDismiss = {
                     com.example.util.ClientCardDeepLinkRouter.clearPendingHandle()
                 }
@@ -1865,14 +1870,14 @@ fun LuxuryBottomSectionBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Sync,
-                            contentDescription = "Syncing",
+                            contentDescription = tr("common.syncing"),
                             tint = GoldPrimary,
                             modifier = Modifier
                                 .size(14.dp)
                                 .graphicsLayer(rotationZ = syncRotationAngle)
                         )
                         Text(
-                            text = if (currentLanguage == AppLanguage.ARABIC) "مزامنة البيانات..." else "Syncing...",
+                            text = tr("common.syncing"),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1925,13 +1930,7 @@ fun LuxuryBottomSectionBar(
                         BottomTab.PROFILE -> AppIcons.Profile
                     }
 
-                    val tabDescription = when (tab) {
-                        BottomTab.CHATS -> "المحادثات"
-                        BottomTab.PROJECTS -> "المشاريع"
-                        BottomTab.BUSINESS -> "إدارة الأعمال"
-                        BottomTab.TRANSACTIONS -> "الفواتير"
-                        BottomTab.PROFILE -> "حسابي"
-                    }
+                    val tabDescription = Translations.get(tab.labelKey, currentLanguage)
 
                     Box(
                         modifier = Modifier

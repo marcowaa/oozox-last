@@ -25,6 +25,7 @@ import androidx.core.app.RemoteInput
 import androidx.core.graphics.drawable.IconCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.data.model.GoldKarat
 
 object NotificationHelper {
 
@@ -48,20 +49,21 @@ object NotificationHelper {
     const val DESTINATION_GOLD = "gold_tab"
 
     /**
-     * Initializes Android 8.0+ Notification Channels with vibration, sounds, and LED badges.
+     * Initializes Android 8.0+ Notification Channels with localized names, descriptions, vibration, and LED badges.
      */
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
+            val lang = Translations.activeLanguage(context)
+            Translations.ensureLoaded(context, lang)
 
-            // Channel 1: Real-time Messages & Group Chats
             val messagesChannel = NotificationChannel(
                 CHANNEL_MESSAGES,
-                "رسائل المحادثات المباشرة ومجموعات العمل",
+                Translations.get("notif.channel_messages_name", lang),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "تنبيهات فورية عند استلام رسائل جديدة أو إشارات في المحادثات"
+                description = Translations.get("notif.channel_messages_desc", lang)
                 enableLights(true)
                 lightColor = Color.parseColor("#00BFA5")
                 enableVibration(true)
@@ -69,13 +71,12 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
-            // Channel 2: Project Updates & Budget Alerts
             val projectsChannel = NotificationChannel(
                 CHANNEL_PROJECTS,
-                "تحديثات المشاريع والميزانيات",
+                Translations.get("notif.channel_projects_name", lang),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات فورية عند اعتماد مصروف، تعديل ميزانية، أو تعيين مهام جديدة"
+                description = Translations.get("notif.channel_projects_desc", lang)
                 enableLights(true)
                 lightColor = Color.parseColor("#00BFA5")
                 enableVibration(true)
@@ -83,26 +84,24 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
-            // Channel 3: Gold Deals & Invoices
             val dealsChannel = NotificationChannel(
                 CHANNEL_DEALS,
-                "صفقات الذهب وكشوفات الحسابات",
+                Translations.get("notif.channel_deals_name", lang),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات صفقات الذهب وتأكيدات الصاغة والتجار"
+                description = Translations.get("notif.channel_deals_desc", lang)
                 enableLights(true)
                 lightColor = Color.parseColor("#FFD700")
                 enableVibration(true)
                 setShowBadge(true)
             }
 
-            // Channel 4: Real-time Custom Gold Price Threshold Alerts
             val priceAlertsChannel = NotificationChannel(
                 CHANNEL_PRICE_ALERTS,
-                "تنبيهات أسعار الذهب الفورية",
+                Translations.get("notif.channel_price_name", lang),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات فورية لحظة وصول سعر الذهب أو الفضة للهدف المحدد مسبقاً"
+                description = Translations.get("notif.channel_price_desc", lang)
                 enableLights(true)
                 lightColor = Color.parseColor("#FFD700")
                 enableVibration(true)
@@ -110,23 +109,21 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
-            // Channel 5: System Announcements
             val systemChannel = NotificationChannel(
                 CHANNEL_SYSTEM,
-                "إعلانات النظام والاشتراكات",
+                Translations.get("notif.channel_system_name", lang),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "تنبيهات عامة حول التطبيق وحالة الاشتراك"
+                description = Translations.get("notif.channel_system_desc", lang)
                 setShowBadge(false)
             }
 
-            // Channel 6: Financial Alerts & Deficit / Surplus Auditing
             val financialChannel = NotificationChannel(
                 CHANNEL_FINANCIAL_ALERTS,
-                "تنبيهات العجز والزيادة والشكاوى المالية",
+                Translations.get("notif.channel_financial_name", lang),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات عاجلة للإدارة والمدير عند تسجيل عجز مالي، زيادة غير معتادة، أو شكاوى تؤثر بأثر رجعي"
+                description = Translations.get("notif.channel_financial_desc", lang)
                 enableLights(true)
                 lightColor = Color.parseColor("#EF4444")
                 enableVibration(true)
@@ -136,10 +133,10 @@ object NotificationHelper {
 
             val geofencingChannel = NotificationChannel(
                 CHANNEL_GEOFENCING,
-                "تنبيهات الموقع الجغرافي والدوام",
+                Translations.get("notif.channel_geofence_name", lang),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "تنبيهات الموظفين والمديرين عند مغادرة مقر العمل أثناء الدوام"
+                description = Translations.get("notif.channel_geofence_desc", lang)
                 enableLights(true)
                 lightColor = Color.YELLOW
                 enableVibration(true)
@@ -147,7 +144,15 @@ object NotificationHelper {
             }
 
             notificationManager.createNotificationChannels(
-                listOf(messagesChannel, projectsChannel, dealsChannel, priceAlertsChannel, systemChannel, financialChannel, geofencingChannel)
+                listOf(
+                    messagesChannel,
+                    projectsChannel,
+                    dealsChannel,
+                    priceAlertsChannel,
+                    systemChannel,
+                    financialChannel,
+                    geofencingChannel
+                )
             )
         }
     }
@@ -173,18 +178,17 @@ object NotificationHelper {
             } catch (_: Exception) {}
         }
 
-        // Generate a crisp, elegant letter avatar with premium colors
         val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         val palette = intArrayOf(
-            Color.parseColor("#D4AF37"), // Gold Primary
-            Color.parseColor("#00BFA5"), // Teal
-            Color.parseColor("#3B82F6"), // Blue
-            Color.parseColor("#8B5CF6"), // Purple
-            Color.parseColor("#10B981"), // Emerald
-            Color.parseColor("#E11D48")  // Rose
+            Color.parseColor("#D4AF37"),
+            Color.parseColor("#00BFA5"),
+            Color.parseColor("#3B82F6"),
+            Color.parseColor("#8B5CF6"),
+            Color.parseColor("#10B981"),
+            Color.parseColor("#E11D48")
         )
         val colorIndex = Math.abs(name.hashCode()) % palette.size
         paint.color = palette[colorIndex]
@@ -193,7 +197,6 @@ object NotificationHelper {
         val radius = sizePx / 2f
         canvas.drawCircle(radius, radius, radius, paint)
 
-        // Draw initial letter with high contrast
         val initial = name.trim().take(1).uppercase()
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -235,9 +238,6 @@ object NotificationHelper {
 
     private val activeChatMessages = java.util.concurrent.ConcurrentHashMap<String, MutableList<QueuedNotificationMessage>>()
 
-    /**
-     * Clears stacked notification messages for a chat when the user opens it.
-     */
     fun clearChatNotification(context: Context, chatId: String) {
         if (chatId.isBlank()) return
         activeChatMessages.remove(chatId)
@@ -249,20 +249,15 @@ object NotificationHelper {
         } catch (_: Exception) {}
     }
 
-    /**
-     * Formats message content into a clean, human-readable WhatsApp-style notification line.
-     * Prevents encrypted payloads, raw JSON, or file URIs from leaking into notifications.
-     */
-    private fun formatWhatsAppMessagePreview(rawText: String): String {
+    private fun formatWhatsAppMessagePreview(context: Context, rawText: String): String {
         val trimmed = rawText.trim()
-        if (trimmed.isBlank()) return "رسالة جديدة"
+        if (trimmed.isBlank()) return Translations.getFromContext(context, "notif.new_message")
 
-        // Never expose raw ciphertext or JSON payloads in notification shade
         if (trimmed.startsWith("ENC_") || trimmed.startsWith("ENC_v")) {
-            return "رسالة مشفرة جديدة"
+            return Translations.getFromContext(context, "notif.encrypted_message")
         }
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-            return "إشعار عملية جديدة"
+            return Translations.getFromContext(context, "notif.operation_notice")
         }
 
         val lower = trimmed.lowercase()
@@ -270,28 +265,22 @@ object NotificationHelper {
             lower.startsWith("[صورة]") || lower.startsWith("[image]") ||
                 (lower.startsWith("content://") && (lower.contains("image") || lower.contains("photo"))) ||
                 lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") ->
-                "📷 صورة"
+                Translations.getFromContext(context, "notif.preview_image")
             lower.startsWith("[فيديو]") || lower.startsWith("[video]") ||
                 lower.endsWith(".mp4") || lower.endsWith(".mov") ->
-                "🎥 فيديو"
+                Translations.getFromContext(context, "notif.preview_video")
             lower.startsWith("[صوت]") || lower.startsWith("[رسالة صوتية]") || lower.startsWith("[audio]") || lower.startsWith("[voice]") ||
                 lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".mp3") || lower.endsWith(".ogg") ->
-                "🎤 رسالة صوتية"
+                Translations.getFromContext(context, "notif.preview_voice")
             lower.startsWith("[مستند]") || lower.startsWith("[ملف]") || lower.startsWith("[file]") || lower.startsWith("[document]") ||
                 lower.endsWith(".pdf") || lower.endsWith(".xlsx") || lower.endsWith(".docx") ->
-                "📄 مستند"
+                Translations.getFromContext(context, "notif.preview_doc")
             lower.startsWith("[موقع]") || lower.startsWith("[location]") ->
-                "📍 موقع"
+                Translations.getFromContext(context, "notif.preview_location")
             else -> trimmed
         }
     }
 
-    /**
-     * Dispatches a WhatsApp-style notification for a newly received chat message.
-     * - 1-on-1 Chat: Title = Sender Name, Body = Exact Message Text (stacked if multiple).
-     * - Group Chat: Title = Group Name, Body = "Sender Name: Message Text".
-     * - Sub-Accounts: Discreet notification without sender name or message content.
-     */
     fun showChatMessageNotification(
         context: Context,
         chatId: String = "",
@@ -303,10 +292,11 @@ object NotificationHelper {
         isGroup: Boolean = false,
         groupName: String? = null
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
         val safeSenderName = senderName.trim().ifBlank { "OOZOX" }
-        val cleanPreview = formatWhatsAppMessagePreview(messageText)
+        val cleanPreview = formatWhatsAppMessagePreview(context, messageText)
 
-        // Case 1: Sub-Account (الحسابات الفرعية)
         if (isSubAccount) {
             if (!isSubAccountNotificationEnabled) {
                 return
@@ -342,7 +332,7 @@ object NotificationHelper {
             val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("OOZOX")
-                .setContentText("رسالة جديدة")
+                .setContentText(Translations.get("notif.new_message", lang))
                 .setColor(Color.parseColor("#D4AF37"))
                 .setAutoCancel(true)
                 .apply {
@@ -360,7 +350,6 @@ object NotificationHelper {
             return
         }
 
-        // Case 2: Main Account (الحساب الرئيسي) — WhatsApp MessagingStyle
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (chatId.isNotBlank()) {
@@ -376,7 +365,6 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Link incoming message notification directly to the floating bubble user heads
         if (chatId.isNotBlank()) {
             MessengerBubbleManager.initialize(context.applicationContext)
             MessengerBubbleManager.showBubble(
@@ -407,9 +395,8 @@ object NotificationHelper {
             null
         }
 
-        // Local user ("أنت") must be the MessagingStyle root user; otherwise Android renders the sender as "You"
         val mePerson = Person.Builder()
-            .setName("أنت")
+            .setName(Translations.get("common.you", lang))
             .setKey("local_me")
             .build()
 
@@ -441,9 +428,9 @@ object NotificationHelper {
             messagingStyle.addMessage(queued.text, queued.timestamp, msgPersonBuilder.build())
         }
 
-        // Quick Direct Reply Action (WhatsApp style)
+        val replyLabel = Translations.get("common.reply", lang)
         val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY)
-            .setLabel("رد")
+            .setLabel(replyLabel)
             .build()
 
         val replyPendingIntent = PendingIntent.getActivity(
@@ -455,7 +442,7 @@ object NotificationHelper {
 
         val replyAction = NotificationCompat.Action.Builder(
             R.drawable.ic_launcher_foreground,
-            "رد",
+            replyLabel,
             replyPendingIntent
         )
             .addRemoteInput(remoteInput)
@@ -502,14 +489,20 @@ object NotificationHelper {
         val notificationId = if (chatId.isNotBlank()) chatId.hashCode() else 1001
         notifySafe(context, notificationId, builder.build())
 
-        // WhatsApp-style Group Summary when multiple chats have unread notifications
         if (activeChatMessages.size > 1) {
             val totalMessages = activeChatMessages.values.sumOf { it.size }
             val totalChats = activeChatMessages.size
             val summaryNotification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("OOZOX")
-                .setContentText("$totalMessages رسائل من $totalChats محادثات")
+                .setContentText(
+                    Translations.format(
+                        "notif.summary_fmt",
+                        lang,
+                        "messages" to totalMessages,
+                        "chats" to totalChats
+                    )
+                )
                 .setColor(Color.parseColor("#D4AF37"))
                 .setGroup(GROUP_KEY_MESSAGES)
                 .setGroupSummary(true)
@@ -519,7 +512,6 @@ object NotificationHelper {
             notifySafe(context, SUMMARY_NOTIFICATION_ID, summaryNotification)
         }
 
-        // Dispatch clean in-app toast notification alert
         com.example.ui.components.ToastNotificationBus.showNewMessage(
             senderName = displayTitle,
             messageText = collapsedText
@@ -542,16 +534,17 @@ object NotificationHelper {
         )
     }
 
-    /**
-     * Dispatches a notification for a project update, budget burn warning, or task assignment.
-     */
     fun showProjectUpdateNotification(
         context: Context,
         projectId: String = "",
         projectName: String,
-        title: String = "تحديث في المشروع",
+        title: String = "",
         updateMessage: String
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+        val resolvedTitle = title.ifBlank { Translations.get("notif.proj_default_title", lang) }
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (projectId.isNotBlank()) {
@@ -571,12 +564,21 @@ object NotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_PROJECTS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("🏗️ $projectName: $title")
+            .setContentTitle(
+                Translations.format(
+                    "notif.proj_update_title_fmt",
+                    lang,
+                    "project" to projectName,
+                    "title" to resolvedTitle
+                )
+            )
             .setContentText(updateMessage)
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .setBigContentTitle("🏗️ $projectName")
-                    .setSummaryText("تحديث مشروع")
+                    .setBigContentTitle(
+                        Translations.format("notif.proj_big_title_fmt", lang, "project" to projectName)
+                    )
+                    .setSummaryText(Translations.get("notif.proj_summary", lang))
                     .bigText(updateMessage)
             )
             .setColor(Color.parseColor("#00BFA5"))
@@ -586,12 +588,15 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .build()
 
-        notifySafe(context, ("proj_" + (if (projectId.isNotBlank()) projectId else System.currentTimeMillis().toString())).hashCode(), notification)
+        notifySafe(
+            context,
+            ("proj_" + (if (projectId.isNotBlank()) projectId else System.currentTimeMillis().toString())).hashCode(),
+            notification
+        )
 
-        // Dispatch simple in-app toast notification alert
         com.example.ui.components.ToastNotificationBus.showProjectUpdate(
             projectName = projectName,
-            updateDescription = "$title: $updateMessage"
+            updateDescription = "$resolvedTitle: $updateMessage"
         )
     }
 
@@ -615,12 +620,10 @@ object NotificationHelper {
         projectName: String,
         updateMessage: String
     ) {
-        showProjectUpdateNotification(context, "", projectName, "تحديث", updateMessage)
+        val simpleTitle = Translations.getFromContext(context, "notif.proj_simple_title")
+        showProjectUpdateNotification(context, "", projectName, simpleTitle, updateMessage)
     }
 
-    /**
-     * Dispatches a notification specifically when an invoice status changes (PAID, OVERDUE, CANCELLED, PENDING).
-     */
     fun showInvoiceStatusNotification(
         context: Context,
         invoiceId: String = "",
@@ -629,6 +632,9 @@ object NotificationHelper {
         totalAmount: Double,
         counterpartName: String? = null
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, DESTINATION_TRANSACTION)
@@ -645,10 +651,10 @@ object NotificationHelper {
         )
 
         val statusLabel = when (status.uppercase()) {
-            "PAID" -> "✅ مسددة بالكامل"
-            "OVERDUE" -> "⚠️ متأخرة عن موعد السداد"
-            "CANCELLED" -> "❌ ملغاة"
-            "PENDING" -> "⏳ قيد الانتظار"
+            "PAID" -> Translations.get("notif.inv_paid", lang)
+            "OVERDUE" -> Translations.get("notif.inv_overdue", lang)
+            "CANCELLED" -> Translations.get("notif.inv_cancelled", lang)
+            "PENDING" -> Translations.get("notif.inv_pending", lang)
             else -> status
         }
 
@@ -659,25 +665,28 @@ object NotificationHelper {
             else -> Color.parseColor("#FFD700")
         }
 
-        val formattedAmount = String.format(java.util.Locale.US, "%,.2f", totalAmount)
-        val title = "📄 تحديث فاتورة $invoiceNumber: $statusLabel"
-        val body = StringBuilder().apply {
-            append("تم تحديث حالة الفاتورة بقيمة $formattedAmount ج.م إلى: $statusLabel.")
+        val formattedAmount = GoldUtils.formatCurrency(totalAmount, lang)
+        val title = Translations.format("notif.inv_title_fmt", lang, "num" to invoiceNumber, "status" to statusLabel)
+        val body = buildString {
+            append(Translations.format("notif.inv_body_fmt", lang, "amount" to formattedAmount, "status" to statusLabel))
             if (!counterpartName.isNullOrBlank()) {
-                append("\nالطرف الآخر: $counterpartName")
+                append("\n")
+                append(Translations.format("notif.inv_counterpart_fmt", lang, "name" to counterpartName))
             }
-        }.toString()
+        }
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_DEALS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
-            .setContentText("القيمة: $formattedAmount ج.م | الحالة: $statusLabel")
+            .setContentText(
+                Translations.format("notif.inv_short_fmt", lang, "amount" to formattedAmount, "status" to statusLabel)
+            )
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .setBigContentTitle("📄 فاتورة $invoiceNumber")
-                    .setSummaryText("حالة الفاتورة")
+                    .setBigContentTitle(Translations.format("notif.inv_big_title_fmt", lang, "num" to invoiceNumber))
+                    .setSummaryText(Translations.get("notif.inv_summary", lang))
                     .bigText(body)
             )
             .setColor(statusColor)
@@ -687,18 +696,22 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .build()
 
-        notifySafe(context, ("inv_" + (if (invoiceId.isNotBlank()) invoiceId else System.currentTimeMillis().toString())).hashCode(), notification)
+        notifySafe(
+            context,
+            ("inv_" + (if (invoiceId.isNotBlank()) invoiceId else System.currentTimeMillis().toString())).hashCode(),
+            notification
+        )
     }
 
-    /**
-     * Dispatches a notification for a gold deal or invoice update.
-     */
     fun showGoldDealNotification(
         context: Context,
         transactionId: String = "",
         title: String,
         message: String
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (transactionId.isNotBlank()) {
@@ -718,10 +731,10 @@ object NotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_DEALS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("⚡ $title")
+            .setContentTitle(Translations.format("notif.deal_title_fmt", lang, "title" to title))
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setSubText("صفقات الذهب")
+            .setSubText(Translations.get("notif.gold_subtext", lang))
             .setColor(Color.parseColor("#FFD700"))
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
@@ -729,7 +742,11 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .build()
 
-        notifySafe(context, ("deal_" + (if (transactionId.isNotBlank()) transactionId else System.currentTimeMillis().toString())).hashCode(), notification)
+        notifySafe(
+            context,
+            ("deal_" + (if (transactionId.isNotBlank()) transactionId else System.currentTimeMillis().toString())).hashCode(),
+            notification
+        )
     }
 
     fun showTransactionNotification(
@@ -741,9 +758,6 @@ object NotificationHelper {
         showGoldDealNotification(context, "", title, if (body.isNotBlank()) body else message)
     }
 
-    /**
-     * Dispatches a high-priority push notification when the gold/silver market hits a user-defined price threshold.
-     */
     fun showGoldPriceThresholdNotification(
         context: Context,
         alertId: String,
@@ -754,6 +768,9 @@ object NotificationHelper {
         direction: String,
         note: String? = null
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, DESTINATION_GOLD)
@@ -766,46 +783,64 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val metalLabel = if (metalType == "SILVER" || metalType == "فضة") "الفضة" else "الذهب"
+        val metalLabel = if (metalType.equals("SILVER", ignoreCase = true) || metalType == "فضة") {
+            Translations.get("notif.metal_silver", lang)
+        } else {
+            Translations.get("notif.metal_gold", lang)
+        }
         val karatLabel = when (karat.uppercase()) {
-            "24", "KARAT_24" -> "عيار 24"
-            "21", "KARAT_21" -> "عيار 21"
-            "18", "KARAT_18" -> "عيار 18"
-            "14", "KARAT_14" -> "عيار 14"
-            "POUND", "GOLD_POUND" -> "الجنيه الذهب"
-            "OUNCE", "OUNCE_USD" -> "الأونصة العالمية"
-            "999", "SILVER_999" -> "فضة 999"
-            "925", "SILVER_925" -> "فضة 925"
-            "800", "SILVER_800" -> "فضة 800"
+            "24", "KARAT_24" -> GoldKarat.KARAT_24.localizedLabel(lang)
+            "21", "KARAT_21" -> GoldKarat.KARAT_21.localizedLabel(lang)
+            "18", "KARAT_18" -> GoldKarat.KARAT_18.localizedLabel(lang)
+            "14", "KARAT_14" -> GoldKarat.KARAT_14.localizedLabel(lang)
+            "POUND", "GOLD_POUND" -> Translations.get("notif.gold_pound", lang)
+            "OUNCE", "OUNCE_USD" -> Translations.get("notif.gold_ounce", lang)
+            "999", "SILVER_999" -> Translations.get("silver.karat_999", lang)
+            "925", "SILVER_925" -> Translations.get("silver.karat_925", lang)
+            "800", "SILVER_800" -> Translations.get("silver.karat_800", lang)
             else -> karat
         }
 
-        val directionIcon = if (direction == "ABOVE" || direction == "أعلى") "📈 صعود" else "📉 هبوط"
-        val title = "🎯 تنبيه سعر فوري: $metalLabel $karatLabel"
-        val targetFormatted = String.format(java.util.Locale.US, "%,.0f", targetPrice)
-        val currentFormatted = String.format(java.util.Locale.US, "%,.0f", currentPrice)
+        val directionLabel = if (direction.equals("ABOVE", ignoreCase = true) || direction == "أعلى") {
+            Translations.get("notif.dir_above", lang)
+        } else {
+            Translations.get("notif.dir_below", lang)
+        }
+        val title = Translations.format("notif.price_title_fmt", lang, "metal" to metalLabel, "karat" to karatLabel)
+        val targetFormatted = GoldUtils.formatCurrency(targetPrice, lang)
+        val currentFormatted = GoldUtils.formatCurrency(currentPrice, lang)
 
-        val bodyText = StringBuilder().apply {
-            append("وصل السعر اللحظي في السوق إلى $currentFormatted ج.م ")
-            append("(${directionIcon} وتجاوز هدفك المحدد $targetFormatted ج.م).")
+        val bodyText = buildString {
+            append(
+                Translations.format(
+                    "notif.price_body_fmt",
+                    lang,
+                    "current" to currentFormatted,
+                    "dir" to directionLabel,
+                    "target" to targetFormatted
+                )
+            )
             if (!note.isNullOrBlank()) {
-                append("\nملاحظتك: $note")
+                append("\n")
+                append(Translations.format("notif.price_note_fmt", lang, "note" to note))
             }
-        }.toString()
+        }
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_PRICE_ALERTS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
-            .setContentText("السعر الحالي: $currentFormatted ج.م (الهدف: $targetFormatted ج.م)")
+            .setContentText(
+                Translations.format("notif.price_short_fmt", lang, "current" to currentFormatted, "target" to targetFormatted)
+            )
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .setBigContentTitle(title)
-                    .setSummaryText("تنبيه أهداف الذهب")
+                    .setSummaryText(Translations.get("notif.price_summary", lang))
                     .bigText(bodyText)
             )
-            .setColor(Color.parseColor("#FFD700")) // Gold
+            .setColor(Color.parseColor("#FFD700"))
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -815,9 +850,6 @@ object NotificationHelper {
         notifySafe(context, ("alert_" + alertId).hashCode(), notification)
     }
 
-    /**
-     * Dispatches a general system announcement notification.
-     */
     fun showSystemNotification(
         context: Context,
         title: String,
@@ -846,9 +878,6 @@ object NotificationHelper {
         notifySafe(context, System.currentTimeMillis().toInt(), notification)
     }
 
-    /**
-     * Dispatches an urgent notification to the manager when a financial deficit is recorded.
-     */
     fun showFinancialDeficitNotification(
         context: Context,
         groupName: String,
@@ -857,6 +886,9 @@ object NotificationHelper {
         entryDate: String,
         notes: String? = null
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "company_accounting_hub")
@@ -869,29 +901,46 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val formattedAmount = String.format(java.util.Locale.US, "%,.2f", deficitAmount)
-        val title = "🚨 تنبيه عجز مالي بالخزينة: $formattedAmount ج.م"
-        val body = StringBuilder().apply {
-            append("تم تسجيل عجز مالي بقيمة $formattedAmount ج.م في [$groupName].\n")
-            append("الموظف المسؤول: $staffName | التاريخ: $entryDate")
+        val formattedAmount = GoldUtils.formatCurrency(deficitAmount, lang)
+        val title = Translations.format("notif.deficit_title_fmt", lang, "amount" to formattedAmount)
+        val body = buildString {
+            append(
+                Translations.format(
+                    "notif.deficit_body_fmt",
+                    lang,
+                    "amount" to formattedAmount,
+                    "group" to groupName,
+                    "staff" to staffName,
+                    "date" to entryDate
+                )
+            )
             if (!notes.isNullOrBlank()) {
-                append("\nالبيان: $notes")
+                append("\n")
+                append(Translations.format("notif.notes_fmt", lang, "notes" to notes))
             }
-        }.toString()
+        }
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_FINANCIAL_ALERTS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
-            .setContentText("عجز مالي $formattedAmount ج.م مسجل بواسطة $staffName في $entryDate")
+            .setContentText(
+                Translations.format(
+                    "notif.deficit_short_fmt",
+                    lang,
+                    "amount" to formattedAmount,
+                    "staff" to staffName,
+                    "date" to entryDate
+                )
+            )
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .setBigContentTitle(title)
-                    .setSummaryText("رقابة الخزينة والعهدة")
+                    .setSummaryText(Translations.get("notif.deficit_summary", lang))
                     .bigText(body)
             )
-            .setColor(Color.parseColor("#EF4444")) // Red
+            .setColor(Color.parseColor("#EF4444"))
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -901,9 +950,6 @@ object NotificationHelper {
         notifySafe(context, ("deficit_" + System.currentTimeMillis()).hashCode(), notification)
     }
 
-    /**
-     * Dispatches a notification to the manager when a notable financial surplus/excess is recorded.
-     */
     fun showFinancialSurplusNotification(
         context: Context,
         groupName: String,
@@ -912,6 +958,9 @@ object NotificationHelper {
         entryDate: String,
         notes: String? = null
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "company_accounting_hub")
@@ -924,29 +973,40 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val formattedAmount = String.format(java.util.Locale.US, "%,.2f", surplusAmount)
-        val title = "💰 تنبيه زيادة مالية / إيراد مميز: $formattedAmount ج.م"
-        val body = StringBuilder().apply {
-            append("تم تسجيل تدفق مالي / فائض بقيمة $formattedAmount ج.م في [$groupName].\n")
-            append("الموظف: $staffName | التاريخ: $entryDate")
+        val formattedAmount = GoldUtils.formatCurrency(surplusAmount, lang)
+        val title = Translations.format("notif.surplus_title_fmt", lang, "amount" to formattedAmount)
+        val body = buildString {
+            append(
+                Translations.format(
+                    "notif.surplus_body_fmt",
+                    lang,
+                    "amount" to formattedAmount,
+                    "group" to groupName,
+                    "staff" to staffName,
+                    "date" to entryDate
+                )
+            )
             if (!notes.isNullOrBlank()) {
-                append("\nالبيان: $notes")
+                append("\n")
+                append(Translations.format("notif.notes_fmt", lang, "notes" to notes))
             }
-        }.toString()
+        }
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_FINANCIAL_ALERTS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
-            .setContentText("زيادة مالية مسجلة بقيمة $formattedAmount ج.م في $entryDate")
+            .setContentText(
+                Translations.format("notif.surplus_short_fmt", lang, "amount" to formattedAmount, "date" to entryDate)
+            )
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .setBigContentTitle(title)
-                    .setSummaryText("رقابة التدفقات النقدية")
+                    .setSummaryText(Translations.get("notif.surplus_summary", lang))
                     .bigText(body)
             )
-            .setColor(Color.parseColor("#10B981")) // Green
+            .setColor(Color.parseColor("#10B981"))
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -956,9 +1016,6 @@ object NotificationHelper {
         notifySafe(context, ("surplus_" + System.currentTimeMillis()).hashCode(), notification)
     }
 
-    /**
-     * Dispatches an urgent alert to the manager when a retroactive employee complaint/adjustment results in a deficit on that target day.
-     */
     fun showRetroactiveComplaintDeficitNotification(
         context: Context,
         groupName: String,
@@ -968,6 +1025,9 @@ object NotificationHelper {
         adjustmentAmount: Double,
         netDayDeficit: Double
     ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "company_accounting_hub")
@@ -980,29 +1040,35 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val formattedAdj = String.format(java.util.Locale.US, "%,.2f", adjustmentAmount)
-        val formattedDeficit = String.format(java.util.Locale.US, "%,.2f", netDayDeficit)
-        val title = "⚠️ إنذار إداري: عجز ناتج عن شكوى بأثر رجعي ($formattedDeficit ج.م)"
-        val body = StringBuilder().apply {
-            append("أدرج الموظف [$staffName] شكوى/تسوية مالية بقيمة $formattedAdj ج.م أثرت بأثر رجعي على يوم [$targetDate].\n")
-            append("عنوان الشكوى: $complaintTitle\n")
-            append("صافي عجز الخزينة المحسوب لذلك اليوم: $formattedDeficit ج.م في [$groupName].\n")
-            append("يرجى فحص المعاملات المسببة للعجز واتخاذ الإجراء اللازم.")
-        }.toString()
+        val formattedAdj = GoldUtils.formatCurrency(adjustmentAmount, lang)
+        val formattedDeficit = GoldUtils.formatCurrency(netDayDeficit, lang)
+        val title = Translations.format("notif.retro_title_fmt", lang, "amount" to formattedDeficit)
+        val body = Translations.format(
+            "notif.retro_body_fmt",
+            lang,
+            "staff" to staffName,
+            "adj" to formattedAdj,
+            "date" to targetDate,
+            "title" to complaintTitle,
+            "deficit" to formattedDeficit,
+            "group" to groupName
+        )
 
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_FINANCIAL_ALERTS)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
-            .setContentText("شكوى بأثر رجعي أحدثت عجزاً ($formattedDeficit ج.م) بتاريخ $targetDate")
+            .setContentText(
+                Translations.format("notif.retro_short_fmt", lang, "amount" to formattedDeficit, "date" to targetDate)
+            )
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .setBigContentTitle(title)
-                    .setSummaryText("متابعة الشكاوى المالية والعجز")
+                    .setSummaryText(Translations.get("notif.retro_summary", lang))
                     .bigText(body)
             )
-            .setColor(Color.parseColor("#DC2626")) // Urgent Red
+            .setColor(Color.parseColor("#DC2626"))
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -1013,6 +1079,9 @@ object NotificationHelper {
     }
 
     fun showStaffGeofenceWarning(context: Context, staffName: String) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -1021,8 +1090,8 @@ object NotificationHelper {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_GEOFENCING)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("⚠️ تنبيه: خارج نطاق العمل")
-            .setContentText("يا $staffName، يرجى العودة إلى مقر العمل لتجنب تسجيل مخالفة إدارية.")
+            .setContentTitle(Translations.get("notif.geofence_staff_title", lang))
+            .setContentText(Translations.format("notif.geofence_staff_body_fmt", lang, "staff" to staffName))
             .setColor(Color.RED)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -1032,6 +1101,9 @@ object NotificationHelper {
     }
 
     fun showManagerGeofenceAlert(context: Context, staffName: String, durationMins: Int) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "company_accounting_hub")
@@ -1041,8 +1113,10 @@ object NotificationHelper {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_GEOFENCING)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("🚨 إنذار إداري: انقطاع موظف")
-            .setContentText("الموظف $staffName متواجد خارج مقر العمل منذ $durationMins دقيقة.")
+            .setContentTitle(Translations.get("notif.geofence_mgr_title", lang))
+            .setContentText(
+                Translations.format("notif.geofence_mgr_body_fmt", lang, "staff" to staffName, "mins" to durationMins)
+            )
             .setColor(Color.parseColor("#DC2626"))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -1051,7 +1125,11 @@ object NotificationHelper {
         notifySafe(context, 2002, notification)
     }
 
-    fun showManagerGpsDisabledAlert(context: Context, staffName: String, issueDetail: String = "تم إيقاف خدمة الموقع GPS أو تعذر تحديد النطاق") {
+    fun showManagerGpsDisabledAlert(context: Context, staffName: String, issueDetail: String = "") {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+        val resolvedDetail = issueDetail.ifBlank { Translations.get("notif.gps_issue_default", lang) }
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "company_accounting_hub")
@@ -1061,8 +1139,15 @@ object NotificationHelper {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_GEOFENCING)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("🚨 تحذير: إيقاف موقع العمل للموظف")
-            .setContentText("الموظف $staffName: $issueDetail. تم إشعار الإدارة تلقائياً.")
+            .setContentTitle(Translations.get("notif.gps_disabled_title", lang))
+            .setContentText(
+                Translations.format(
+                    "notif.gps_disabled_body_fmt",
+                    lang,
+                    "staff" to staffName,
+                    "detail" to resolvedDetail
+                )
+            )
             .setColor(Color.parseColor("#DC2626"))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -1072,6 +1157,9 @@ object NotificationHelper {
     }
 
     fun showShiftHandoverReceivedAlert(context: Context, senderName: String, receiverName: String, totalCash: Double) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "business_management")
@@ -1081,8 +1169,16 @@ object NotificationHelper {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_GEOFENCING)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("🤝 تأكيد استلام الشفت والعهدة")
-            .setContentText("أكد $receiverName استلام الخزينة (${totalCash.toInt()} ج.م) والبضاعة والفواتير من $senderName.")
+            .setContentTitle(Translations.get("notif.shift_handover_title", lang))
+            .setContentText(
+                Translations.format(
+                    "notif.shift_handover_body_fmt",
+                    lang,
+                    "receiver" to receiverName,
+                    "amount" to GoldUtils.formatCurrency(totalCash, lang),
+                    "sender" to senderName
+                )
+            )
             .setColor(Color.parseColor("#10B981"))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -1091,7 +1187,17 @@ object NotificationHelper {
         notifySafe(context, 2004, notification)
     }
 
-    fun showForensicLiabilityAlert(context: Context, complaintTitle: String, invoiceNo: String, primaryName: String, receiverName: String, liabilityType: String) {
+    fun showForensicLiabilityAlert(
+        context: Context,
+        complaintTitle: String,
+        invoiceNo: String,
+        primaryName: String,
+        receiverName: String,
+        liabilityType: String
+    ) {
+        val lang = Translations.activeLanguage(context)
+        Translations.ensureLoaded(context, lang)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DESTINATION, "business_management")
@@ -1101,8 +1207,17 @@ object NotificationHelper {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_FINANCIAL_ALERTS)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("⚖️ تحليل الذكاء المالي: مسؤولية مشتركة")
-            .setContentText("شكوى فاتورة #$invoiceNo: تم فحص إقرار الاستلام لـ $receiverName و $primaryName ($liabilityType).")
+            .setContentTitle(Translations.get("notif.forensic_title", lang))
+            .setContentText(
+                Translations.format(
+                    "notif.forensic_body_fmt",
+                    lang,
+                    "invoice" to invoiceNo,
+                    "receiver" to receiverName,
+                    "primary" to primaryName,
+                    "type" to liabilityType
+                )
+            )
             .setColor(Color.parseColor("#DC2626"))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)

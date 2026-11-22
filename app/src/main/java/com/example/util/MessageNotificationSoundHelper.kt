@@ -34,7 +34,27 @@ data class MessageNotificationTone(
     val descriptionAr: String,
     val icon: String,
     val durationMs: Int
-)
+) {
+    fun localizedName(language: AppLanguage): String = when (id) {
+        MessageNotificationSoundHelper.TONE_GOLD -> Translations.get("tone.gold_name", language)
+        MessageNotificationSoundHelper.TONE_CRYSTAL -> Translations.get("tone.crystal_name", language)
+        MessageNotificationSoundHelper.TONE_MODERN_POP -> Translations.get("tone.pop_name", language)
+        MessageNotificationSoundHelper.TONE_SMART_PING -> Translations.get("tone.smart_name", language)
+        MessageNotificationSoundHelper.TONE_CASH_VAULT -> Translations.get("tone.vault_name", language)
+        MessageNotificationSoundHelper.TONE_SUBTLE_PULSE -> Translations.get("tone.subtle_name", language)
+        else -> Translations.get("tone.default_name", language)
+    }
+
+    fun localizedDescription(language: AppLanguage): String = when (id) {
+        MessageNotificationSoundHelper.TONE_GOLD -> Translations.get("tone.gold_desc", language)
+        MessageNotificationSoundHelper.TONE_CRYSTAL -> Translations.get("tone.crystal_desc", language)
+        MessageNotificationSoundHelper.TONE_MODERN_POP -> Translations.get("tone.pop_desc", language)
+        MessageNotificationSoundHelper.TONE_SMART_PING -> Translations.get("tone.smart_desc", language)
+        MessageNotificationSoundHelper.TONE_CASH_VAULT -> Translations.get("tone.vault_desc", language)
+        MessageNotificationSoundHelper.TONE_SUBTLE_PULSE -> Translations.get("tone.subtle_desc", language)
+        else -> Translations.get("tone.default_desc", language)
+    }
+}
 
 /**
  * Comprehensive helper for custom message notification sounds.

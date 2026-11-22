@@ -28,6 +28,43 @@ object GoldUtils {
         "مصاغ", "سبائك", "عملات", "جنيه ذهب", "أساور", "خواتم", "قلائد", "أقراط", "أخرى"
     )
 
+    fun localizedManufacturers(language: AppLanguage = Translations.activeLanguage(null)): List<Pair<String, String>> = listOf(
+        "لازوردي" to Translations.get("gold_utils.mfg_lazurde", language),
+        "معوض" to Translations.get("gold_utils.mfg_mouawad", language),
+        "داماس" to Translations.get("gold_utils.mfg_damas", language),
+        "السبيعي" to Translations.get("gold_utils.mfg_alsubaie", language),
+        "الفردان" to Translations.get("gold_utils.mfg_alfardan", language),
+        "الرميزان" to Translations.get("gold_utils.mfg_alromaizan", language),
+        "مجوهرات طيف" to Translations.get("gold_utils.mfg_taif", language),
+        "كارتييه" to Translations.get("gold_utils.mfg_cartier", language),
+        "بولغري" to Translations.get("gold_utils.mfg_bvlgari", language)
+    )
+
+    fun localizedGoldTypes(language: AppLanguage = Translations.activeLanguage(null)): List<Pair<String, String>> = listOf(
+        "مصاغ" to Translations.get("gold_utils.type_jewelry", language),
+        "سبائك" to Translations.get("gold_utils.type_bullion", language),
+        "عملات" to Translations.get("gold_utils.type_coins", language),
+        "جنيه ذهب" to Translations.get("gold_utils.type_pound", language),
+        "أساور" to Translations.get("gold_utils.type_bracelets", language),
+        "خواتم" to Translations.get("gold_utils.type_rings", language),
+        "قلائد" to Translations.get("gold_utils.type_necklaces", language),
+        "أقراط" to Translations.get("gold_utils.type_earrings", language),
+        "أخرى" to Translations.get("gold_utils.type_other", language)
+    )
+
+    fun localizeManufacturer(raw: String, language: AppLanguage = Translations.activeLanguage(null)): String {
+        return localizedManufacturers(language).firstOrNull { it.first == raw }?.second ?: raw
+    }
+
+    fun localizeGoldType(raw: String, language: AppLanguage = Translations.activeLanguage(null)): String {
+        return localizedGoldTypes(language).firstOrNull { it.first == raw }?.second ?: raw
+    }
+
+    private fun localeFor(language: AppLanguage): Locale = when (language) {
+        AppLanguage.ARABIC -> Locale("ar", "EG")
+        else -> Locale(language.code)
+    }
+
     fun calculateGoldPrice(weight: Double, pricePerGram: Double, manufacturingCostPerGram: Double): Triple<Double, Double, Double> {
         val totalGoldPrice = weight * pricePerGram
         val totalManufacturing = weight * manufacturingCostPerGram
@@ -40,8 +77,6 @@ object GoldUtils {
         currentPricePerGram: Double,
         karat: Double = 21.0
     ): ZakatResult {
-        // Standard Nisab for pure gold (24k) is 85 grams.
-        // Convert the given karat weight to equivalent pure 24k weight.
         val pureGoldEquivalent = if (karat > 0 && karat <= 24) {
             totalGoldWeight * (karat / 24.0)
         } else {
@@ -74,61 +109,85 @@ object GoldUtils {
         return ProfitLossResult(totalCost, currentValue, profitLoss, profitLossPercent)
     }
 
-    fun formatCurrency(amount: Double): String {
-        val format = NumberFormat.getNumberInstance(Locale("ar", "EG"))
+    fun formatCurrency(
+        amount: Double,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val format = NumberFormat.getNumberInstance(localeFor(language))
         format.minimumFractionDigits = 0
         format.maximumFractionDigits = 2
-        return "${format.format(amount)} ج.م"
+        val unit = Translations.get("gold_utils.currency_unit", language)
+        return "${format.format(amount)} $unit"
     }
 
-    fun formatWeight(weight: Double): String {
-        val format = NumberFormat.getNumberInstance(Locale("ar", "EG"))
+    fun formatWeight(
+        weight: Double,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val format = NumberFormat.getNumberInstance(localeFor(language))
         format.maximumFractionDigits = 2
-        return "${format.format(weight)} جم"
+        val unit = Translations.get("gold_utils.weight_unit", language)
+        return "${format.format(weight)} $unit"
     }
 
-    fun formatDecimal(value: Double): String {
-        val format = NumberFormat.getNumberInstance(Locale("ar", "EG"))
+    fun formatDecimal(
+        value: Double,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val format = NumberFormat.getNumberInstance(localeFor(language))
         format.minimumFractionDigits = 0
         format.maximumFractionDigits = 2
         return format.format(value)
     }
 
-    fun formatDate(timestamp: Long): String {
-        val sdf = SimpleDateFormat("yyyy/MM/dd hh:mm a", Locale("ar", "EG"))
+    fun formatDate(
+        timestamp: Long,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val sdf = SimpleDateFormat("yyyy/MM/dd hh:mm a", localeFor(language))
         return sdf.format(Date(timestamp))
     }
 
-    fun formatExactDateTime(timestamp: Long): String {
-        val sdf = SimpleDateFormat("yyyy/MM/dd - hh:mm:ss a", Locale("ar", "EG"))
+    fun formatExactDateTime(
+        timestamp: Long,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val sdf = SimpleDateFormat("yyyy/MM/dd - hh:mm:ss a", localeFor(language))
         return sdf.format(Date(timestamp))
     }
 
-    fun formatCallExactDateTime(timestamp: Long): String {
+    fun formatCallExactDateTime(
+        timestamp: Long,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val loc = localeFor(language)
         val nowCal = Calendar.getInstance()
         val callCal = Calendar.getInstance().apply { timeInMillis = timestamp }
-        val timeSdf = SimpleDateFormat("hh:mm:ss a", Locale("ar", "EG"))
+        val timeSdf = SimpleDateFormat("hh:mm:ss a", loc)
         val formattedTime = timeSdf.format(Date(timestamp))
 
         val isToday = nowCal.get(Calendar.YEAR) == callCal.get(Calendar.YEAR) &&
-                      nowCal.get(Calendar.DAY_OF_YEAR) == callCal.get(Calendar.DAY_OF_YEAR)
+            nowCal.get(Calendar.DAY_OF_YEAR) == callCal.get(Calendar.DAY_OF_YEAR)
 
         nowCal.add(Calendar.DAY_OF_YEAR, -1)
         val isYesterday = nowCal.get(Calendar.YEAR) == callCal.get(Calendar.YEAR) &&
-                          nowCal.get(Calendar.DAY_OF_YEAR) == callCal.get(Calendar.DAY_OF_YEAR)
+            nowCal.get(Calendar.DAY_OF_YEAR) == callCal.get(Calendar.DAY_OF_YEAR)
 
         return when {
-            isToday -> "اليوم • $formattedTime"
-            isYesterday -> "أمس • $formattedTime"
+            isToday -> Translations.format("gold_utils.today_fmt", language, "time" to formattedTime)
+            isYesterday -> Translations.format("gold_utils.yesterday_fmt", language, "time" to formattedTime)
             else -> {
-                val dateSdf = SimpleDateFormat("yyyy/MM/dd • hh:mm:ss a", Locale("ar", "EG"))
+                val dateSdf = SimpleDateFormat("yyyy/MM/dd • hh:mm:ss a", loc)
                 dateSdf.format(Date(timestamp))
             }
         }
     }
 
-    fun formatShortTime(timestamp: Long): String {
-        val sdf = SimpleDateFormat("hh:mm a", Locale("ar", "EG"))
+    fun formatShortTime(
+        timestamp: Long,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val sdf = SimpleDateFormat("hh:mm a", localeFor(language))
         return sdf.format(Date(timestamp))
     }
 
@@ -136,28 +195,33 @@ object GoldUtils {
         val cal1 = Calendar.getInstance().apply { timeInMillis = time1 }
         val cal2 = Calendar.getInstance().apply { timeInMillis = time2 }
         return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
-               cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR) &&
-               cal1.get(Calendar.HOUR_OF_DAY) == cal2.get(Calendar.HOUR_OF_DAY)
+            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR) &&
+            cal1.get(Calendar.HOUR_OF_DAY) == cal2.get(Calendar.HOUR_OF_DAY)
     }
 
-    fun formatHourlyTimestampHeader(timestamp: Long): String {
+    fun formatHourlyTimestampHeader(
+        timestamp: Long,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String {
+        val loc = localeFor(language)
         val nowCal = Calendar.getInstance()
         val msgCal = Calendar.getInstance().apply { timeInMillis = timestamp }
-        val hourSdf = SimpleDateFormat("hh:00 a", Locale("ar", "EG"))
+        val hourSdf = SimpleDateFormat("hh:00 a", loc)
         val formattedHour = hourSdf.format(Date(timestamp))
 
         val isToday = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
-                      nowCal.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
+            nowCal.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
 
         nowCal.add(Calendar.DAY_OF_YEAR, -1)
         val isYesterday = nowCal.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
-                          nowCal.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
+            nowCal.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
 
         return when {
-            isToday -> "اليوم • $formattedHour"
-            isYesterday -> "أمس • $formattedHour"
+            isToday -> Translations.format("gold_utils.today_fmt", language, "time" to formattedHour)
+            isYesterday -> Translations.format("gold_utils.yesterday_fmt", language, "time" to formattedHour)
             else -> {
-                val dateSdf = SimpleDateFormat("EEEE، d MMMM • hh:00 a", Locale("ar", "EG"))
+                val pattern = if (language == AppLanguage.ARABIC) "EEEE، d MMMM • hh:00 a" else "EEEE, d MMMM • hh:00 a"
+                val dateSdf = SimpleDateFormat(pattern, loc)
                 dateSdf.format(Date(timestamp))
             }
         }
@@ -174,10 +238,13 @@ object GoldUtils {
         }
     }
 
-    fun getStatusLabel(status: TransactionStatus): String = when (status) {
-        TransactionStatus.PURCHASED -> "مشترى"
-        TransactionStatus.RETURNED -> "مُرجَع"
-        TransactionStatus.RESOLD -> "مُعاد بيعه"
+    fun getStatusLabel(
+        status: TransactionStatus,
+        language: AppLanguage = Translations.activeLanguage(null)
+    ): String = when (status) {
+        TransactionStatus.PURCHASED -> Translations.get("gold_utils.status_purchased", language)
+        TransactionStatus.RETURNED -> Translations.get("gold_utils.status_returned", language)
+        TransactionStatus.RESOLD -> Translations.get("gold_utils.status_resold", language)
     }
 
     data class ZakatResult(
@@ -196,7 +263,8 @@ object GoldUtils {
 
     fun isZoxAdminAccount(user: com.example.data.model.UserEntity?): Boolean {
         if (user == null) return false
-        return user.type.equals("ADMIN", ignoreCase = true) || user.type.equals(com.example.data.model.UserType.ADMIN.name, ignoreCase = true)
+        return user.type.equals("ADMIN", ignoreCase = true) ||
+            user.type.equals(com.example.data.model.UserType.ADMIN.name, ignoreCase = true)
     }
 
     fun formatPhoneForDisplay(

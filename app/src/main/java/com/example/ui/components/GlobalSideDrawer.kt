@@ -1,17 +1,14 @@
 package com.example.ui.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -21,14 +18,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,26 +37,28 @@ import com.example.ui.theme.*
 import com.example.util.AppLanguage
 import com.example.util.GoldUtils
 import com.example.util.Translations
+import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * High-level identifiers for primary sections in the side navigation drawer.
  */
-enum class DrawerSection(val id: String, val title: String) {
-    HOME("home", "الرئيسية والمحادثات"),
-    AI_ACCOUNTANT("ai_accountant", "المحاسب المالي"),
-    COMPANY_ACCOUNTING("company_accounting", "المركز المحاسبي وإدارة الشركات"),
-    SUBSCRIPTIONS("subscriptions", "باقات وعضوية VIP"),
-    ENCRYPTED_VAULT("encrypted_vault", "الخزينة والنسخ المشفر"),
-    LANGUAGE("language", "لغة النظام والواجهة"),
-    ADMIN("admin", "لوحة الإدارة والرقابة المركزية"),
-    GOLD("gold", "قسم الذهب والمعادن الثمينة"),
-    PROJECTS("projects", "إدارة المشاريع والاستثمارات")
+enum class DrawerSection(val id: String, val titleKey: String) {
+    HOME("home", "drawer.sec_home_chats"),
+    AI_ACCOUNTANT("ai_accountant", "drawer.ai_title"),
+    COMPANY_ACCOUNTING("company_accounting", "drawer.hub_short_title"),
+    SUBSCRIPTIONS("subscriptions", "drawer.subs_title"),
+    ENCRYPTED_VAULT("encrypted_vault", "drawer.vault_title"),
+    LANGUAGE("language", "drawer.lang_title"),
+    ADMIN("admin", "drawer.admin_title"),
+    GOLD("gold", "drawer.gold_section"),
+    PROJECTS("projects", "drawer.project_section_title");
+
+    fun localizedTitle(lang: AppLanguage): String = Translations.get(titleKey, lang)
 }
 
 /**
- * Enterprise-Grade Luxury Side Navigation Drawer
- * Completely reorganized with clean visual hierarchy, rich subtitles, high-contrast badges,
- * active section highlighting, unified typography scale, and standard Material 3 >=48dp touch targets.
+ * Enterprise-Grade Luxury Side Navigation Drawer (14-language synced)
  */
 @Composable
 fun GlobalSideDrawerContent(
@@ -94,8 +92,8 @@ fun GlobalSideDrawerContent(
 
     val isAdmin = remember(currentUser) {
         currentUser?.type == UserType.ADMIN.name ||
-                currentUser?.name?.contains("Admin", ignoreCase = true) == true ||
-                currentUser?.name?.contains("الإدارة", ignoreCase = true) == true
+            currentUser?.name?.contains("Admin", ignoreCase = true) == true ||
+            currentUser?.name?.contains("الإدارة", ignoreCase = true) == true
     }
 
     ModalDrawerSheet(
@@ -119,7 +117,7 @@ fun GlobalSideDrawerContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .heightIn(min = 52.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -163,7 +161,7 @@ fun GlobalSideDrawerContent(
                             )
                         }
                         Text(
-                            text = "منصة الأعمال",
+                            text = tr("drawer.business_platform"),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = OozoxTeal
@@ -177,7 +175,7 @@ fun GlobalSideDrawerContent(
                         onCloseDrawer()
                     },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("drawer_close_button")
                 ) {
                     Box(
@@ -190,7 +188,7 @@ fun GlobalSideDrawerContent(
                     ) {
                         AppIcon(
                             imageVector = AppIcons.MenuClose,
-                            contentDescription = Translations.get("close", currentLanguage),
+                            contentDescription = tr("common.close"),
                             tint = MaterialTheme.colorScheme.onSurface,
                             size = AppIconSize.SM
                         )
@@ -200,11 +198,14 @@ fun GlobalSideDrawerContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 2. User Profile Summary Card (Elevated Luxury Card)
+            // 2. User Profile Summary Card
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.2.dp, if (isDark) adaptiveGoldPrimary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                border = BorderStroke(
+                    1.2.dp,
+                    if (isDark) adaptiveGoldPrimary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                ),
                 shadowElevation = if (isDark) 2.dp else 1.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -213,12 +214,14 @@ fun GlobalSideDrawerContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Profile Avatar with Ring
                     Box(
                         modifier = Modifier
                             .size(50.dp)
                             .clip(CircleShape)
-                            .background(if (isDark) GoldPrimary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .background(
+                                if (isDark) GoldPrimary.copy(alpha = 0.18f)
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            )
                             .border(1.5.dp, if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -230,7 +233,6 @@ fun GlobalSideDrawerContent(
                             fontSize = 20.sp
                         )
 
-                        // Online green dot indicator
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
@@ -247,7 +249,7 @@ fun GlobalSideDrawerContent(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = currentUser?.name ?: Translations.get("account_info", currentLanguage),
+                                text = currentUser?.name ?: tr("drawer.account_info"),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -257,7 +259,7 @@ fun GlobalSideDrawerContent(
                             if (currentUser?.isVerified == true || isAdmin) {
                                 AppIcon(
                                     imageVector = AppIcons.Verified,
-                                    contentDescription = "Verified",
+                                    contentDescription = tr("drawer.verified_badge"),
                                     tint = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary,
                                     size = AppIconSize.SM
                                 )
@@ -273,15 +275,17 @@ fun GlobalSideDrawerContent(
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = if (isDark) GoldPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                border = BorderStroke(0.6.dp, if (isDark) GoldPrimary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                                border = BorderStroke(
+                                    0.6.dp,
+                                    if (isDark) GoldPrimary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                )
                             ) {
                                 Text(
-                                    text = if (currentUser?.type == UserType.GOLD_TRADER.name)
-                                        "تاجر ذهب"
-                                    else if (isAdmin)
-                                        "إدارة النظام"
-                                    else
-                                        "حساب أعمال",
+                                    text = when {
+                                        currentUser?.type == UserType.GOLD_TRADER.name -> tr("drawer.role_gold_trader")
+                                        isAdmin -> tr("drawer.role_system_admin")
+                                        else -> tr("drawer.role_business")
+                                    },
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary,
@@ -290,7 +294,7 @@ fun GlobalSideDrawerContent(
                             }
 
                             Text(
-                                text = "متصل",
+                                text = tr("drawer.online_status"),
                                 fontSize = 10.5.sp,
                                 color = adaptiveStatusGreen
                             )
@@ -314,6 +318,7 @@ fun GlobalSideDrawerContent(
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(0.8.dp, GoldPrimary.copy(alpha = 0.25f)),
                     modifier = Modifier
+                        .heightIn(min = 36.dp)
                         .testTag("drawer_gold_ticker_chip")
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -322,7 +327,7 @@ fun GlobalSideDrawerContent(
                         }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -333,14 +338,14 @@ fun GlobalSideDrawerContent(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "ذهب عيار 21: ${GoldUtils.formatCurrency(goldPriceKarat21)}",
+                            text = "${tr("drawer.gold_21_label")}: ${GoldUtils.formatCurrency(goldPriceKarat21, currentLanguage)}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isDark) GoldLight else MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "حي",
+                            text = tr("drawer.live_badge"),
                             fontSize = 9.sp,
                             color = adaptiveStatusGreen,
                             fontWeight = FontWeight.Bold
@@ -349,7 +354,7 @@ fun GlobalSideDrawerContent(
                 }
 
                 Text(
-                    text = "المحادثات النشطة ($activeChatsCount)",
+                    text = trFmt("drawer.active_chats_fmt", "count" to activeChatsCount),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                     fontWeight = FontWeight.Medium
@@ -363,19 +368,20 @@ fun GlobalSideDrawerContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // SECTION 0: الرئيسية
+                // SECTION 0: Home
                 Column {
-                    SectionHeader(title = "الرئيسية")
+                    SectionHeader(title = tr("drawer.sec_home"))
                     Spacer(modifier = Modifier.height(6.dp))
                     EnhancedDrawerItem(
                         icon = AppIcons.Chats,
                         iconTint = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary,
                         iconBg = if (isDark) GoldPrimary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                        title = "المحادثات",
-                        subtitle = "المحادثات والقيود المالية",
-                        badgeText = "الرئيسية",
+                        title = tr("drawer.chats_title"),
+                        subtitle = tr("drawer.chats_sub"),
+                        badgeText = tr("drawer.home_badge"),
                         badgeTint = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary,
                         badgeBg = if (isDark) GoldPrimary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                        modifier = Modifier.testTag("drawer_nav_chats"),
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onCloseDrawer()
@@ -384,19 +390,20 @@ fun GlobalSideDrawerContent(
                     )
                 }
 
-                // SECTION: قسم الذهب المستقل
+                // SECTION: Gold Market
                 Column {
-                    SectionHeader(title = "قسم الذهب والمعادن")
+                    SectionHeader(title = tr("drawer.sec_gold_metals"))
                     Spacer(modifier = Modifier.height(6.dp))
                     EnhancedDrawerItem(
                         icon = Icons.Default.MonetizationOn,
                         iconTint = if (isDark) GoldLight else Color(0xFFB45309),
                         iconBg = if (isDark) GoldPrimary.copy(alpha = 0.2f) else Color(0xFFFDE68A),
-                        title = "قسم الذهب",
-                        subtitle = "أسعار الذهب، حاسبة المصنعية والمشتريات",
-                        badgeText = "ذهب",
+                        title = tr("drawer.gold_section"),
+                        subtitle = tr("drawer.gold_sub"),
+                        badgeText = tr("drawer.gold_badge"),
                         badgeTint = if (isDark) GoldLight else Color(0xFFB45309),
                         badgeBg = if (isDark) GoldPrimary.copy(alpha = 0.2f) else Color(0xFFFDE68A),
+                        modifier = Modifier.testTag("drawer_nav_gold"),
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onCloseDrawer()
@@ -405,21 +412,21 @@ fun GlobalSideDrawerContent(
                     )
                 }
 
-                // SECTION 1: الخدمات الذكية
+                // SECTION 1: Accounting & Finance Services
                 Column {
-                    SectionHeader(title = "الخدمات المحاسبية والمالية")
+                    SectionHeader(title = tr("drawer.sec_finance"))
                     Spacer(modifier = Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // AI Voice Business Agent
                         EnhancedDrawerItem(
                             icon = Icons.Default.Mic,
                             iconTint = if (isDark) OozoxTeal else MaterialTheme.colorScheme.primary,
                             iconBg = if (isDark) OozoxTeal.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            title = "المساعد الصوتي",
-                            subtitle = "أوامر وتسجيل بالصوت",
-                            badgeText = "صوتي",
+                            title = tr("drawer.voice_assistant"),
+                            subtitle = tr("drawer.voice_sub"),
+                            badgeText = tr("drawer.voice_badge"),
                             badgeTint = if (isDark) OozoxTeal else MaterialTheme.colorScheme.primary,
                             badgeBg = if (isDark) OozoxTeal.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_voice"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onCloseDrawer()
@@ -427,16 +434,16 @@ fun GlobalSideDrawerContent(
                             }
                         )
 
-                        // AI Accountant
                         EnhancedDrawerItem(
                             icon = AppIcons.AIAccountant,
                             iconTint = if (isDark) Color(0xFFA78BFA) else Color(0xFF6D28D9),
                             iconBg = if (isDark) Color(0xFF8B5CF6).copy(alpha = 0.16f) else Color(0xFF8B5CF6).copy(alpha = 0.10f),
-                            title = "المحاسب المالي",
-                            subtitle = "تحليل العمليات والحسابات",
+                            title = tr("drawer.ai_title"),
+                            subtitle = tr("drawer.ai_sub"),
                             badgeText = "PRO",
                             badgeTint = if (isDark) Color(0xFFA78BFA) else Color(0xFF6D28D9),
                             badgeBg = if (isDark) Color(0xFF8B5CF6).copy(alpha = 0.16f) else Color(0xFF8B5CF6).copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_ai"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onCloseDrawer()
@@ -444,16 +451,16 @@ fun GlobalSideDrawerContent(
                             }
                         )
 
-                        // Company Accounting Hub
                         EnhancedDrawerItem(
                             icon = AppIcons.Corporate,
                             iconTint = if (isDark) GoldLight else MaterialTheme.colorScheme.primary,
                             iconBg = if (isDark) GoldDark.copy(alpha = 0.35f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            title = "المركز المحاسبي",
-                            subtitle = "اليومية العامة والشركات",
+                            title = tr("drawer.hub_short_title"),
+                            subtitle = tr("drawer.company_acct_sub"),
                             badgeText = "PRO",
                             badgeTint = if (isDark) GoldLight else MaterialTheme.colorScheme.primary,
                             badgeBg = if (isDark) GoldPrimary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_company_acct"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onCloseDrawer()
@@ -461,16 +468,16 @@ fun GlobalSideDrawerContent(
                             }
                         )
 
-                        // Invoice Verification
                         EnhancedDrawerItem(
                             icon = Icons.Default.Verified,
                             iconTint = if (isDark) OozoxTeal else MaterialTheme.colorScheme.primary,
                             iconBg = if (isDark) OozoxTeal.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            title = "التحقق من الفاتورة",
-                            subtitle = "فحص التوقيع المائي الرقمي",
-                            badgeText = "توثيق",
+                            title = tr("drawer.invoice_verify"),
+                            subtitle = tr("drawer.invoice_verify_sub"),
+                            badgeText = tr("drawer.verify_badge"),
                             badgeTint = if (isDark) OozoxTeal else MaterialTheme.colorScheme.primary,
                             badgeBg = if (isDark) OozoxTeal.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_verify_invoice"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onCloseDrawer()
@@ -480,21 +487,21 @@ fun GlobalSideDrawerContent(
                     }
                 }
 
-                // SECTION 2: الاشتراكات والأمان
+                // SECTION 2: Subscriptions & Security
                 Column {
-                    SectionHeader(title = "الاشتراكات والأمان")
+                    SectionHeader(title = tr("drawer.sec_subs_security"))
                     Spacer(modifier = Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Subscriptions & VIP
                         EnhancedDrawerItem(
                             icon = AppIcons.Crown,
                             iconTint = if (isDark) GoldAccent else Color(0xFFB45309),
                             iconBg = if (isDark) GoldPrimary.copy(alpha = 0.16f) else Color(0xFFF59E0B).copy(alpha = 0.10f),
-                            title = "الاشتراكات",
-                            subtitle = "باقات وعضوية VIP",
+                            title = tr("drawer.subs_title"),
+                            subtitle = tr("drawer.subs_sub"),
                             badgeText = "VIP",
                             badgeTint = if (isDark) GoldAccent else Color(0xFFB45309),
                             badgeBg = if (isDark) GoldPrimary.copy(alpha = 0.16f) else Color(0xFFF59E0B).copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_subscriptions"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onCloseDrawer()
@@ -502,16 +509,16 @@ fun GlobalSideDrawerContent(
                             }
                         )
 
-                        // Encrypted Vault
                         EnhancedDrawerItem(
                             icon = AppIcons.EncryptedVault,
                             iconTint = if (isDark) Color(0xFF818CF8) else Color(0xFF4338CA),
                             iconBg = if (isDark) Color(0xFF4F46E5).copy(alpha = 0.16f) else Color(0xFF4F46E5).copy(alpha = 0.10f),
-                            title = "الخزينة المشفرة",
-                            subtitle = "النسخ الاحتياطي والأمان",
-                            badgeText = "مشفر",
+                            title = tr("drawer.vault_title"),
+                            subtitle = tr("drawer.vault_sub"),
+                            badgeText = tr("drawer.vault_badge"),
                             badgeTint = if (isDark) Color(0xFF818CF8) else Color(0xFF4338CA),
                             badgeBg = if (isDark) Color(0xFF4F46E5).copy(alpha = 0.16f) else Color(0xFF4F46E5).copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_vault"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onCloseDrawer()
@@ -521,38 +528,38 @@ fun GlobalSideDrawerContent(
                     }
                 }
 
-                // SECTION 3: التفضيلات والنظام
+                // SECTION 3: Preferences & System
                 Column {
-                    SectionHeader(title = "التفضيلات والنظام")
+                    SectionHeader(title = tr("drawer.sec_prefs"))
                     Spacer(modifier = Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Language
                         EnhancedDrawerItem(
                             icon = Icons.Default.Language,
                             iconTint = if (isDark) Color(0xFF34D399) else Color(0xFF047857),
                             iconBg = if (isDark) Color(0xFF059669).copy(alpha = 0.16f) else Color(0xFF059669).copy(alpha = 0.10f),
-                            title = "اللغة",
-                            subtitle = "تخصيص لغة التطبيق",
+                            title = tr("drawer.lang_title"),
+                            subtitle = tr("drawer.lang_sub"),
                             badgeText = "${currentLanguage.flag} ${currentLanguage.displayName}",
                             badgeTint = if (isDark) Color(0xFF34D399) else Color(0xFF047857),
                             badgeBg = if (isDark) Color(0xFF059669).copy(alpha = 0.16f) else Color(0xFF059669).copy(alpha = 0.10f),
+                            modifier = Modifier.testTag("drawer_nav_language"),
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 showLanguageModal = true
                             }
                         )
 
-                        // Admin Dashboard (if admin)
                         if (isAdmin) {
                             EnhancedDrawerItem(
                                 icon = Icons.Default.AdminPanelSettings,
                                 iconTint = if (isDark) Color(0xFFF87171) else Color(0xFFB91C1C),
                                 iconBg = if (isDark) Color(0xFFDC2626).copy(alpha = 0.16f) else Color(0xFFDC2626).copy(alpha = 0.10f),
-                                title = "لوحة الإدارة",
-                                subtitle = "إدارة النظام والمستخدمين",
+                                title = tr("drawer.admin_title"),
+                                subtitle = tr("drawer.admin_sub"),
                                 badgeText = "ADMIN",
                                 badgeTint = if (isDark) Color(0xFFF87171) else Color(0xFFB91C1C),
                                 badgeBg = if (isDark) Color(0xFFDC2626).copy(alpha = 0.16f) else Color(0xFFDC2626).copy(alpha = 0.10f),
+                                modifier = Modifier.testTag("drawer_nav_admin"),
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onCloseDrawer()
@@ -573,7 +580,6 @@ fun GlobalSideDrawerContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Theme Mode Switcher & Color Palette Selector Card
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -589,7 +595,6 @@ fun GlobalSideDrawerContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Switch & Day/Night Toggle
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -611,7 +616,7 @@ fun GlobalSideDrawerContent(
 
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .background(
                                         if (isDark)
@@ -619,24 +624,21 @@ fun GlobalSideDrawerContent(
                                         else
                                             Color(0xFFFEF3C7)
                                     )
-                                    .clickable(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            themeController.toggleTheme()
-                                        }
-                                    ),
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        themeController.toggleTheme()
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 AppIcon(
                                     imageVector = if (isDark) AppIcons.Moon else AppIcons.Sun,
-                                    contentDescription = if (isDark) "الوضع الداكن" else "الوضع الفاتح",
+                                    contentDescription = if (isDark) tr("theme.switch_to_dark") else tr("theme.switch_to_light"),
                                     tint = if (isDark) themeController.currentPalette.primaryColor else Color(0xFFD97706),
                                     size = AppIconSize.SM
                                 )
                             }
                         }
 
-                        // Vertical Divider
                         Box(
                             modifier = Modifier
                                 .height(24.dp)
@@ -644,7 +646,6 @@ fun GlobalSideDrawerContent(
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                         )
 
-                        // Circular Color Palette Dots
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -656,12 +657,10 @@ fun GlobalSideDrawerContent(
                                 Box(
                                     modifier = Modifier
                                         .size(30.dp)
-                                        .clickable(
-                                            onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                themeController.setPalette(palette)
-                                            }
-                                        ),
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            themeController.setPalette(palette)
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Box(
@@ -719,7 +718,7 @@ fun GlobalSideDrawerContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = Translations.get("logout", currentLanguage),
+                            text = tr("drawer.logout"),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
@@ -729,7 +728,6 @@ fun GlobalSideDrawerContent(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Brand Identity & Official Motto Footer
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -754,104 +752,16 @@ fun GlobalSideDrawerContent(
         }
     }
 
-    // Language Selector Modal
+    // 14-Language Picker Modal
     if (showLanguageModal) {
-        AlertDialog(
-            onDismissRequest = { showLanguageModal = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Language,
-                        contentDescription = null,
-                        tint = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        text = "اختر لغة التطبيق والواجهة",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AppLanguage.entries.forEach { lang ->
-                        val isSelected = lang == currentLanguage
-                        Surface(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onLanguageChange(lang)
-                                showLanguageModal = false
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) (if (isDark) GoldPrimary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            border = BorderStroke(
-                                width = if (isSelected) 1.5.dp else 1.dp,
-                                color = if (isSelected) (if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Text(text = lang.flag, fontSize = 20.sp)
-                                    Text(
-                                        text = lang.displayName,
-                                        fontSize = 14.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) (if (isDark) GoldLight else Color(0xFF0F172A)) else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                if (isSelected) {
-                                    AppIcon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary,
-                                        size = AppIconSize.SM
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { showLanguageModal = false },
-                    modifier = Modifier.height(48.dp)
-                ) {
-                    Text(
-                        text = Translations.get("close", currentLanguage),
-                        fontWeight = FontWeight.Bold,
-                        color = if (isDark) GoldPrimary else MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
+        AppLanguagePickerDialog(
+            currentLanguage = currentLanguage,
+            onLanguageSelected = onLanguageChange,
+            onDismiss = { showLanguageModal = false }
         )
     }
 }
 
-/**
- * Section Header Component with professional subtle label styling and theme accent.
- */
 @Composable
 private fun SectionHeader(title: String) {
     val themeController = LocalAppTheme.current
@@ -879,10 +789,6 @@ private fun SectionHeader(title: String) {
     }
 }
 
-/**
- * Clean & Elegant Drawer Item Card with rich two-line text (Title + Subtitle),
- * crisp icon container, neat category badge, and uniform high-contrast design.
- */
 @Composable
 private fun EnhancedDrawerItem(
     icon: ImageVector,
@@ -893,6 +799,7 @@ private fun EnhancedDrawerItem(
     badgeText: String? = null,
     badgeTint: Color = adaptiveGoldPrimary,
     badgeBg: Color = adaptiveGoldPrimary.copy(alpha = 0.15f),
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val themeController = LocalAppTheme.current
@@ -906,7 +813,9 @@ private fun EnhancedDrawerItem(
             width = 1.dp,
             color = if (isDark) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
     ) {
         Row(
             modifier = Modifier
@@ -920,7 +829,6 @@ private fun EnhancedDrawerItem(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                // Leading Icon in Styled Container
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -941,7 +849,6 @@ private fun EnhancedDrawerItem(
                     )
                 }
 
-                // Title & Descriptive Subtitle with unified typography
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
@@ -966,7 +873,6 @@ private fun EnhancedDrawerItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Trailing Section: Category Badge and Navigation Arrow
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)

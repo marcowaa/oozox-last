@@ -12,7 +12,10 @@ data class TranslationColorOption(
     val darkColor: Color,
     val lightColor: Color,
     val previewColor: Color
-)
+) {
+    fun localizedTitle(language: AppLanguage): String =
+        Translations.get("tr_style.color_${id.lowercase()}", language)
+}
 
 data class TranslationSizeOption(
     val id: String,
@@ -20,7 +23,13 @@ data class TranslationSizeOption(
     val sizeSp: Float,
     val lineHeightSp: Float,
     val descriptionAr: String
-)
+) {
+    fun localizedTitle(language: AppLanguage): String =
+        Translations.get("tr_style.size_${id.lowercase()}", language)
+
+    fun localizedDescription(language: AppLanguage): String =
+        Translations.get("tr_style.size_${id.lowercase()}_desc", language)
+}
 
 object TranslationStyleHelper {
 

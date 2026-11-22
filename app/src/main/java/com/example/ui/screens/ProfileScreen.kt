@@ -66,6 +66,8 @@ import com.example.util.AppLanguage
 import com.example.util.CallPrivacy
 import com.example.util.CallPrivacyManager
 import com.example.util.ContactSyncEngine
+import com.example.util.LocalAppLanguage
+import com.example.util.Translations
 import com.example.util.tr
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
@@ -1260,25 +1262,24 @@ fun ProfileScreen(
 
     // Modal 2: Human-Crafted Responsive Account Cover Style Studio
     if (showCoverPickerModal) {
-        val isArabic = currentLanguage == AppLanguage.ARABIC
         var previewCover by remember(selectedCover) { mutableStateOf(selectedCover ?: "تدرج ذهبي ملكي") }
 
-        val coverPresets = remember(isArabic) {
+        val coverPresets = remember(currentLanguage, Translations.catalogVersion) {
             listOf(
                 Triple(
                     "تدرج ذهبي ملكي",
-                    if (isArabic) "النمط الذهبي الملكي" else "Royal Gold Gradient",
-                    if (isArabic) "تدرج دافئ فاخر لقطاع الذهب والمجوهرات" else "Warm luxury gradient for gold & jewelry"
+                    Translations.get("profile.cover_gold_t", currentLanguage),
+                    Translations.get("profile.cover_gold_d", currentLanguage)
                 ),
                 Triple(
                     "خلفية فضية فاخرة",
-                    if (isArabic) "النمط الفضي البلاتيني" else "Platinum Silver",
-                    if (isArabic) "مظهر معدني هادئ للأعمال والاستثمار" else "Sleek metallic tone for business & finance"
+                    Translations.get("profile.cover_silver_t", currentLanguage),
+                    Translations.get("profile.cover_silver_d", currentLanguage)
                 ),
                 Triple(
                     "نمط المقاولات والعقارات",
-                    if (isArabic) "النمط الهندسي الحديث" else "Architectural Teal",
-                    if (isArabic) "تدرج عصري للمشاريع والعقارات" else "Modern slate-teal for real estate & projects"
+                    Translations.get("profile.cover_teal_t", currentLanguage),
+                    Translations.get("profile.cover_teal_d", currentLanguage)
                 )
             )
         }
@@ -1293,7 +1294,10 @@ fun ProfileScreen(
             onDismissRequest = { showCoverPickerModal = false },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            CompositionLocalProvider(LocalLayoutDirection provides currentLanguage.direction) {
+            CompositionLocalProvider(
+                LocalLayoutDirection provides currentLanguage.direction,
+                LocalAppLanguage provides currentLanguage
+            ) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -1317,7 +1321,7 @@ fun ProfileScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isArabic) "نمط غلاف الحساب" else "Account Cover Style",
+                                text = tr("profile.cover_title"),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -1325,7 +1329,7 @@ fun ProfileScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (isArabic) "اختر تصميماً جاهزاً أو ارفع صورة من جهازك" else "Pick a preset theme or upload your own photo",
+                                text = tr("profile.cover_sub"),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -1338,7 +1342,7 @@ fun ProfileScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = if (isArabic) "إغلاق" else "Close",
+                                contentDescription = tr("common.close"),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -1384,7 +1388,7 @@ fun ProfileScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isArabic) "معاينة حية للغلاف" else "Live Cover Preview",
+                                    text = tr("profile.cover_live_preview"),
                                     color = Color.White.copy(alpha = 0.8f),
                                     fontSize = 11.sp,
                                     maxLines = 1
@@ -1450,7 +1454,7 @@ fun ProfileScreen(
                                     if (isSelected) {
                                         Icon(
                                             imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = if (isArabic) "محدد" else "Selected",
+                                            contentDescription = tr("common.selected"),
                                             tint = adaptiveGoldPrimary,
                                             modifier = Modifier.size(22.dp)
                                         )
@@ -1488,7 +1492,7 @@ fun ProfileScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isArabic) "اختيار وضبط صورة من المعرض" else "Choose & Crop Photo from Gallery",
+                            text = tr("profile.cover_pick_gallery"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = adaptiveGoldPrimary,
@@ -1510,7 +1514,7 @@ fun ProfileScreen(
                                 .heightIn(min = 48.dp)
                         ) {
                             Text(
-                                text = if (isArabic) "إلغاء" else "Cancel",
+                                text = tr("common.cancel"),
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold
@@ -1532,7 +1536,7 @@ fun ProfileScreen(
                                 .heightIn(min = 48.dp)
                         ) {
                             Text(
-                                text = if (isArabic) "اعتماد الغلاف" else "Apply Cover",
+                                text = tr("profile.cover_apply"),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )

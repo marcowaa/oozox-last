@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
+import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * Filter mode context for chat empty states
@@ -107,7 +109,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     Text(
-                        text = "منصة المراسلات والقيود المالية",
+                        text = tr("empty.chat_inbox_title"),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -117,7 +119,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "لم يتم تسجيل أي محادثات تجارية بعد. تواصل مباشرة مع الشركاء وتجار الذهب عبر قنوات مشفرة ببروتوكول E2EE.",
+                        text = tr("empty.chat_inbox_desc"),
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -134,18 +136,18 @@ fun ExecutiveChatEmptyState(
                     ) {
                         EmptyStateFeatureRow(
                             icon = Icons.Default.EnhancedEncryption,
-                            title = "تشفير مالي ومحادثات آمنة",
-                            description = "مراسلات مباشرة مشفرة لا تمر عبر خوادم طرف ثالث."
+                            title = tr("empty.chat_pillar_1_t"),
+                            description = tr("empty.chat_pillar_1_d")
                         )
                         EmptyStateFeatureRow(
                             icon = Icons.Default.Tag,
-                            title = "القيود المحاسبية التلقائية",
-                            description = "اكتب #بند_المصروف 5000 داخل المحادثة ليتم ترحيل القيد لدفتر الأستاذ فوراً."
+                            title = tr("empty.chat_pillar_2_t"),
+                            description = tr("empty.chat_pillar_2_d")
                         )
                         EmptyStateFeatureRow(
                             icon = Icons.Default.AccountBalanceWallet,
-                            title = "ربط التداولات والذهب",
-                            description = "مزامنة لحظية لحركات الذهب والعملات والتحويلات البنكية."
+                            title = tr("empty.chat_pillar_3_t"),
+                            description = tr("empty.chat_pillar_3_d")
                         )
                     }
 
@@ -167,7 +169,7 @@ fun ExecutiveChatEmptyState(
                         Icon(Icons.Default.AddComment, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "بدء محادثة تجارية جديدة",
+                            text = tr("empty.btn_new_chat"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -181,13 +183,13 @@ fun ExecutiveChatEmptyState(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("btn_empty_sync_chats")
                     ) {
                         Icon(Icons.Default.Sync, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "تحديث ومزامنة المحادثات",
+                            text = tr("empty.btn_sync_chats"),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium
@@ -215,7 +217,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "لا توجد نتائج مطابقة للبحث",
+                        text = tr("empty.search_no_results"),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -225,8 +227,11 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = if (searchQuery.isNotBlank()) "لم يتم العثور على محادثات أو قيود تطابق: \"$searchQuery\""
-                        else "لا توجد نتائج تطابق معايير الفرز الحالية.",
+                        text = if (searchQuery.isNotBlank()) {
+                            trFmt("empty.search_chats_no_match_fmt", "query" to searchQuery)
+                        } else {
+                            tr("empty.search_generic_no_match")
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -243,18 +248,18 @@ fun ExecutiveChatEmptyState(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "إرشادات البحث المالي المتقدم:",
+                                text = tr("empty.search_tips_title"),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = GoldPrimary
                             )
                             Text(
-                                text = "• للبحث في القيود المحاسبية، ابدأ بعلامة # (مثل: #حديد أو #دفعة)",
+                                text = tr("empty.search_tip_1"),
                                 fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "• لفتح الخزينة السرية، أدخل رمز المرور السري الخاص بها",
+                                text = tr("empty.search_tip_2"),
                                 fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -272,12 +277,12 @@ fun ExecutiveChatEmptyState(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("btn_reset_chat_search")
                     ) {
                         Icon(Icons.Default.FilterAltOff, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("إلغاء التصفية وعرض الكل", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text(tr("empty.clear_filters_all"), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -301,7 +306,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "الأرشيف التجاري فارغ",
+                        text = tr("empty.archive_title"),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -311,7 +316,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "لا توجد محادثات مؤرشفة حالياً. يمكنك أرشفة الصفقات والمحادثات المكتملة عبر الضغط المطول على المحادثة والاحتفاظ بها للتدقيق المالي.",
+                        text = tr("empty.archive_desc"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -326,9 +331,9 @@ fun ExecutiveChatEmptyState(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                     ) {
-                        Text("العودة إلى المحادثات النشطة", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text(tr("empty.back_active_chats"), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -352,7 +357,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "صندوق المراسلات منظم بالكامل",
+                        text = tr("empty.unread_title"),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -362,7 +367,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "تمت قراءة والرد على كافة الرسائل الواردة. لا توجد تنبيهات معلقة.",
+                        text = tr("empty.unread_desc"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -379,9 +384,9 @@ fun ExecutiveChatEmptyState(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                     ) {
-                        Text("عرض جميع المحادثات", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text(tr("empty.show_all_chats"), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -405,7 +410,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "لا توجد محادثات في تصنيف $filterTitle",
+                        text = trFmt("empty.type_filter_title_fmt", "filter" to filterTitle),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -415,7 +420,7 @@ fun ExecutiveChatEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "لم يتم إضافة جهات اتصال مصنفة تحت هذا القسم بعد.",
+                        text = tr("empty.type_filter_desc"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -431,17 +436,17 @@ fun ExecutiveChatEmptyState(
                             onClick = onNewChatClick,
                             colors = ButtonDefaults.buttonColors(containerColor = adaptiveGoldPrimary, contentColor = adaptiveOnPrimary),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f).height(44.dp)
+                            modifier = Modifier.weight(1f).height(48.dp)
                         ) {
-                            Text("إضافة جهة اتصال", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(tr("empty.add_contact"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
                             onClick = onResetFilters,
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f).height(44.dp)
+                            modifier = Modifier.weight(1f).height(48.dp)
                         ) {
-                            Text("إظهار الكل", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(tr("empty.show_all"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -527,7 +532,7 @@ fun ExecutiveProjectsEmptyState(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     Text(
-                        text = "سجل المشاريع ومجموعات العمل",
+                        text = tr("empty.projects_title"),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -537,7 +542,7 @@ fun ExecutiveProjectsEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "ابدأ بتأسيس مشروعك الاستثماري الأول لإدارة التدفقات النقدية، الميزانيات التشاركية، وتتبع نسب الإنجاز والمصروفات بدقة متناهية.",
+                        text = tr("empty.projects_desc"),
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -554,18 +559,18 @@ fun ExecutiveProjectsEmptyState(
                     ) {
                         EmptyStateFeatureRow(
                             icon = Icons.Default.MonetizationOn,
-                            title = "رأس المال وسقوف الميزانية",
-                            description = "تحديد المخصصات التقديرية وضبط حدود الإنفاق للمشروع."
+                            title = tr("empty.proj_pillar_1_t"),
+                            description = tr("empty.proj_pillar_1_d")
                         )
                         EmptyStateFeatureRow(
                             icon = Icons.Default.TrendingUp,
-                            title = "مراقبة معدل الحرق المالي",
-                            description = "لوحة تحليلية بصرية للإنفاق الفعلي مقارنة بالميزانية المعتمدة."
+                            title = tr("empty.proj_pillar_2_t"),
+                            description = tr("empty.proj_pillar_2_d")
                         )
                         EmptyStateFeatureRow(
                             icon = Icons.Default.GroupAdd,
-                            title = "إدارة الشركاء والمدراء الميدانيين",
-                            description = "صلاحيات تسيير محاسبي مشتركة مع إشراف مركزي."
+                            title = tr("empty.proj_pillar_3_t"),
+                            description = tr("empty.proj_pillar_3_d")
                         )
                     }
 
@@ -587,7 +592,7 @@ fun ExecutiveProjectsEmptyState(
                         Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "تأسيس مشروع استثماري جديد",
+                            text = tr("empty.projects_btn"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -601,13 +606,13 @@ fun ExecutiveProjectsEmptyState(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("btn_empty_sync_projects")
                     ) {
                         Icon(Icons.Default.Sync, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "مزامنة وتحديث المشاريع",
+                            text = tr("empty.projects_sync_btn"),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium
@@ -635,7 +640,7 @@ fun ExecutiveProjectsEmptyState(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "لا توجد مشاريع مطابقة للبحث",
+                        text = tr("empty.proj_search_empty"),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -645,8 +650,11 @@ fun ExecutiveProjectsEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = if (searchQuery.isNotBlank()) "لم يتم العثور على مشاريع تطابق: \"$searchQuery\""
-                        else "لا توجد مشاريع تطابق المعايير المحددة.",
+                        text = if (searchQuery.isNotBlank()) {
+                            trFmt("empty.proj_search_no_match_fmt", "query" to searchQuery)
+                        } else {
+                            tr("empty.proj_search_generic")
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -663,12 +671,12 @@ fun ExecutiveProjectsEmptyState(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("btn_reset_project_search")
                     ) {
                         Icon(Icons.Default.FilterAltOff, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("إلغاء التصفية وعرض الكل", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text(tr("empty.clear_filters_all"), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -692,7 +700,7 @@ fun ExecutiveProjectsEmptyState(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "لا توجد مشاريع في قسم $categoryTitle",
+                        text = trFmt("empty.proj_cat_empty_fmt", "category" to categoryTitle),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -702,7 +710,7 @@ fun ExecutiveProjectsEmptyState(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "لم يتم إنشاء مشاريع ضمن هذا التصنيف حتى الآن.",
+                        text = tr("empty.proj_cat_desc"),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -718,17 +726,17 @@ fun ExecutiveProjectsEmptyState(
                             onClick = onCreateProjectClick,
                             colors = ButtonDefaults.buttonColors(containerColor = adaptiveGoldPrimary, contentColor = adaptiveOnPrimary),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f).height(44.dp)
+                            modifier = Modifier.weight(1f).height(48.dp)
                         ) {
-                            Text("إضافة مشروع", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(tr("empty.add_project"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
                             onClick = onResetFilters,
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f).height(44.dp)
+                            modifier = Modifier.weight(1f).height(48.dp)
                         ) {
-                            Text("عرض الكل", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(tr("empty.show_all"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }

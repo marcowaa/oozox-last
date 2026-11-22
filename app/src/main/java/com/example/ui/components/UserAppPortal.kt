@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -44,7 +45,11 @@ import com.example.ui.theme.*
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
 import com.example.util.DeviceTrustManager
+import com.example.util.LocalAppLanguage
 import com.example.util.SecurityValidator
+import com.example.util.Translations
+import com.example.util.tr
+import com.example.util.trFmt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -70,6 +75,7 @@ fun UserAppPortal(
     val context = LocalContext.current
     val activity = context as? FragmentActivity
     val coroutineScope = rememberCoroutineScope()
+    val currentLang = LocalAppLanguage.current
 
     val isTrustedDevice = remember(repeatUser?.phone) {
         repeatUser?.phone != null && DeviceTrustManager.isDeviceTrustedForPhone(context, repeatUser.phone)
@@ -122,9 +128,9 @@ fun UserAppPortal(
     }
 
     // Phone Validation
-    val validationResult = remember(selectedCountry, rawPhone) {
+    val validationResult = remember(selectedCountry, rawPhone, currentLang) {
         if (rawPhone.isNotBlank()) {
-            SecurityValidator.validateMobileNumber(selectedCountry, rawPhone)
+            SecurityValidator.validateMobileNumber(selectedCountry, rawPhone, currentLang)
         } else null
     }
 
@@ -143,12 +149,13 @@ fun UserAppPortal(
         if (activity != null && isBiometricAvailable) {
             specificErrorMessage = null
             networkFailureError = null
+            val welcomeName = repeatUser?.name ?: Translations.get("portal.welcome_fallback_name", currentLang)
             BiometricHelper.authenticate(
                 activity = activity,
-                title = "بوابة الدخول البيومترية الآمنة ️",
-                subtitle = "المصادقة ببصمة الإصبع أو التعرف على الوجه",
-                description = "مرحباً ${repeatUser?.name ?: "بك"} في OOZOX، يرجى تأكيد الهوية للدخول الفوري وتأمين بياناتك المالية",
-                negativeButtonText = if (repeatUser?.pin != null) "استخدام رمز PIN" else "إلغاء",
+                title = Translations.get("portal.bio_title", currentLang),
+                subtitle = Translations.get("portal.bio_sub", currentLang),
+                description = Translations.format("portal.bio_desc_fmt", currentLang, "name" to welcomeName),
+                negativeButtonText = if (repeatUser?.pin != null) Translations.get("portal.use_pin_btn", currentLang) else Translations.get("common.cancel", currentLang),
                 onSuccess = {
                     successCallback()
                 },
@@ -161,7 +168,7 @@ fun UserAppPortal(
                     }
                 },
                 onFailed = {
-                    specificErrorMessage = "لم يتم التعرف على البصمة أو الوجه، يرجى المحاولة مجدداً أو استخدام رمز PIN"
+                    specificErrorMessage = Translations.get("portal.bio_failed", currentLang)
                 }
             )
         } else {
@@ -176,11 +183,12 @@ fun UserAppPortal(
         if (activity != null && isDeviceCredentialAvailable) {
             specificErrorMessage = null
             networkFailureError = null
+            val welcomeName = repeatUser?.name ?: Translations.get("portal.welcome_fallback_name", currentLang)
             BiometricHelper.authenticateWithDeviceOrBiometric(
                 activity = activity,
-                title = "تأكيد الهوية بقفل الجهاز",
-                subtitle = "النمط أو رمز PIN أو كلمة مرور الهاتف",
-                description = "مرحباً ${repeatUser?.name ?: "بك"}، يرجى فك قفل الجهاز للدخول الآمن",
+                title = Translations.get("portal.dev_lock_title", currentLang),
+                subtitle = Translations.get("portal.dev_lock_sub", currentLang),
+                description = Translations.format("portal.dev_lock_desc_fmt", currentLang, "name" to welcomeName),
                 onSuccess = {
                     successCallback()
                 },
@@ -191,7 +199,7 @@ fun UserAppPortal(
                     }
                 },
                 onFailed = {
-                    specificErrorMessage = "تعذر التحقق من قفل الجهاز، يرجى المحاولة مجدداً"
+                    specificErrorMessage = Translations.get("portal.dev_lock_failed", currentLang)
                 }
             )
         } else if (repeatUser?.pin != null) {
@@ -227,9 +235,9 @@ fun UserAppPortal(
     )
 
     val dispatchOtpAndProceed: () -> Unit = {
-        val res = SecurityValidator.validateMobileNumber(selectedCountry, rawPhone)
+        val res = SecurityValidator.validateMobileNumber(selectedCountry, rawPhone, currentLang)
         if (!res.isValid) {
-            specificErrorMessage = res.specificError ?: "رقم الهاتف غير صالح. يرجى التأكد من الرقم والمحاولة مجدداً."
+            specificErrorMessage = res.specificError ?: Translations.get("portal.invalid_phone", currentLang)
             networkFailureError = null
         } else {
             specificErrorMessage = null
@@ -241,7 +249,7 @@ fun UserAppPortal(
                 isSendingOtpNetworkCall = false
 
                 if (!isOnline) {
-                    networkFailureError = "تعذر الاتصال بالخادم لإرسال رمز التحقق. يرجى التحقق من اتصال الإنترنت أو تجربة قناة أخرى (واتساب / تليجرام)."
+                    networkFailureError = Translations.get("portal.network_otp_err", currentLang)
                 } else {
                     currentGeneratedOtp = SecurityValidator.generateSecureOtp()
                     authStep = 1
@@ -308,7 +316,7 @@ fun UserAppPortal(
             )
 
             Text(
-                text = "بوابة الأعمال والمراسلة الآمنة",
+                text = tr("portal.subtitle"),
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -380,7 +388,7 @@ fun UserAppPortal(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Text(
-                                text = "أو الدخول المباشر إلى خزينة / ملف فرعي :",
+                                text = tr("portal.sub_profile_heading"),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -427,7 +435,7 @@ fun UserAppPortal(
                                                     Text(profile.roleTitle, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
-                                            Icon(Icons.Default.Fingerprint, contentDescription = "دخول بالبصمة", tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Fingerprint, contentDescription = tr("portal.bio_unlock_cd"), tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -443,7 +451,7 @@ fun UserAppPortal(
                             initialChannel = selectedDeliveryChannel,
                             onOtpVerified = {
                                 DeviceTrustManager.markDeviceTrusted(context, fullPhone)
-                                val finalName = repeatUser?.name ?: "مستخدم OOZOX"
+                                val finalName = repeatUser?.name ?: Translations.get("portal.default_user_name", currentLang)
                                 val finalUser = repeatUser?.username ?: "user_${fullPhone.takeLast(4)}"
                                 val finalType = try {
                                     repeatUser?.type?.let { UserType.valueOf(it) } ?: UserType.BUSINESSMAN
@@ -481,7 +489,7 @@ fun UserAppPortal(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Text(
-                                        text = "تم رصد جهاز جديد — يلزم تأكيد رمز التحقق (OTP) لتفعيل الدخول السريع على هذا الجهاز.",
+                                        text = tr("portal.new_device_notice"),
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                                         lineHeight = 16.sp
@@ -491,7 +499,7 @@ fun UserAppPortal(
                         }
                         // --- STEP 1: AUTHENTIC PHONE NUMBER & MULTI-CHANNEL ACCESS ---
                         Text(
-                            text = "تسجيل الدخول",
+                            text = tr("portal.login_title"),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -499,7 +507,7 @@ fun UserAppPortal(
                         )
 
                         Text(
-                            text = "أدخل رقم الهاتف لتلقي كود التحقق السريع الآمن:",
+                            text = tr("portal.enter_phone_sub"),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -511,7 +519,7 @@ fun UserAppPortal(
                         // PHONE NUMBER INPUT FIELD WITH COUNTRY SELECTOR
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = "رقم الهاتف المحمول",
+                                text = tr("portal.mobile_label"),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -567,7 +575,7 @@ fun UserAppPortal(
                                     },
                                     placeholder = {
                                         Text(
-                                            text = "أدخل رقم الهاتف",
+                                            text = tr("portal.mobile_hint"),
                                             fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                         )
@@ -583,10 +591,13 @@ fun UserAppPortal(
                                     },
                                     trailingIcon = {
                                         if (rawPhone.isNotEmpty()) {
-                                            IconButton(onClick = { rawPhone = "" }) {
+                                            IconButton(
+                                                onClick = { rawPhone = "" },
+                                                modifier = Modifier.size(48.dp)
+                                            ) {
                                                 Icon(
                                                     Icons.Default.Close,
-                                                    contentDescription = "مسح",
+                                                    contentDescription = tr("portal.clear_cd"),
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier.size(16.dp)
                                                 )
@@ -628,7 +639,7 @@ fun UserAppPortal(
                                         border = BorderStroke(0.5.dp, StatusGreen.copy(alpha = 0.4f))
                                     ) {
                                         Text(
-                                            text = "الشبكة المكتشفة: $detectedCarrier",
+                                            text = trFmt("portal.carrier_fmt", "carrier" to detectedCarrier!!),
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = StatusGreen,
@@ -651,7 +662,7 @@ fun UserAppPortal(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = "اختر وسيلة استلام رمز التحقق (OTP):",
+                            text = tr("portal.choose_channel"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -691,7 +702,7 @@ fun UserAppPortal(
                                         ChannelBrandIcon(channel = channel, size = 30.dp)
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = channel.titleAr,
+                                            text = channel.localizedTitle(currentLang),
                                             fontSize = 11.5.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                             color = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.onSurface
@@ -737,16 +748,19 @@ fun UserAppPortal(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.WifiOff, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("خطأ في الشبكة أو تعذر الإرسال", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(tr("portal.network_err_title"), color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(text = networkFailureError!!, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 11.sp)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                        TextButton(onClick = { dispatchOtpAndProceed() }) {
+                                        TextButton(
+                                            onClick = { dispatchOtpAndProceed() },
+                                            modifier = Modifier.heightIn(min = 48.dp)
+                                        ) {
                                             Icon(Icons.Default.Refresh, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("إعادة المحاولة", color = adaptiveGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(tr("common.retry"), color = adaptiveGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -768,7 +782,7 @@ fun UserAppPortal(
                         ) {
                             if (isSendingOtpNetworkCall) {
                                 ExecutiveButtonLoadingIndicator(
-                                    loadingText = "جاري إرسال رمز التحقق...",
+                                    loadingText = tr("portal.sending_otp"),
                                     spinnerSize = 18.dp,
                                     textColor = adaptiveOnPrimary,
                                     spinnerPrimaryColor = adaptiveOnPrimary,
@@ -776,7 +790,7 @@ fun UserAppPortal(
                                 )
                             } else {
                                 Text(
-                                    text = "إرسال رمز التحقق عبر ${selectedDeliveryChannel.titleAr}",
+                                    text = trFmt("portal.send_otp_via_fmt", "channel" to selectedDeliveryChannel.localizedTitle(currentLang)),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -791,7 +805,7 @@ fun UserAppPortal(
                                     triggerBiometricAuthentication {
                                         val finalPhone = if (rawPhone.isNotBlank()) "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}" else (repeatUser?.phone ?: "")
                                         if (finalPhone.isNotBlank()) {
-                                            val finalName = repeatUser?.name ?: "مستخدم OOZOX"
+                                            val finalName = repeatUser?.name ?: Translations.get("portal.default_user_name", currentLang)
                                             val finalUser = repeatUser?.username ?: "user_${finalPhone.takeLast(4)}"
                                             val finalType = try {
                                                 repeatUser?.type?.let { UserType.valueOf(it) } ?: UserType.BUSINESSMAN
@@ -811,7 +825,7 @@ fun UserAppPortal(
                             ) {
                                 Icon(Icons.Default.Fingerprint, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("المصادقة البيومترية (بصمة / وجه)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary)
+                                Text(tr("portal.bio_fallback_btn"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary)
                             }
                         }
 
@@ -820,11 +834,13 @@ fun UserAppPortal(
                             Spacer(modifier = Modifier.height(8.dp))
                             TextButton(
                                 onClick = { isRepeatUserMode = true },
-                                modifier = Modifier.testTag("btn_back_to_repeat_user")
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_back_to_repeat_user")
                             ) {
                                 Icon(Icons.Default.AccountCircle, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("العودة إلى الحساب السابق (${repeatUser.name})", fontSize = 11.sp, color = adaptiveGoldPrimary)
+                                Text(trFmt("portal.back_to_prev_fmt", "name" to repeatUser.name), fontSize = 11.sp, color = adaptiveGoldPrimary)
                             }
                         }
 
@@ -837,20 +853,22 @@ fun UserAppPortal(
                         ) {
                             TextButton(
                                 onClick = { showRecoveryDialog = true },
-                                contentPadding = PaddingValues(2.dp)
+                                contentPadding = PaddingValues(4.dp),
+                                modifier = Modifier.heightIn(min = 48.dp)
                             ) {
                                 Icon(Icons.Default.LockReset, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("استعادة بالكلمات السرية", fontSize = 11.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.Medium)
+                                Text(tr("portal.recover_seed"), fontSize = 11.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.Medium)
                             }
 
                             TextButton(
                                 onClick = { showDeviceTransferDialog = true },
-                                contentPadding = PaddingValues(2.dp)
+                                contentPadding = PaddingValues(4.dp),
+                                modifier = Modifier.heightIn(min = 48.dp)
                             ) {
                                 Icon(Icons.Default.PhonelinkSetup, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("نقل من هاتف آخر", fontSize = 11.sp, color = OozoxTeal, fontWeight = FontWeight.Medium)
+                                Text(tr("portal.transfer_phone"), fontSize = 11.sp, color = OozoxTeal, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -867,7 +885,7 @@ fun UserAppPortal(
                 Icon(Icons.Default.Shield, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "نظام الحماية البيومترية والتشفير المالي E2EE مشفر 256-bit",
+                    text = tr("portal.footer_e2ee"),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -895,12 +913,13 @@ fun UserAppPortal(
 
     // Modal: Country Code Picker
     if (showCountryPicker) {
-        val filteredCountries = remember(countrySearchQuery) {
+        val filteredCountries = remember(countrySearchQuery, currentLang) {
             if (countrySearchQuery.isBlank()) {
                 SecurityValidator.SUPPORTED_COUNTRIES
             } else {
                 SecurityValidator.SUPPORTED_COUNTRIES.filter {
-                    it.countryNameAr.contains(countrySearchQuery, ignoreCase = true) ||
+                    it.localizedName(currentLang).contains(countrySearchQuery, ignoreCase = true) ||
+                            it.countryNameAr.contains(countrySearchQuery, ignoreCase = true) ||
                             it.code.contains(countrySearchQuery)
                 }
             }
@@ -909,7 +928,7 @@ fun UserAppPortal(
         AlertDialog(
             onDismissRequest = { showCountryPicker = false; countrySearchQuery = "" },
             title = {
-                Text("اختر الدولة وكود الاتصال", color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(tr("portal.country_picker_title"), color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             },
             text = {
                 Column(
@@ -920,7 +939,7 @@ fun UserAppPortal(
                     OutlinedTextField(
                         value = countrySearchQuery,
                         onValueChange = { countrySearchQuery = it },
-                        placeholder = { Text("بحث عن دولة أو كود...") },
+                        placeholder = { Text(tr("portal.country_search_hint")) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = adaptiveGoldPrimary) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -961,7 +980,7 @@ fun UserAppPortal(
                                         Text(country.flag, fontSize = 20.sp)
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Text(
-                                            text = country.countryNameAr,
+                                            text = country.localizedName(currentLang),
                                             fontSize = 13.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                             color = if (isSelected) adaptiveGoldPrimary else MaterialTheme.colorScheme.onSurface
@@ -982,8 +1001,11 @@ fun UserAppPortal(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showCountryPicker = false; countrySearchQuery = "" }) {
-                    Text("إغلاق", color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold)
+                TextButton(
+                    onClick = { showCountryPicker = false; countrySearchQuery = "" },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(tr("common.close"), color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -1032,7 +1054,7 @@ private fun RepeatUserPortalView(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "مرحباً بعودتك",
+            text = tr("portal.welcome_back"),
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -1082,7 +1104,7 @@ private fun RepeatUserPortalView(
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             Icons.Default.Verified,
-                            contentDescription = "موثق",
+                            contentDescription = tr("portal.verified_cd"),
                             tint = adaptiveGoldPrimary,
                             modifier = Modifier.size(16.dp)
                         )
@@ -1096,9 +1118,9 @@ private fun RepeatUserPortalView(
                     )
 
                     val roleLabel = when (repeatUser.type) {
-                        UserType.GOLD_TRADER.name -> "تاجر وأعمال معتمد"
-                        UserType.ADMIN.name -> "إدارة النظام"
-                        else -> "رجل أعمال ومستثمر"
+                        UserType.GOLD_TRADER.name -> tr("portal.role_trader")
+                        UserType.ADMIN.name -> tr("portal.role_admin")
+                        else -> tr("portal.role_businessman")
                     }
 
                     Text(
@@ -1133,12 +1155,12 @@ private fun RepeatUserPortalView(
             ) {
                 Icon(
                     Icons.Default.Fingerprint,
-                    contentDescription = "بصمة",
+                    contentDescription = tr("portal.fingerprint_cd"),
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "تسجيل الدخول بالبصمة أو الوجه",
+                    text = tr("portal.biometric_signin_btn"),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -1160,7 +1182,7 @@ private fun RepeatUserPortalView(
             ) {
                 Icon(Icons.Default.PhonelinkLock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(17.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("قفل الجهاز (النمط / PIN / كلمة المرور)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(tr("portal.device_lock_btn"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             }
         }
 
@@ -1178,7 +1200,7 @@ private fun RepeatUserPortalView(
         ) {
             Icon(Icons.Default.Password, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("تسجيل الدخول برمز PIN", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(tr("portal.pin_signin_btn"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1186,11 +1208,13 @@ private fun RepeatUserPortalView(
         // SWITCH ACCOUNT ACTION
         TextButton(
             onClick = onSwitchAccountClick,
-            modifier = Modifier.testTag("btn_portal_switch_account")
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .testTag("btn_portal_switch_account")
         ) {
             Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("تسجيل الدخول بحساب آخر", fontSize = 12.sp, color = OozoxTeal, fontWeight = FontWeight.Bold)
+            Text(tr("portal.switch_account_btn"), fontSize = 12.sp, color = OozoxTeal, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1202,27 +1226,27 @@ private fun RepeatUserPortalView(
 private fun BiometricStatusBadge(biometricStatus: BiometricStatus) {
     val (statusText, statusColor, icon) = when (biometricStatus) {
         BiometricStatus.AVAILABLE -> Triple(
-            "مستشعر البصمة والتعرف على الوجه جاهز",
+            tr("portal.bio_ready"),
             adaptiveStatusGreen,
             Icons.Default.Fingerprint
         )
         BiometricStatus.NOT_ENROLLED -> Triple(
-            "المستشعر متوفر (لم تسجل بصمة بالجهاز)",
+            tr("portal.bio_not_enrolled"),
             adaptiveStatusOrange,
             Icons.Default.WarningAmber
         )
         BiometricStatus.NO_HARDWARE -> Triple(
-            "الجهاز لا يدعم المستشعرات البيومترية",
+            tr("portal.bio_no_hw"),
             MaterialTheme.colorScheme.onSurfaceVariant,
             Icons.Default.Lock
         )
         BiometricStatus.HARDWARE_UNAVAILABLE -> Triple(
-            "مستشعر البصمة غير متاح حالياً",
+            tr("portal.bio_unavail"),
             adaptiveStatusOrange,
             Icons.Default.HourglassEmpty
         )
         else -> Triple(
-            "المصادقة البيومترية غير نشطة",
+            tr("portal.bio_inactive"),
             MaterialTheme.colorScheme.onSurfaceVariant,
             Icons.Default.Security
         )
@@ -1261,6 +1285,7 @@ private fun UserPortalPinDialog(
     onPinVerified: () -> Unit
 ) {
     val context = LocalContext.current
+    val currentLang = LocalAppLanguage.current
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var lockoutSeconds by remember { mutableIntStateOf(DeviceTrustManager.getRemainingLockoutSeconds(context)) }
@@ -1299,9 +1324,9 @@ private fun UserPortalPinDialog(
                 val remaining = DeviceTrustManager.recordFailedPinAttempt(context)
                 lockoutSeconds = DeviceTrustManager.getRemainingLockoutSeconds(context)
                 errorMessage = if (lockoutSeconds > 0) {
-                    "تم إيقاف المحاولات مؤقتاً لمدة $lockoutSeconds ثانية"
+                    Translations.format("portal.pin_lockout_fmt", currentLang, "sec" to lockoutSeconds)
                 } else {
-                    "رمز PIN غير صحيح (المتبقي $remaining محاولات)"
+                    Translations.format("portal.pin_wrong_fmt", currentLang, "rem" to remaining)
                 }
                 vibratePhone()
                 enteredPin = ""
@@ -1321,6 +1346,10 @@ private fun UserPortalPinDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides currentLang.direction,
+            LocalAppLanguage provides currentLang
+        ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
@@ -1344,21 +1373,21 @@ private fun UserPortalPinDialog(
                 ) {
                     Box(
                         modifier = Modifier
-                            .heightIn(min = 40.dp)
+                            .heightIn(min = 48.dp)
                             .clickable { onDismiss() }
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
-                        Text("إلغاء", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(tr("common.cancel"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("التحقق بالرمز السري PIN", fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary, fontSize = 14.sp)
+                    Text(tr("portal.pin_dialog_title"), fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary, fontSize = 14.sp)
                     Spacer(modifier = Modifier.size(24.dp))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "مرحباً $userName، أدخل رمز PIN الخاص بحسابك",
+                    text = trFmt("portal.pin_dialog_sub_fmt", "name" to userName),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -1422,7 +1451,7 @@ private fun UserPortalPinDialog(
                                         shape = CircleShape
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Backspace, contentDescription = "حذف", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                            Icon(Icons.Default.Backspace, contentDescription = tr("portal.backspace_cd"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                                         }
                                     }
                                 }
@@ -1450,6 +1479,7 @@ private fun UserPortalPinDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
+        }
         }
     }
 }

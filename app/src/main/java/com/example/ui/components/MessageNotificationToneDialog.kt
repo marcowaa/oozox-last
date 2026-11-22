@@ -52,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,8 +74,12 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.adaptiveGoldPrimary
 import com.example.ui.theme.adaptiveOnPrimary
 import com.example.ui.theme.GoldPrimary
+import com.example.util.LocalAppLanguage
 import com.example.util.MessageNotificationSoundHelper
 import com.example.util.MessageNotificationTone
+import com.example.util.Translations
+import com.example.util.tr
+import com.example.util.trFmt
 
 @Composable
 fun MessageNotificationToneDialog(
@@ -82,6 +88,7 @@ fun MessageNotificationToneDialog(
     onToneSelected: (toneId: String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val currentLang = LocalAppLanguage.current
 
     var selectedToneId by remember {
         mutableStateOf(initialToneId ?: MessageNotificationSoundHelper.getSelectedTone(context))
@@ -108,6 +115,10 @@ fun MessageNotificationToneDialog(
         },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides currentLang.direction,
+            LocalAppLanguage provides currentLang
+        ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
@@ -150,13 +161,13 @@ fun MessageNotificationToneDialog(
 
                         Column {
                             Text(
-                                text = "نغمات التنبيه المخصصة 🔔",
+                                text = "${tr("tone.dialog_title")} 🔔",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "تخصيص نغمة الرسائل الجديدة",
+                                text = tr("tone.dialog_sub"),
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -168,11 +179,11 @@ fun MessageNotificationToneDialog(
                             MessageNotificationSoundHelper.stopPlayback()
                             onDismiss()
                         },
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق",
+                            contentDescription = tr("common.close"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -211,13 +222,13 @@ fun MessageNotificationToneDialog(
                                 )
                                 Column {
                                     Text(
-                                        text = "التنبيهات الصوتية للرسائل",
+                                        text = tr("tone.sound_title"),
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (isSoundEnabled) "تشغيل النغمة عند ورود رسالة" else "كتم النغمة الصوتية",
+                                        text = if (isSoundEnabled) tr("tone.sound_on") else tr("tone.sound_off"),
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -261,13 +272,13 @@ fun MessageNotificationToneDialog(
                                 )
                                 Column {
                                     Text(
-                                        text = "الاهتزاز التفاعلي مع الرسائل",
+                                        text = tr("tone.vib_title"),
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (isVibrationEnabled) "نبضات متوافقة مع النغمة" else "بدون اهتزاز",
+                                        text = if (isVibrationEnabled) tr("tone.vib_on") else tr("tone.vib_off"),
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -299,7 +310,7 @@ fun MessageNotificationToneDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "اختر نغمة التنبيه المفضلة:",
+                        text = tr("tone.choose_fav"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         color = GoldPrimary
@@ -310,7 +321,7 @@ fun MessageNotificationToneDialog(
                         color = GoldPrimary.copy(alpha = 0.12f)
                     ) {
                         Text(
-                            text = "${MessageNotificationSoundHelper.AVAILABLE_TONES.size} نغمات مدمجة",
+                            text = trFmt("tone.count_fmt", "count" to MessageNotificationSoundHelper.AVAILABLE_TONES.size),
                             fontSize = 10.5.sp,
                             color = GoldPrimary,
                             fontWeight = FontWeight.Bold,
@@ -366,7 +377,12 @@ fun MessageNotificationToneDialog(
                         onClick = {
                             MessageNotificationSoundHelper.setSelectedTone(context, selectedToneId)
                             MessageNotificationSoundHelper.playNewMessageSound(context)
-                            Toast.makeText(context, "تم تجربة نغمة: ${MessageNotificationSoundHelper.getToneById(selectedToneId).nameAr}", Toast.LENGTH_SHORT).show()
+                            val toneName = MessageNotificationSoundHelper.getToneById(selectedToneId).localizedName(currentLang)
+                            Toast.makeText(
+                                context,
+                                Translations.format("tone.test_toast_fmt", currentLang, "name" to toneName),
+                                Toast.LENGTH_SHORT
+                            ).show()
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -376,7 +392,7 @@ fun MessageNotificationToneDialog(
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
                         Text(
-                            text = "تجربة التنبيه",
+                            text = tr("tone.test_btn"),
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = GoldPrimary
@@ -388,7 +404,7 @@ fun MessageNotificationToneDialog(
                             MessageNotificationSoundHelper.setSelectedTone(context, selectedToneId)
                             MessageNotificationSoundHelper.stopPlayback()
                             onToneSelected(selectedToneId)
-                            Toast.makeText(context, "تم حفظ النغمة المفضلة بنجاح", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, Translations.get("tone.saved_toast", currentLang), Toast.LENGTH_SHORT).show()
                             onDismiss()
                         },
                         modifier = Modifier
@@ -401,13 +417,14 @@ fun MessageNotificationToneDialog(
                         )
                     ) {
                         Text(
-                            text = "حفظ واختيار",
+                            text = tr("tone.save_btn"),
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
+        }
         }
     }
 }
@@ -421,6 +438,7 @@ private fun NotificationToneItemRow(
     onSelect: () -> Unit,
     onTogglePlay: () -> Unit
 ) {
+    val currentLang = LocalAppLanguage.current
     val borderColor by animateColorAsState(
         targetValue = if (isSelected) GoldPrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
         label = "toneBorderColor"
@@ -495,7 +513,7 @@ private fun NotificationToneItemRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = tone.nameAr,
+                            text = tone.localizedName(currentLang),
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                             fontSize = 13.sp,
                             color = if (isSelected) GoldPrimary else MaterialTheme.colorScheme.onSurface
@@ -507,7 +525,7 @@ private fun NotificationToneItemRow(
                                 color = GoldPrimary.copy(alpha = 0.2f)
                             ) {
                                 Text(
-                                    text = "الحالية",
+                                    text = tr("tone.current_badge"),
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GoldPrimary,
@@ -518,7 +536,7 @@ private fun NotificationToneItemRow(
                     }
 
                     Text(
-                        text = tone.descriptionAr,
+                        text = tone.localizedDescription(currentLang),
                         fontSize = 10.5.sp,
                         lineHeight = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -532,7 +550,7 @@ private fun NotificationToneItemRow(
             // Play / Stop preview button
             FilledTonalIconButton(
                 onClick = onTogglePlay,
-                modifier = Modifier.size(34.dp),
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
                 colors = IconButtonDefaults.filledTonalIconButtonColors(
                     containerColor = if (isPlaying) adaptiveGoldPrimary else adaptiveGoldPrimary.copy(alpha = 0.15f),
@@ -541,8 +559,8 @@ private fun NotificationToneItemRow(
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "إيقاف" else "استماع",
-                    modifier = Modifier.size(18.dp)
+                    contentDescription = if (isPlaying) tr("tone.stop_cd") else tr("tone.play_cd"),
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

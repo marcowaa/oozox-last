@@ -21,7 +21,15 @@ enum class ClientCardLinkKind(val labelAr: String, val iconTag: String) {
     DOMAIN_CARD("دومين المشروع", "web"),
     WHATSAPP("واتساب", "wa"),
     INSTAGRAM("إنستغرام", "ig"),
-    WEBSITE("رابط خارجي", "link")
+    WEBSITE("رابط خارجي", "link");
+
+    fun localizedLabel(language: AppLanguage): String = when (this) {
+        APP_DEEP_LINK -> Translations.get("card.link_app", language)
+        DOMAIN_CARD -> Translations.get("card.link_domain", language)
+        WHATSAPP -> Translations.get("card.link_whatsapp", language)
+        INSTAGRAM -> Translations.get("card.link_instagram", language)
+        WEBSITE -> Translations.get("card.link_website", language)
+    }
 }
 
 data class ClientCardLinkItem(
@@ -43,7 +51,15 @@ enum class ClientCardPresetTheme(
     ROYAL_NAVY("ROYAL_NAVY", "أزرق ملكي", "#0B1D3A", "#1E3A8A", "#F8FAFC", "#38BDF8"),
     EMERALD_PRO("EMERALD_PRO", "زمردي", "#064E3B", "#0F766E", "#FFFFFF", "#34D399"),
     BURGUNDY_LUX("BURGUNDY_LUX", "عنابي فاخر", "#3B0764", "#701A75", "#FFFFFF", "#F472B6"),
-    CLEAN_LIGHT("CLEAN_LIGHT", "فاتح عصري", "#FFFFFF", "#F1F5F9", "#0F172A", "#1E3A8A")
+    CLEAN_LIGHT("CLEAN_LIGHT", "فاتح عصري", "#FFFFFF", "#F1F5F9", "#0F172A", "#1E3A8A");
+
+    fun localizedTitle(language: AppLanguage): String = when (this) {
+        EXECUTIVE_DARK -> Translations.get("card.theme_exec_dark", language)
+        ROYAL_NAVY -> Translations.get("card.theme_royal_navy", language)
+        EMERALD_PRO -> Translations.get("card.theme_emerald", language)
+        BURGUNDY_LUX -> Translations.get("card.theme_burgundy", language)
+        CLEAN_LIGHT -> Translations.get("card.theme_clean_light", language)
+    }
 }
 
 enum class SocialSharePlatform(val labelAr: String, val packageNames: List<String>) {
@@ -51,7 +67,15 @@ enum class SocialSharePlatform(val labelAr: String, val packageNames: List<Strin
     TELEGRAM("تيليجرام", listOf("org.telegram.messenger", "org.thunderdog.challegram")),
     INSTAGRAM("إنستغرام", listOf("com.instagram.android")),
     FACEBOOK("فيسبوك", listOf("com.facebook.katana", "com.facebook.orca")),
-    ALL("المزيد", emptyList())
+    ALL("المزيد", emptyList());
+
+    fun localizedLabel(language: AppLanguage): String = when (this) {
+        WHATSAPP -> Translations.get("card.link_whatsapp", language)
+        TELEGRAM -> Translations.get("card.share_telegram", language)
+        INSTAGRAM -> Translations.get("card.link_instagram", language)
+        FACEBOOK -> Translations.get("card.share_facebook", language)
+        ALL -> Translations.get("card.share_more", language)
+    }
 }
 
 data class ClientCardStyleConfig(

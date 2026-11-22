@@ -1,17 +1,11 @@
 package com.example.ui.components
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,9 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,54 +43,63 @@ fun SubscriptionUpgradeModal(
     onSubmitSubscriptionRequest: (planId: String, planTitle: String, pricePaid: Double) -> Unit,
     onOpenFullSubscriptionsScreen: () -> Unit
 ) {
-    val context = LocalContext.current
-    val subDetails = remember(currentUser?.subscriptionTier, currentUser?.subscriptionEndTimestamp, currentUser?.subscriptionStartTimestamp) {
-        SubscriptionFeatureGate.evaluateSubscription(currentUser)
+    val currentLanguage = LocalAppLanguage.current
+    @Suppress("UNUSED_VARIABLE")
+    val catalogTick = Translations.catalogVersion
+
+    val subDetails = remember(
+        currentUser?.subscriptionTier,
+        currentUser?.subscriptionEndTimestamp,
+        currentUser?.subscriptionStartTimestamp,
+        currentLanguage,
+        catalogTick
+    ) {
+        SubscriptionFeatureGate.evaluateSubscription(currentUser, currentLanguage)
     }
 
-    val plans = remember(subscriptionPlans) {
+    val plans = remember(subscriptionPlans, currentLanguage, catalogTick) {
         if (subscriptionPlans.isNotEmpty()) {
             subscriptionPlans
         } else {
             listOf(
                 SubscriptionPlanEntity(
                     id = SubscriptionTier.FREE_TRIAL.name,
-                    title = "الفترة التجريبية المجانية",
-                    badgeText = "60 يوماً مجاناً",
+                    title = SubscriptionTier.FREE_TRIAL.localizedLabel(currentLanguage),
+                    badgeText = SubscriptionTier.FREE_TRIAL.localizedBadgeText(currentLanguage),
                     monthlyPrice = 0.0,
                     annualPrice = 0.0,
-                    description = "تشمل كل مزايا المنصة المتطورة لمدة شهرين كاملين بدون أي قيود.",
-                    featuresListText = "• المساعد المالي الذكي Gemini AI\n• التشفير الآمن للخزائن السرية\n• المزامنة السحابية الاحتياطية\n• رادار كشف التجار القريبين\n• تقارير الأرباح وكشوف الحسابات",
+                    description = SubscriptionTier.FREE_TRIAL.localizedDescription(currentLanguage),
+                    featuresListText = Translations.get("sub.plan_free_features", currentLanguage),
                     isPopular = false
                 ),
                 SubscriptionPlanEntity(
                     id = SubscriptionTier.SILVER_TRADER.name,
-                    title = "باقة التاجر الفضية",
-                    badgeText = "الأكثر مرونة",
+                    title = SubscriptionTier.SILVER_TRADER.localizedLabel(currentLanguage),
+                    badgeText = SubscriptionTier.SILVER_TRADER.localizedBadgeText(currentLanguage),
                     monthlyPrice = 499.0,
                     annualPrice = 4990.0,
-                    description = "مثالية للتجار الأفراد والورش الصغيرة لإدارة الحسابات وفواتير الذهب.",
-                    featuresListText = "• جميع مزايا الفترة التجريبية بدون انقطاع\n• تقارير Excel/PDF غير محدودة\n• دعم فني مخصص للتجار\n• استخراج كشوف حسابات العملاء",
+                    description = SubscriptionTier.SILVER_TRADER.localizedDescription(currentLanguage),
+                    featuresListText = Translations.get("sub.plan_silver_features", currentLanguage),
                     isPopular = false
                 ),
                 SubscriptionPlanEntity(
                     id = SubscriptionTier.GOLD_ENTERPRISE.name,
-                    title = "باقة الذهب للشركات والمؤسسات",
-                    badgeText = "الأكثر شعبية",
+                    title = SubscriptionTier.GOLD_ENTERPRISE.localizedLabel(currentLanguage),
+                    badgeText = SubscriptionTier.GOLD_ENTERPRISE.localizedBadgeText(currentLanguage),
                     monthlyPrice = 999.0,
                     annualPrice = 9990.0,
-                    description = "الباقة القياسية المتكاملة لكبرى محلات الصاغة ومكاتب تجارة المعادن الثمينة.",
-                    featuresListText = "• سعة حسابات ومحادثات غير محدودة\n• تحليل الصفقات والموازين بالذكاء الاصطناعي\n• ربط خزائن متعددة وتشفير سحابي دائم\n• أولوية قصوى في عمليات التقاص والتوثيق",
+                    description = SubscriptionTier.GOLD_ENTERPRISE.localizedDescription(currentLanguage),
+                    featuresListText = Translations.get("sub.plan_gold_features", currentLanguage),
                     isPopular = true
                 ),
                 SubscriptionPlanEntity(
                     id = SubscriptionTier.DIAMOND_VIP.name,
-                    title = "باقة الماس لكبار الصاغة VIP",
-                    badgeText = "نخبة التجار",
+                    title = SubscriptionTier.DIAMOND_VIP.localizedLabel(currentLanguage),
+                    badgeText = SubscriptionTier.DIAMOND_VIP.localizedBadgeText(currentLanguage),
                     monthlyPrice = 1899.0,
                     annualPrice = 18990.0,
-                    description = "أعلى درجات الموثوقية والدعم لكبار المستثمرين ومصانع الذهب والسبائك.",
-                    featuresListText = "• خادم سحابي خاص فائق السرعة ومزامنة فورية\n• تدقيق مالي محاسبي شامل واستشارات الصاغة\n• شارة توثيق ماسية مميزة تظهر لجميع التجار\n• دعم هاتفي مباشر 24/7",
+                    description = SubscriptionTier.DIAMOND_VIP.localizedDescription(currentLanguage),
+                    featuresListText = Translations.get("sub.plan_diamond_features", currentLanguage),
                     isPopular = false
                 )
             )
@@ -110,7 +111,7 @@ fun SubscriptionUpgradeModal(
     var successToastMessage by remember { mutableStateOf<String?>(null) }
     var isAnnualBilling by remember { mutableStateOf(false) }
 
-    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()) }
+    remember(currentLanguage) { SimpleDateFormat("yyyy/MM/dd", Locale(currentLanguage.code)) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -136,7 +137,10 @@ fun SubscriptionUpgradeModal(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Surface(
                             color = GoldPrimary.copy(alpha = 0.2f),
                             shape = CircleShape,
@@ -152,15 +156,15 @@ fun SubscriptionUpgradeModal(
                             }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "باقات واشتراكات OOZOX للأعمال",
+                                text = tr("sub.modal_title"),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "عروض الترقية، إدارة الأعمال وحالة باقتك الحالية",
+                                text = tr("sub.modal_sub"),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -169,9 +173,15 @@ fun SubscriptionUpgradeModal(
 
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("close_upgrade_modal_btn")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = tr("common.close"),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -270,17 +280,17 @@ fun SubscriptionUpgradeModal(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column(modifier = Modifier.weight(1f, fill = false)) {
                                             Text(
-                                                text = "الباقة المشترك بها حالياً",
+                                                text = tr("sub.current_plan"),
                                                 fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
-                                                text = subDetails.tier.label,
+                                                text = subDetails.tier.localizedLabel(currentLanguage),
                                                 fontSize = 13.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = GoldPrimary,
                                                 maxLines = 1,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
@@ -298,12 +308,12 @@ fun SubscriptionUpgradeModal(
                                     ) {
                                         Text(
                                             text = when (subDetails.phase) {
-                                                SubscriptionPhase.PAID_ACTIVE -> tr("paid_active", "مشترك VIP 💎")
-                                                SubscriptionPhase.TRIAL_ACTIVE -> tr("free_trial", "تجربة مجانية")
-                                                SubscriptionPhase.GRACE_WARNING_STAGE_1 -> tr("grace_stage_1", "تدرج 1 ⚠️")
-                                                SubscriptionPhase.GRACE_WARNING_STAGE_2 -> tr("grace_stage_2", "تدرج 2 🚨")
-                                                SubscriptionPhase.BASE_RESTRICTED -> tr("restricted", "حجب 🔒")
-                                                SubscriptionPhase.PAID_EXPIRED -> tr("expired", "منتهي ❌")
+                                                SubscriptionPhase.PAID_ACTIVE -> tr("sub.badge_paid_active")
+                                                SubscriptionPhase.TRIAL_ACTIVE -> tr("sub.badge_free_trial")
+                                                SubscriptionPhase.GRACE_WARNING_STAGE_1 -> tr("sub.badge_grace_1")
+                                                SubscriptionPhase.GRACE_WARNING_STAGE_2 -> tr("sub.badge_grace_2")
+                                                SubscriptionPhase.BASE_RESTRICTED -> tr("sub.badge_restricted")
+                                                SubscriptionPhase.PAID_EXPIRED -> tr("sub.badge_expired")
                                             },
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -345,7 +355,7 @@ fun SubscriptionUpgradeModal(
                                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                                         )
                                         Text(
-                                            text = "متبقي ${subDetails.trialDaysRemaining} من 60 يوم",
+                                            text = trFmt("sub.trial_progress_fmt", "days" to subDetails.trialDaysRemaining),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (subDetails.trialDaysRemaining <= 10) StatusOrange else StatusGreen
@@ -367,7 +377,7 @@ fun SubscriptionUpgradeModal(
                                                 Icon(Icons.Default.HourglassTop, contentDescription = null, tint = StatusOrange, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
-                                                    text = "تنبيه: اقتراب انتهاء الفترة التجريبية! قم بالترقية الآن لتجنب تقييد الذكاء الاصطناعي وتقارير الصاغة.",
+                                                    text = tr("sub.trial_warn_soon"),
                                                     fontSize = 10.5.sp,
                                                     color = StatusOrange,
                                                     fontWeight = FontWeight.Medium
@@ -391,9 +401,9 @@ fun SubscriptionUpgradeModal(
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
                                                 text = if (subDetails.phase == SubscriptionPhase.GRACE_WARNING_STAGE_1)
-                                                    "المرحلة 1: تم تقييد الذكاء الاصطناعي والمزامنة السحابية. سارع بالترقية لتفادي تقييد كشوف الحسابات!"
+                                                    tr("sub.stage1_banner_warn")
                                                 else
-                                                    "المرحلة 2: تم تقييد الخزائن والتقارير المالية. يرجى الاشتراك في باقة مدفوعة لفتح كافة المزايا.",
+                                                    tr("sub.stage2_banner_warn"),
                                                 fontSize = 10.5.sp,
                                                 color = StatusRed,
                                                 fontWeight = FontWeight.Bold
@@ -411,7 +421,7 @@ fun SubscriptionUpgradeModal(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = StatusOrange, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("العروض والخصومات المتاحة حالياً", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                                Text(tr("sub.announcements_title"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
                             }
 
                             if (activeAnnouncements.isNotEmpty()) {
@@ -446,7 +456,7 @@ fun SubscriptionUpgradeModal(
                                                             shape = RoundedCornerShape(4.dp)
                                                         ) {
                                                             Text(
-                                                                "خصم ${promo.discountPercent}%",
+                                                                trFmt("sub.discount_badge_fmt", "percent" to promo.discountPercent),
                                                                 color = Color.White,
                                                                 fontSize = 9.sp,
                                                                 fontWeight = FontWeight.Bold,
@@ -457,7 +467,12 @@ fun SubscriptionUpgradeModal(
                                                 }
                                                 Text(promo.content, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 if (promo.promoCode != null) {
-                                                    Text("كوبون الخصم: ${promo.promoCode}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary)
+                                                    Text(
+                                                        trFmt("sub.promo_code_fmt", "code" to promo.promoCode),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = adaptiveGoldPrimary
+                                                    )
                                                 }
                                             }
                                         }
@@ -487,17 +502,28 @@ fun SubscriptionUpgradeModal(
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("عرض الترقية السنوية للصاغة", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                                Text(tr("sub.promo_default_title"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Surface(
                                                     color = StatusGreen,
                                                     shape = RoundedCornerShape(4.dp)
                                                 ) {
-                                                    Text("خصم 20%", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                                    Text(
+                                                        tr("sub.promo_default_badge"),
+                                                        color = Color.Black,
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
                                                 }
                                             }
-                                            Text("احصل على خصم 20% إضافي وشهرين مجاناً عند تفعيل الاشتراك السنوي لأي باقة.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Text("الكود الترويجي: GOLDVIP2026", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                                            Text(tr("sub.promo_default_desc"), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                trFmt("sub.promo_code_fmt", "code" to "GOLDVIP2026"),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = GoldPrimary
+                                            )
                                         }
                                     }
                                 }
@@ -520,10 +546,10 @@ fun SubscriptionUpgradeModal(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text("نوع دورة الفوترة:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(tr("sub.billing_cycle_label"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(
-                                        text = if (isAnnualBilling) "اشتراك سنوي (خصم 20% إضافي )" else "اشتراك شهري مرن",
+                                        text = if (isAnnualBilling) tr("sub.billing_annual_full") else tr("sub.billing_monthly_full"),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isAnnualBilling) StatusGreen else GoldPrimary
@@ -531,13 +557,24 @@ fun SubscriptionUpgradeModal(
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("شهري", fontSize = 11.sp, color = if (!isAnnualBilling) GoldPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        tr("sub.billing_month_short"),
+                                        fontSize = 11.sp,
+                                        color = if (!isAnnualBilling) GoldPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     Switch(
                                         checked = isAnnualBilling,
                                         onCheckedChange = { isAnnualBilling = it },
-                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                        modifier = Modifier
+                                            .padding(horizontal = 6.dp)
+                                            .testTag("billing_cycle_switch")
                                     )
-                                    Text("سنوي", fontSize = 11.sp, color = if (isAnnualBilling) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        tr("sub.billing_year_short"),
+                                        fontSize = 11.sp,
+                                        color = if (isAnnualBilling) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -546,7 +583,7 @@ fun SubscriptionUpgradeModal(
                     // 4. Subscription Plans for Direct Upgrade / Renewal
                     item {
                         Text(
-                            text = "الباقات المتاحة للترقية أو التجديد",
+                            text = tr("sub.available_plans_title"),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = GoldPrimary
@@ -627,15 +664,22 @@ fun SubscriptionUpgradeModal(
                                         if (plan.monthlyPrice > 0) {
                                             if (plan.isOfferActive && plan.discountPercent > 0) {
                                                 Text(
-                                                    text = if (isAnnualBilling) "${(plan.monthlyPrice * 12).toInt()} ج.م" else "${plan.monthlyPrice.toInt()} ج.م",
+                                                    text = GoldUtils.formatCurrency(
+                                                        if (isAnnualBilling) plan.monthlyPrice * 12 else plan.monthlyPrice,
+                                                        currentLanguage
+                                                    ),
                                                     fontSize = 10.sp,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     textDecoration = TextDecoration.LineThrough,
                                                     softWrap = false
                                                 )
                                             }
+                                            val formattedFinalPrice = GoldUtils.formatCurrency(finalPrice, currentLanguage)
                                             Text(
-                                                text = if (isAnnualBilling) "${finalPrice.toInt()} ج.م / سنة" else "${finalPrice.toInt()} ج.م / شهر",
+                                                text = if (isAnnualBilling)
+                                                    trFmt("sub.price_per_year_fmt", "price" to formattedFinalPrice)
+                                                else
+                                                    trFmt("sub.price_per_month_fmt", "price" to formattedFinalPrice),
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = GoldPrimary,
@@ -643,7 +687,7 @@ fun SubscriptionUpgradeModal(
                                             )
                                         } else {
                                             Text(
-                                                text = "مجاناً 100%",
+                                                text = tr("sub.free_100"),
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = StatusGreen,
@@ -679,12 +723,14 @@ fun SubscriptionUpgradeModal(
                                     OutlinedButton(
                                         onClick = { },
                                         enabled = false,
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
                                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusGreen, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("باقتك الحالية المفعلة", fontSize = 12.sp, color = StatusGreen, fontWeight = FontWeight.Bold)
+                                        Text(tr("sub.active_current_btn"), fontSize = 12.sp, color = StatusGreen, fontWeight = FontWeight.Bold)
                                     }
                                 } else if (plan.id == SubscriptionTier.FREE_TRIAL.name) {
                                     Surface(
@@ -693,7 +739,7 @@ fun SubscriptionUpgradeModal(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
-                                            text = "مفعلة تلقائياً لجميع الحسابات الجديدة لمدة 60 يوماً كاملة",
+                                            text = tr("sub.trial_auto_active"),
                                             fontSize = 10.5.sp,
                                             color = StatusGreen,
                                             fontWeight = FontWeight.Medium,
@@ -712,7 +758,10 @@ fun SubscriptionUpgradeModal(
                                         ),
                                         shape = RoundedCornerShape(10.dp),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .testTag("upgrade_plan_btn_${plan.id}")
                                     ) {
                                         Icon(
                                             imageVector = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE) Icons.Default.Upgrade else Icons.Default.RocketLaunch,
@@ -722,7 +771,10 @@ fun SubscriptionUpgradeModal(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE) "ترقية إلى هذه الباقة" else "اشتراك وترقية فورية",
+                                            text = if (subDetails.phase == SubscriptionPhase.PAID_ACTIVE)
+                                                tr("sub.upgrade_to_plan")
+                                            else
+                                                tr("sub.subscribe_now"),
                                             color = Color.Black,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.5.sp
@@ -740,10 +792,12 @@ fun SubscriptionUpgradeModal(
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = 48.dp)
                                 .clickable {
                                     onDismiss()
                                     onOpenFullSubscriptionsScreen()
                                 }
+                                .testTag("open_full_subscriptions_card")
                         ) {
                             Row(
                                 modifier = Modifier
@@ -752,12 +806,15 @@ fun SubscriptionUpgradeModal(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(Icons.Default.Tune, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
-                                        Text("محاكي التدرج وخريطة الميزات الكاملة ↗️", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
-                                        Text("فتح صفحة إدارة الاشتراكات المتقدمة", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(tr("sub.open_simulator_title"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                                        Text(tr("sub.open_simulator_sub"), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
@@ -793,7 +850,8 @@ fun SubscriptionUpgradeModal(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth(0.92f)
-                    .wrapContentHeight(),
+                    .wrapContentHeight()
+                    .testTag("subscription_payment_confirm_dialog"),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp,
@@ -813,6 +871,7 @@ fun SubscriptionUpgradeModal(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(
+                            modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -831,9 +890,9 @@ fun SubscriptionUpgradeModal(
                                 )
                             }
 
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "تأكيد طلب الترقية",
+                                    text = tr("sub.confirm_upgrade_title"),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -848,11 +907,11 @@ fun SubscriptionUpgradeModal(
 
                         IconButton(
                             onClick = { if (!isSubmitting) showPaymentConfirmDialog = false },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.minimumInteractiveComponentSize()
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "إغلاق",
+                                contentDescription = tr("common.close"),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -865,8 +924,10 @@ fun SubscriptionUpgradeModal(
                     )
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        val cycleText = if (isAnnualBilling) tr("sub.cycle_annual_paren") else tr("sub.cycle_monthly_paren")
+                        val formattedTotal = GoldUtils.formatCurrency(calculatedPrice, currentLanguage)
                         Text(
-                            text = "المبلغ الإجمالي المطلوب: ${calculatedPrice.toInt()} ج.م ${if (isAnnualBilling) "(سنوياً)" else "(شهرياً)"}",
+                            text = trFmt("sub.total_due_fmt", "price" to formattedTotal, "cycle" to cycleText),
                             fontWeight = FontWeight.Bold,
                             color = GoldPrimary,
                             fontSize = 13.sp
@@ -879,22 +940,24 @@ fun SubscriptionUpgradeModal(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("طرق السداد المعتمدة:", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
-                                Text("• InstaPay / المحافظ الإلكترونية / التحويل البنكي وفقاً لبيانات الدفع الصادرة من الإدارة.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("sub.payment_methods_title"), fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text(tr("sub.payment_methods_desc"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
 
                         OutlinedTextField(
                             value = paymentPhoneOrRef,
                             onValueChange = { paymentPhoneOrRef = it },
-                            label = { Text("رقم الهاتف أو رقم مرجع عملية التحويل", fontSize = 11.sp) },
+                            label = { Text(tr("sub.transfer_ref_label"), fontSize = 11.sp) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("upgrade_transfer_ref_input")
                         )
 
                         Text(
-                            text = "بمجرد الضغط على تأكيد، يتم إرسال إشعار فوري لمراجعة التحويل وتفعيل الباقة وتحديث صلاحيات حسابك.",
+                            text = tr("sub.confirm_upgrade_note"),
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 15.sp
@@ -917,7 +980,7 @@ fun SubscriptionUpgradeModal(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("إلغاء", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(tr("common.cancel"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
@@ -925,15 +988,16 @@ fun SubscriptionUpgradeModal(
                                 isSubmitting = true
                                 onSubmitSubscriptionRequest(plan.id, plan.title, calculatedPrice)
                                 showPaymentConfirmDialog = false
-                                successToastMessage = "تم إرسال طلب ترقية حسابك إلى باقة «${plan.title}» بنجاح! سيتم مراجعة الطلب وتفعيل الميزات فوراً."
+                                successToastMessage = Translations.format("sub.req_success_fmt", currentLanguage, "plan" to plan.title)
                             },
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = MaterialTheme.colorScheme.background),
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
+                                .testTag("confirm_upgrade_submit_btn")
                         ) {
-                            Text("تأكيد الترقية", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(tr("sub.confirm_upgrade_btn"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                     }
                 }

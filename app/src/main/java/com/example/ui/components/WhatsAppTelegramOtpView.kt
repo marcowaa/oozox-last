@@ -32,7 +32,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
+import com.example.util.AppLanguage
+import com.example.util.LocalAppLanguage
 import com.example.util.SecurityValidator
+import com.example.util.Translations
+import com.example.util.tr
+import com.example.util.trFmt
 import kotlinx.coroutines.delay
 
 /**
@@ -45,7 +50,25 @@ enum class OtpDeliveryChannel(
 ) {
     WHATSAPP("واتساب", "تسليم فوري مشفر E2EE", WhatsAppGreen),
     TELEGRAM("تليجرام", "بوت التحقق الآمن الفوري", TelegramBlue),
-    SMS("رسالة SMS", "كود مباشر عبر شبكة الجوال", SmsGold)
+    SMS("رسالة SMS", "كود مباشر عبر شبكة الجوال", SmsGold);
+
+    fun localizedTitle(language: AppLanguage): String = Translations.get(
+        when (this) {
+            WHATSAPP -> "otp.ch_whatsapp"
+            TELEGRAM -> "otp.ch_telegram"
+            SMS -> "otp.ch_sms"
+        },
+        language
+    )
+
+    fun localizedDescription(language: AppLanguage): String = Translations.get(
+        when (this) {
+            WHATSAPP -> "otp.ch_whatsapp_desc"
+            TELEGRAM -> "otp.ch_telegram_desc"
+            SMS -> "otp.ch_sms_desc"
+        },
+        language
+    )
 }
 
 /**
@@ -82,6 +105,7 @@ fun WhatsAppTelegramOtpView(
     onBackClick: () -> Unit,
     onResendRequested: (channel: OtpDeliveryChannel) -> String
 ) {
+    val currentLang = LocalAppLanguage.current
     var currentOtpInput by remember { mutableStateOf("") }
     var currentExpectedOtp by remember { mutableStateOf(expectedOtp) }
     var currentChannel by remember { mutableStateOf(initialChannel) }
@@ -130,11 +154,10 @@ fun WhatsAppTelegramOtpView(
         keyboardController?.show()
     }
 
-    // Verification Logic
     val verifyCode: (String) -> Unit = { code ->
         val cleanCode = code.trim().filter { it.isDigit() }
         if (isLocked) {
-            errorMessage = "الحساب مقفل مؤقتاً لحمايتك يرجى الانتظار $lockRemainingSeconds ثانية."
+            errorMessage = Translations.format("otp.locked_err_fmt", currentLang, "sec" to lockRemainingSeconds)
         } else if (cleanCode.length == 6) {
             isVerifying = true
             errorMessage = null
@@ -151,9 +174,9 @@ fun WhatsAppTelegramOtpView(
                 if (rateLimiter.isLocked()) {
                     isLocked = true
                     lockRemainingSeconds = rateLimiter.getRemainingLockSeconds()
-                    errorMessage = "تم تجاوز عدد المحاولات المسموح بها! تم قفل التحقق لمدة 3 دقائق لدواعي الأمان"
+                    errorMessage = Translations.get("otp.max_attempts_err", currentLang)
                 } else {
-                    errorMessage = "رمز التحقق غير صحيح. متبقي لك ${rateLimiter.getRemainingAttempts()} محاولات فقط! يرجى التأكد من الرمز المدخل"
+                    errorMessage = Translations.format("otp.wrong_code_fmt", currentLang, "rem" to rateLimiter.getRemainingAttempts())
                 }
             }
         }
@@ -172,7 +195,11 @@ fun WhatsAppTelegramOtpView(
             currentOtpInput = ""
             resendCountdown = 60
             isResendingNetworkCall = false
-            resendSuccessNotice = "تم إرسال رمز أمان جديد بنجاح عبر ${targetChannel.titleAr}"
+            resendSuccessNotice = Translations.format(
+                "otp.resent_fmt",
+                currentLang,
+                "channel" to targetChannel.localizedTitle(currentLang)
+            )
         }
     }
 
@@ -201,13 +228,13 @@ fun WhatsAppTelegramOtpView(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "رجوع لتعديل رقم الهاتف",
+                        contentDescription = tr("otp.edit_phone_cd"),
                         tint = GoldPrimary,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "تعديل الرقم",
+                        text = tr("otp.edit_phone"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = GoldPrimary
@@ -227,7 +254,7 @@ fun WhatsAppTelegramOtpView(
                     ChannelBrandIcon(channel = currentChannel, size = 16.dp)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "مُرسل عبر ${currentChannel.titleAr}",
+                        text = trFmt("otp.sent_via_fmt", "channel" to currentChannel.localizedTitle(currentLang)),
                         fontSize = 11.sp,
                         color = currentChannel.brandColor,
                         fontWeight = FontWeight.Bold
@@ -253,7 +280,7 @@ fun WhatsAppTelegramOtpView(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "رمز التحقق الأمني",
+            text = tr("otp.title"),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -262,7 +289,7 @@ fun WhatsAppTelegramOtpView(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = "تم إرسال رمز الأمان المكوّن من 6 أرقام إلى:",
+            text = tr("otp.sent_to_sub"),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -406,13 +433,13 @@ fun WhatsAppTelegramOtpView(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "النظام مقفل مؤقتاً لحماية الحساب ️",
+                            text = tr("otp.lock_banner_title"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
                         )
                         Text(
-                            text = "يرجى الانتظار $lockRemainingSeconds ثانية لإعادة المحاولة",
+                            text = trFmt("otp.lock_banner_wait_fmt", "sec" to lockRemainingSeconds),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -447,7 +474,7 @@ fun WhatsAppTelegramOtpView(
 
         // Delivery Channels for Resending Code
         Text(
-            text = "إعادة إرسال الرمز عبر قناة أخرى:",
+            text = tr("otp.resend_other"),
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium
@@ -482,7 +509,7 @@ fun WhatsAppTelegramOtpView(
                         ChannelBrandIcon(channel = channel, size = 20.dp)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = channel.titleAr,
+                            text = channel.localizedTitle(currentLang),
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.onSurfaceVariant
@@ -497,7 +524,7 @@ fun WhatsAppTelegramOtpView(
         // Resend Timer Status
         if (!canResend && !isLocked) {
             Text(
-                text = "يمكنك إعادة إرسال الرمز بعد ($resendCountdown) ثانية",
+                text = trFmt("otp.resend_countdown_fmt", "sec" to resendCountdown),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
@@ -518,7 +545,7 @@ fun WhatsAppTelegramOtpView(
                     Icon(Icons.Default.Refresh, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                 }
-                Text("إعادة إرسال الرمز الآن", fontSize = 12.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold)
+                Text(tr("otp.resend_now"), fontSize = 12.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -537,7 +564,7 @@ fun WhatsAppTelegramOtpView(
         ) {
             if (isVerifying) {
                 ExecutiveButtonLoadingIndicator(
-                    loadingText = "جاري التحقق من صحة الرمز...",
+                    loadingText = tr("otp.verifying"),
                     spinnerSize = 18.dp,
                     textColor = adaptiveOnPrimary,
                     spinnerPrimaryColor = adaptiveOnPrimary,
@@ -546,7 +573,7 @@ fun WhatsAppTelegramOtpView(
             } else {
                 Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("تأكيد الرمز والدخول", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(tr("otp.confirm_enter"), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -20,6 +20,12 @@ class OozoxApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Initialize 14-language localization catalog and start server-backed sync
+        com.example.util.Translations.init(this)
+        com.example.util.ServerLocalizationSyncManager.syncLanguageAsync(
+            context = this,
+            language = com.example.util.Translations.activeLanguage(this)
+        )
         // Initialize Notification Channels & FCM Token Manager
         com.example.util.FcmNotificationManager.initialize(this)
         try {

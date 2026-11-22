@@ -18,6 +18,10 @@ object RetrofitClient {
     private var authToken: String? = null
 
     @Volatile
+    var activeLanguage: String = "ar"
+        private set
+
+    @Volatile
     var enableNetworkBodyLogs: Boolean = false
 
     @Volatile
@@ -50,6 +54,11 @@ object RetrofitClient {
         authToken = token?.trim()?.takeIf { it.isNotEmpty() }
     }
 
+    fun setActiveLanguage(langCode: String?) {
+        val cleaned = langCode?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: "ar"
+        activeLanguage = cleaned
+    }
+
     fun getAuthToken(): String? = authToken
 
     fun hasActiveSession(): Boolean = !authToken.isNullOrBlank()
@@ -67,9 +76,17 @@ object RetrofitClient {
         get() = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
+                val lang = activeLanguage
                 val requestBuilder = originalRequest.newBuilder()
                     .header("Accept", "application/json")
                     .header("Content-Type", "application/json")
+
+                if (originalRequest.header("Accept-Language").isNullOrBlank()) {
+                    requestBuilder.header("Accept-Language", lang)
+                }
+                if (originalRequest.header("X-App-Language").isNullOrBlank()) {
+                    requestBuilder.header("X-App-Language", lang)
+                }
 
                 val token = authToken
                 if (!token.isNullOrBlank() && originalRequest.header("Authorization").isNullOrBlank()) {

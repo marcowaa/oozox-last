@@ -33,7 +33,28 @@ object SecurityValidator {
         val flag: String,
         val exampleLength: Int = 10,
         val placeholder: String = "1012345678"
-    )
+    ) {
+        fun localizedName(language: AppLanguage): String = when (code) {
+            "+20" -> Translations.get("country.eg", language)
+            "+966" -> Translations.get("country.sa", language)
+            "+971" -> Translations.get("country.ae", language)
+            "+965" -> Translations.get("country.kw", language)
+            "+974" -> Translations.get("country.qa", language)
+            "+973" -> Translations.get("country.bh", language)
+            "+968" -> Translations.get("country.om", language)
+            "+962" -> Translations.get("country.jo", language)
+            "+961" -> Translations.get("country.lb", language)
+            "+964" -> Translations.get("country.iq", language)
+            "+212" -> Translations.get("country.ma", language)
+            "+216" -> Translations.get("country.tn", language)
+            "+213" -> Translations.get("country.dz", language)
+            "+1" -> Translations.get("country.us", language)
+            "+44" -> Translations.get("country.gb", language)
+            "+49" -> Translations.get("country.de", language)
+            "+90" -> Translations.get("country.tr", language)
+            else -> countryNameAr
+        }
+    }
 
     val SUPPORTED_COUNTRIES = listOf(
         CountryCodeInfo("+20", "مصر", "🇪🇬", 10, "1012345678"),
@@ -67,14 +88,18 @@ object SecurityValidator {
     /**
      * Deep validation of mobile number based on country dialing rules and prefix patterns
      */
-    fun validateMobileNumber(selectedCountry: CountryCodeInfo, rawInput: String): PhoneValidationResult {
+    fun validateMobileNumber(
+        selectedCountry: CountryCodeInfo,
+        rawInput: String,
+        language: AppLanguage = AppLanguage.ARABIC
+    ): PhoneValidationResult {
         val trimmed = rawInput.trim()
         if (trimmed.isBlank()) {
             return PhoneValidationResult(
                 isValid = false,
                 cleanDigits = "",
                 fullFormattedPhone = selectedCountry.code,
-                specificError = "يرجى كتابة رقم الهاتف المحمول للمتابعة 📱"
+                specificError = Translations.get("sec.phone_empty", language)
             )
         }
 
@@ -84,7 +109,7 @@ object SecurityValidator {
                 isValid = false,
                 cleanDigits = "",
                 fullFormattedPhone = selectedCountry.code,
-                specificError = "الرقم يحتوي على رموز أو أحرف غير صالحة. يرجى إدخال أرقام فقط ⚠️"
+                specificError = Translations.get("sec.phone_chars", language)
             )
         }
 
@@ -95,14 +120,14 @@ object SecurityValidator {
         val strippedCode = selectedCountry.code.removePrefix("+")
         if (digits.startsWith(strippedCode)) {
             digits = digits.removePrefix(strippedCode)
-            autoCorrection = "تم حذف كود الدولة المكرر تلقائياً (${selectedCountry.code})"
+            autoCorrection = Translations.format("sec.phone_strip_cc_fmt", language, "code" to selectedCountry.code)
         }
 
         // Strip leading 0 if present (e.g. 010... -> 10...)
         if (digits.startsWith("0")) {
             digits = digits.drop(1)
             if (autoCorrection == null) {
-                autoCorrection = "تمت إزالة الصفر الأول لمطابقة المعيار الدولي"
+                autoCorrection = Translations.get("sec.phone_strip_zero", language)
             }
         }
 
@@ -111,7 +136,7 @@ object SecurityValidator {
                 isValid = false,
                 cleanDigits = "",
                 fullFormattedPhone = selectedCountry.code,
-                specificError = "يرجى إكمال كتابة رقم الهاتف المحمول"
+                specificError = Translations.get("sec.phone_incomplete", language)
             )
         }
 
@@ -119,69 +144,69 @@ object SecurityValidator {
         var specificError: String? = null
 
         when (selectedCountry.code) {
-            "+20" -> { // Egypt: 10 digits without leading 0. Prefixes: 10, 11, 12, 15
+            "+20" -> {
                 when {
                     digits.length < 10 -> {
-                        specificError = "رقم الهاتف المصري غير مكتمل (متبقي ${10 - digits.length} أرقام) 🇪🇬"
+                        specificError = Translations.format("sec.eg_short_fmt", language, "rem" to (10 - digits.length))
                     }
                     digits.length > 10 -> {
-                        specificError = "رقم الهاتف المصري أطول من اللازم (يجب أن يتكون من 10 أرقام بعد إزالة الصفر) ⚠️"
+                        specificError = Translations.get("sec.eg_long", language)
                     }
-                    digits.startsWith("10") -> carrier = "فودافون مصر (Vodafone)"
-                    digits.startsWith("11") -> carrier = "إتصالات مصر (e& / Etisalat)"
-                    digits.startsWith("12") -> carrier = "أورنج مصر (Orange)"
-                    digits.startsWith("15") -> carrier = "المصرية للاتصالات (WE)"
-                    else -> specificError = "رقم المحمول المصري غير صالح. يجب أن يبدأ بـ 010 أو 011 أو 012 أو 015 ⚠️"
+                    digits.startsWith("10") -> carrier = "Vodafone Egypt"
+                    digits.startsWith("11") -> carrier = "e& / Etisalat Egypt"
+                    digits.startsWith("12") -> carrier = "Orange Egypt"
+                    digits.startsWith("15") -> carrier = "WE Telecom Egypt"
+                    else -> specificError = Translations.get("sec.eg_prefix", language)
                 }
             }
-            "+966" -> { // Saudi Arabia: 9 digits without leading 0. Starts with 5
+            "+966" -> {
                 when {
                     digits.length < 9 -> {
-                        specificError = "رقم الهاتف السعودي غير مكتمل (متبقي ${9 - digits.length} أرقام) 🇸🇦"
+                        specificError = Translations.format("sec.sa_short_fmt", language, "rem" to (9 - digits.length))
                     }
                     digits.length > 9 -> {
-                        specificError = "رقم الهاتف السعودي أطول من المعتاد (يتكون من 9 أرقام بعد الكود) ⚠️"
+                        specificError = Translations.get("sec.sa_long", language)
                     }
                     !digits.startsWith("5") -> {
-                        specificError = "رقم الجوال السعودي يجب أن يبدأ بالرقم 5 (مثال: 512345678) 🇸🇦"
+                        specificError = Translations.get("sec.sa_prefix", language)
                     }
-                    digits.startsWith("50") || digits.startsWith("53") || digits.startsWith("55") -> carrier = "STC (الاتصالات السعودية)"
-                    digits.startsWith("54") || digits.startsWith("56") -> carrier = "موبايلي (Mobily)"
-                    digits.startsWith("58") || digits.startsWith("59") -> carrier = "زين السعودية (Zain)"
-                    else -> carrier = "شبكة اتصالات سعودية معتمدة"
+                    digits.startsWith("50") || digits.startsWith("53") || digits.startsWith("55") -> carrier = "STC"
+                    digits.startsWith("54") || digits.startsWith("56") -> carrier = "Mobily"
+                    digits.startsWith("58") || digits.startsWith("59") -> carrier = "Zain KSA"
+                    else -> carrier = "KSA Carrier"
                 }
             }
-            "+971" -> { // UAE: 9 digits without leading 0. Starts with 5
+            "+971" -> {
                 when {
                     digits.length < 9 -> {
-                        specificError = "رقم الهاتف الإماراتي غير مكتمل (متبقي ${9 - digits.length} أرقام) 🇦🇪"
+                        specificError = Translations.format("sec.ae_short_fmt", language, "rem" to (9 - digits.length))
                     }
                     digits.length > 9 -> {
-                        specificError = "رقم الهاتف الإماراتي يجب أن يتكون من 9 أرقام 🇦🇪"
+                        specificError = Translations.get("sec.ae_long", language)
                     }
                     !digits.startsWith("5") -> {
-                        specificError = "رقم الجوال الإماراتي يجب أن يبدأ بالرقم 5 (مثال: 501234567) 🇦🇪"
+                        specificError = Translations.get("sec.ae_prefix", language)
                     }
-                    digits.startsWith("50") || digits.startsWith("54") || digits.startsWith("56") -> carrier = "اتصالات الإمارات (e&)"
-                    digits.startsWith("52") || digits.startsWith("55") || digits.startsWith("58") -> carrier = "دو (du)"
-                    else -> carrier = "اتصالات الإمارات"
+                    digits.startsWith("50") || digits.startsWith("54") || digits.startsWith("56") -> carrier = "e& UAE"
+                    digits.startsWith("52") || digits.startsWith("55") || digits.startsWith("58") -> carrier = "du UAE"
+                    else -> carrier = "UAE Carrier"
                 }
             }
-            "+965" -> { // Kuwait: 8 digits. Starts with 5, 6, 9
+            "+965" -> {
                 when {
-                    digits.length < 8 -> specificError = "رقم الهاتف الكويتي غير مكتمل (يتكون من 8 أرقام) 🇰🇼"
-                    digits.length > 8 -> specificError = "رقم الهاتف الكويتي يجب أن يتكون من 8 أرقام 🇰🇼"
-                    digits.startsWith("9") -> carrier = "زين الكويت (Zain)"
-                    digits.startsWith("6") -> carrier = "أوريدو الكويت (Ooredoo)"
-                    digits.startsWith("5") -> carrier = "STC الكويت"
-                    else -> specificError = "رقم الجوال الكويتي يجب أن يبدأ بـ 5 أو 6 أو 9 🇰🇼"
+                    digits.length < 8 -> specificError = Translations.get("sec.kw_short", language)
+                    digits.length > 8 -> specificError = Translations.get("sec.kw_long", language)
+                    digits.startsWith("9") -> carrier = "Zain Kuwait"
+                    digits.startsWith("6") -> carrier = "Ooredoo Kuwait"
+                    digits.startsWith("5") -> carrier = "STC Kuwait"
+                    else -> specificError = Translations.get("sec.kw_prefix", language)
                 }
             }
-            else -> { // International / Other Arab Countries
+            else -> {
                 if (digits.length < 7) {
-                    specificError = "رقم الهاتف قصير جداً وغير مكتمل لهذا البلد ⚠️"
+                    specificError = Translations.get("sec.intl_short", language)
                 } else if (digits.length > 14) {
-                    specificError = "رقم الهاتف يتجاوز الحد الأقصى للأرقام الدولية المسموح بها ⚠️"
+                    specificError = Translations.get("sec.intl_long", language)
                 }
             }
         }

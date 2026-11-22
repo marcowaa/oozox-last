@@ -15,12 +15,35 @@ enum class BroadcastTargetCategory(val label: String, val icon: String, val desc
     GOLD_TRADERS("الشركات والتجار المعتمدون", "🏢", "إرسال لجميع التجار والشركات والمؤسسات المعتمدة"),
     SUB_ACCOUNTS("أصحاب الحسابات الفرعية والخزائن", "", "إرسال للموظفين والمحاسبين والخزائن الفرعية"),
     WORKGROUPS("مجموعات وفرق العمل والمشاريع", "️", "إرسال لأعضاء مجموعات العمل الميداني وإدارة المشاريع"),
-    ACTIVE_RECENTLY("المستخدمين النشطين مؤخراً", "", "إرسال للمستخدمين المتفاعلين بالعمليات والصفقات")
+    ACTIVE_RECENTLY("المستخدمين النشطين مؤخراً", "", "إرسال للمستخدمين المتفاعلين بالعمليات والصفقات");
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        ALL_USERS -> com.example.util.Translations.get("broadcast.cat_all", language)
+        BUSINESSMEN -> com.example.util.Translations.get("broadcast.cat_business", language)
+        GOLD_TRADERS -> com.example.util.Translations.get("broadcast.cat_traders", language)
+        SUB_ACCOUNTS -> com.example.util.Translations.get("broadcast.cat_subaccounts", language)
+        WORKGROUPS -> com.example.util.Translations.get("broadcast.cat_workgroups", language)
+        ACTIVE_RECENTLY -> com.example.util.Translations.get("broadcast.cat_active", language)
+    }
+
+    fun localizedDescription(language: com.example.util.AppLanguage): String = when (this) {
+        ALL_USERS -> com.example.util.Translations.get("broadcast.desc_all", language)
+        BUSINESSMEN -> com.example.util.Translations.get("broadcast.desc_business", language)
+        GOLD_TRADERS -> com.example.util.Translations.get("broadcast.desc_traders", language)
+        SUB_ACCOUNTS -> com.example.util.Translations.get("broadcast.desc_subaccounts", language)
+        WORKGROUPS -> com.example.util.Translations.get("broadcast.desc_workgroups", language)
+        ACTIVE_RECENTLY -> com.example.util.Translations.get("broadcast.desc_active", language)
+    }
 }
 
 enum class MetalType(val label: String) {
     GOLD("ذهب"),
-    SILVER("فضة")
+    SILVER("فضة");
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        GOLD -> com.example.util.Translations.get("metal.gold", language)
+        SILVER -> com.example.util.Translations.get("metal.silver", language)
+    }
 }
 
 enum class SilverKarat(val label: String) {
@@ -32,6 +55,20 @@ enum class SilverKarat(val label: String) {
         KARAT_999 -> "عيار 999"
         KARAT_925 -> "عيار 925"
         KARAT_800 -> "عيار 800"
+    }
+
+    fun displayLabel(language: com.example.util.AppLanguage): String = localizedLabel(language)
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        KARAT_999 -> com.example.util.Translations.get("silver.karat_999", language)
+        KARAT_925 -> com.example.util.Translations.get("silver.karat_925", language)
+        KARAT_800 -> com.example.util.Translations.get("silver.karat_800", language)
+    }
+
+    fun localizedFullLabel(language: com.example.util.AppLanguage): String = when (this) {
+        KARAT_999 -> com.example.util.Translations.get("silver.karat_999_full", language)
+        KARAT_925 -> com.example.util.Translations.get("silver.karat_925_full", language)
+        KARAT_800 -> com.example.util.Translations.get("silver.karat_800_full", language)
     }
 }
 
@@ -46,6 +83,15 @@ enum class GoldKarat(val label: String) {
         KARAT_18 -> "عيار 18"
         KARAT_21 -> "عيار 21"
         KARAT_24 -> "عيار 24"
+    }
+
+    fun displayLabel(language: com.example.util.AppLanguage): String = localizedLabel(language)
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        KARAT_14 -> com.example.util.Translations.get("gold.karat_14", language)
+        KARAT_18 -> com.example.util.Translations.get("gold.karat_18", language)
+        KARAT_21 -> com.example.util.Translations.get("gold.karat_21", language)
+        KARAT_24 -> com.example.util.Translations.get("gold.karat_24", language)
     }
 
     companion object {
@@ -92,6 +138,15 @@ enum class ProjectType {
         CONTRACTING -> "مقاولات وتوريد"
         OTHER -> "مشروع آخر"
     }
+
+    fun displayLabel(language: com.example.util.AppLanguage): String = localizedLabel(language)
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        CONSTRUCTION -> com.example.util.Translations.get("project.type_construction", language)
+        FINISHING -> com.example.util.Translations.get("project.type_finishing", language)
+        CONTRACTING -> com.example.util.Translations.get("project.type_contracting", language)
+        OTHER -> com.example.util.Translations.get("project.type_other", language)
+    }
 }
 
 enum class TraderStatus {
@@ -133,7 +188,28 @@ enum class SubscriptionTier(
         description = "كل الميزات بلا حدود + المحاسب الذكي والوكيل الصوتي AI + النسخ الاحتياطي التلقائي السحابي + دعم فني VIP مباشر",
         badgeText = "الماسية VIP",
         defaultMonthlyPrice = 1999.0
-    )
+    );
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        FREE_TRIAL -> com.example.util.Translations.get("sub.tier_free_label", language)
+        SILVER_TRADER -> com.example.util.Translations.get("sub.tier_silver_label", language)
+        GOLD_ENTERPRISE -> com.example.util.Translations.get("sub.tier_gold_label", language)
+        DIAMOND_VIP -> com.example.util.Translations.get("sub.tier_diamond_label", language)
+    }
+
+    fun localizedDescription(language: com.example.util.AppLanguage): String = when (this) {
+        FREE_TRIAL -> com.example.util.Translations.get("sub.tier_free_desc", language)
+        SILVER_TRADER -> com.example.util.Translations.get("sub.tier_silver_desc", language)
+        GOLD_ENTERPRISE -> com.example.util.Translations.get("sub.tier_gold_desc", language)
+        DIAMOND_VIP -> com.example.util.Translations.get("sub.tier_diamond_desc", language)
+    }
+
+    fun localizedBadgeText(language: com.example.util.AppLanguage): String = when (this) {
+        FREE_TRIAL -> com.example.util.Translations.get("sub.tier_free_badge", language)
+        SILVER_TRADER -> com.example.util.Translations.get("sub.tier_silver_badge", language)
+        GOLD_ENTERPRISE -> com.example.util.Translations.get("sub.tier_gold_badge", language)
+        DIAMOND_VIP -> com.example.util.Translations.get("sub.tier_diamond_badge", language)
+    }
 }
 
 @Entity(tableName = "users")
@@ -699,7 +775,23 @@ enum class ProjectMemberRole(val label: String, val description: String) {
     FINANCIAL_PARTNER("شريك مالي ومساهم", "الاطلاع على رأس المال والميزانية والتقارير المالية"),
     EXECUTIVE_MANAGER("مدير تنفيذي", "إدارة العمليات والموقع الميداني وإرسال طلبات التوريد"),
     PROCUREMENT_OFFICER("مسؤول مشتريات وتوريد", "إدخال فواتير المواد الخام والمصروفات الميدانية"),
-    AUDITOR("مدقق ومراجع حسابات", "عرض الحسابات والسجلات والمطابقة دون صلاحية التعديل")
+    AUDITOR("مدقق ومراجع حسابات", "عرض الحسابات والسجلات والمطابقة دون صلاحية التعديل");
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        OWNER -> com.example.util.Translations.get("proj.role_owner", language)
+        FINANCIAL_PARTNER -> com.example.util.Translations.get("proj.role_partner", language)
+        EXECUTIVE_MANAGER -> com.example.util.Translations.get("proj.role_exec", language)
+        PROCUREMENT_OFFICER -> com.example.util.Translations.get("proj.role_procurement", language)
+        AUDITOR -> com.example.util.Translations.get("proj.role_auditor", language)
+    }
+
+    fun localizedDescription(language: com.example.util.AppLanguage): String = when (this) {
+        OWNER -> com.example.util.Translations.get("proj.role_desc_owner", language)
+        FINANCIAL_PARTNER -> com.example.util.Translations.get("proj.role_desc_partner", language)
+        EXECUTIVE_MANAGER -> com.example.util.Translations.get("proj.role_desc_exec", language)
+        PROCUREMENT_OFFICER -> com.example.util.Translations.get("proj.role_desc_procurement", language)
+        AUDITOR -> com.example.util.Translations.get("proj.role_desc_auditor", language)
+    }
 }
 
 @Entity(tableName = "project_members")
@@ -836,7 +928,16 @@ enum class MerchantProductCategory(val label: String, val icon: String) {
     GOLD_POUND("جنيهات ذهب", ""),
     SILVER("فضيات 925", ""),
     SERVICES("خدمات وصياغة", ""),
-    CUSTOM_ORDERS("تفصيل وتصميم", "")
+    CUSTOM_ORDERS("تفصيل وتصميم", "");
+
+    fun localizedLabel(language: com.example.util.AppLanguage): String = when (this) {
+        BULLION -> com.example.util.Translations.get("merchant.cat_bullion", language)
+        JEWELRY -> com.example.util.Translations.get("merchant.cat_jewelry", language)
+        GOLD_POUND -> com.example.util.Translations.get("merchant.cat_gold_pound", language)
+        SILVER -> com.example.util.Translations.get("merchant.cat_silver", language)
+        SERVICES -> com.example.util.Translations.get("merchant.cat_services", language)
+        CUSTOM_ORDERS -> com.example.util.Translations.get("merchant.cat_custom", language)
+    }
 }
 
 @Entity(tableName = "merchant_reviews")
@@ -1044,6 +1145,14 @@ object QuickBusinessReplies {
         "يرجى إرسال الفاتورة الرسمية",
         "تم استلام الشحنة والمطابقة",
         "ننتظر اعتماد سند الصرف"
+    )
+
+    fun localizedReplies(language: com.example.util.AppLanguage): List<String> = listOf(
+        com.example.util.Translations.get("quick_reply.confirmed", language),
+        com.example.util.Translations.get("quick_reply.transferred", language),
+        com.example.util.Translations.get("quick_reply.send_invoice", language),
+        com.example.util.Translations.get("quick_reply.shipment_matched", language),
+        com.example.util.Translations.get("quick_reply.awaiting_voucher", language)
     )
 }
 

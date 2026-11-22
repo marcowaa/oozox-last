@@ -1275,10 +1275,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setLanguage(language: com.example.util.AppLanguage) {
         _currentLanguage.value = language
         prefs.edit().putString("app_language", language.code).apply()
-        com.example.util.Translations.applyLocale(getApplication(), language)
+        val app = getApplication<android.app.Application>()
+        com.example.util.Translations.applyLocale(app, language)
+        com.example.util.NotificationHelper.createNotificationChannels(app)
+        com.example.util.ServerLocalizationSyncManager.syncLanguageAsync(
+            context = app,
+            language = language,
+            pushPreferenceToServer = true
+        )
     }
 
     init {
+        com.example.util.Translations.init(getApplication())
         viewModelScope.launch(Dispatchers.IO) {
             repository.seedInitialDataIfEmpty()
             repository.seedSubscriptionPlansIfEmpty()

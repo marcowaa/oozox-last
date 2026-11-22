@@ -160,6 +160,9 @@ enum class AppThemePalette(
         onPrimaryLight = Color(0xFFFFFFFF)
     );
 
+    fun localizedTitle(language: com.example.util.AppLanguage): String =
+        com.example.util.Translations.get("theme.$id", language)
+
     companion object {
         fun fromId(id: String?): AppThemePalette = entries.find { it.id == id } ?: OOZOX_INFINITY
     }

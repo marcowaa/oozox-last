@@ -28,9 +28,10 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.FinancialComplaintEntity
 import com.example.data.model.WorkGroupEntity
 import com.example.ui.theme.*
-import com.example.util.AppLanguage
 import com.example.util.LocalAppLanguage
+import com.example.util.Translations
 import com.example.util.acctStr
+import com.example.util.tr
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,14 +43,13 @@ import java.util.*
 fun RetroactiveComplaintDialog(
     groups: List<WorkGroupEntity>,
     initialGroup: WorkGroupEntity? = null,
-    currentStaffName: String = "أ/ طارق المحاسب",
-    currentStaffRole: String = "محاسب العهدة",
+    currentStaffName: String = "",
+    currentStaffRole: String = "",
     currentStaffId: String = "staff_current",
     onDismiss: () -> Unit,
     onSubmitComplaint: (FinancialComplaintEntity) -> Unit
 ) {
     val lang = LocalAppLanguage.current
-    val isAr = lang == AppLanguage.ARABIC || lang == AppLanguage.URDU || lang == AppLanguage.PERSIAN
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
     val today = remember { dateFormat.format(Date()) }
     val yesterday = remember {
@@ -63,16 +63,21 @@ fun RetroactiveComplaintDialog(
         dateFormat.format(cal.time)
     }
 
-    val categories = remember(isAr) {
-        if (isAr) {
-            listOf("عجز صندوق", "فرق كاشير", "مرتجع عميل", "مصنعيات", "قيد دفتري", "تسوية أخرى")
-        } else {
-            listOf("Cash Deficit", "POS Gap", "Client Return", "Craft Fee", "Ledger Fix", "Adjustment")
-        }
+    val categories = remember(lang) {
+        listOf(
+            Translations.get("retro.cat_deficit", lang),
+            Translations.get("retro.cat_pos_gap", lang),
+            Translations.get("retro.cat_return", lang),
+            Translations.get("retro.cat_craft", lang),
+            Translations.get("retro.cat_ledger", lang),
+            Translations.get("retro.cat_other", lang)
+        )
     }
 
     var selectedGroup by remember { mutableStateOf(initialGroup ?: groups.firstOrNull()) }
-    val defaultDept = if (isAr) "الخزينة العامة" else "Main Treasury"
+    val defaultDept = tr("retro.main_treasury")
+    val defaultStaffName = tr("lock.default_user")
+    val defaultStaffRole = tr("retro.default_staff_role")
     var targetDate by remember { mutableStateOf(yesterday) }
     var customDateInput by remember { mutableStateOf("") }
     var isCustomDate by remember { mutableStateOf(false) }
@@ -82,8 +87,12 @@ fun RetroactiveComplaintDialog(
     var category by remember(categories) { mutableStateOf(categories.first()) }
     var title by remember { mutableStateOf("") }
     var details by remember { mutableStateOf("") }
-    var staffName by remember { mutableStateOf(currentStaffName) }
-    var staffRole by remember { mutableStateOf(currentStaffRole) }
+    var staffName by remember(currentStaffName, defaultStaffName) {
+        mutableStateOf(currentStaffName.ifBlank { defaultStaffName })
+    }
+    var staffRole by remember(currentStaffRole, defaultStaffRole) {
+        mutableStateOf(currentStaffRole.ifBlank { defaultStaffRole })
+    }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
 

@@ -42,8 +42,11 @@ import com.example.ui.navigation.MainAppNavigation
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.GoldPrimary
 import com.example.ui.viewmodel.MainViewModel
+import com.example.util.AppLocalizationProvider
 import com.example.util.NotificationHelper
 import com.example.util.SecurityValidator
+import com.example.util.Translations
+import com.example.util.tr
 
 class MainActivity : FragmentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -78,7 +81,8 @@ class MainActivity : FragmentActivity() {
             )
         )
 
-        // Initialize local notification channels & Firebase Cloud Messaging
+        // Initialize translation engine and notification channels in active language
+        Translations.init(applicationContext)
         NotificationHelper.createNotificationChannels(applicationContext)
         com.example.util.FcmNotificationManager.initialize(applicationContext)
         com.example.util.MessengerBubbleManager.initialize(applicationContext)
@@ -147,6 +151,8 @@ class MainActivity : FragmentActivity() {
             }
 
             if (devModeStatus.isDevModeActive) {
+                val activeLang = remember { Translations.activeLanguage(this@MainActivity) }
+                AppLocalizationProvider(currentLanguage = activeLang) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -176,7 +182,7 @@ class MainActivity : FragmentActivity() {
                         Spacer(modifier = Modifier.height(20.dp))
 
                         Text(
-                            text = "وضع المطور مفعّل 🛡️",
+                            text = tr("security.dev_mode_title"),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -186,7 +192,7 @@ class MainActivity : FragmentActivity() {
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "لحماية بياناتك المالية، يُرجى إيقاف خيارات المطور وتصحيح USB للمتابعة بأمان.",
+                            text = tr("security.dev_mode_desc"),
                             fontSize = 13.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -209,13 +215,13 @@ class MainActivity : FragmentActivity() {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "خيارات المطور",
+                                    text = tr("security.dev_options"),
                                     fontSize = 13.sp,
                                     color = Color.White,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = if (devModeStatus.isDevSettingsEnabled) "مفعّلة ⚠️" else "معطّلة ✅",
+                                    text = if (devModeStatus.isDevSettingsEnabled) tr("security.enabled_warn") else tr("security.disabled_ok"),
                                     fontSize = 12.5.sp,
                                     color = if (devModeStatus.isDevSettingsEnabled) Color(0xFFFB7185) else Color(0xFF34D399),
                                     fontWeight = FontWeight.Bold
@@ -230,13 +236,13 @@ class MainActivity : FragmentActivity() {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "تصحيح USB",
+                                        text = tr("security.usb_debug"),
                                         fontSize = 13.sp,
                                         color = Color.White,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
-                                        text = "مفعّل ⚠️",
+                                        text = tr("security.enabled_warn"),
                                         fontSize = 12.5.sp,
                                         color = Color(0xFFFB7185),
                                         fontWeight = FontWeight.Bold
@@ -266,7 +272,7 @@ class MainActivity : FragmentActivity() {
                         ) {
                             Icon(Icons.Default.Settings, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("فتح الإعدادات", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(tr("security.open_settings"), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -282,7 +288,7 @@ class MainActivity : FragmentActivity() {
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("إعادة الفحص", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(tr("security.recheck"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -294,9 +300,10 @@ class MainActivity : FragmentActivity() {
                         ) {
                             Icon(Icons.Default.ExitToApp, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("إغلاق التطبيق", color = Color(0xFF9CA3AF), fontSize = 13.sp)
+                            Text(tr("security.exit_app"), color = Color(0xFF9CA3AF), fontSize = 13.sp)
                         }
                     }
+                }
                 }
                 return@setContent
             }
@@ -320,6 +327,8 @@ class MainActivity : FragmentActivity() {
             var errorMessage by remember { mutableStateOf("") }
 
             if (hasFatalError) {
+                val activeLang = remember { Translations.activeLanguage(this@MainActivity) }
+                AppLocalizationProvider(currentLanguage = activeLang) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -340,7 +349,7 @@ class MainActivity : FragmentActivity() {
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "حدث استثناء بسيط في التطبيق",
+                            text = tr("security.crash_title"),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -348,7 +357,7 @@ class MainActivity : FragmentActivity() {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "تم الحفاظ على بياناتك بأمان. يمكنك إعادة تحميل التطبيق الآن.",
+                            text = tr("security.crash_desc"),
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -364,9 +373,10 @@ class MainActivity : FragmentActivity() {
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("إعادة تشغيل التطبيق", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(tr("security.restart_app"), color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
+                }
                 }
             } else {
                 AppProvider(viewModel = viewModel) {

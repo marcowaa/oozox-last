@@ -865,9 +865,10 @@ private fun GradualFeatureRestrictionTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val currentLang = com.example.util.LocalAppLanguage.current
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(feat.titleAr, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                                Text(feat.descriptionAr, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                Text(feat.localizedTitle(currentLang), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(feat.localizedDescription(currentLang), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
 
                             Surface(

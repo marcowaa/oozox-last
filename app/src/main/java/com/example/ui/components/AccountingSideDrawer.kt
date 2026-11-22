@@ -11,7 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +51,7 @@ fun AccountingSideDrawerContent(
 ) {
     val currentLang = LocalAppLanguage.current
     val str: (String) -> String = { key -> AccountingI18n.get(key, currentLang) }
+    var showLanguageModal by remember { mutableStateOf(false) }
     val primaryGold = adaptiveGoldPrimary
     val onPrimary = adaptiveOnPrimary
     val statusGreen = adaptiveStatusGreen
@@ -293,61 +294,69 @@ fun AccountingSideDrawerContent(
                     )
                 }
 
-                // Language Toggle Pills
+                // 14-Language Selector
                 item {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
-                    Row(
+                    Surface(
+                        onClick = { showLanguageModal = true },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        border = BorderStroke(1.dp, primaryGold.copy(alpha = 0.35f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .heightIn(min = 48.dp)
+                            .testTag("accounting_drawer_language_btn")
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = str("language"),
-                                tint = primaryGold,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = str("language"),
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = str("language"),
+                                    tint = primaryGold,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = str("language"),
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(
-                                AppLanguage.ARABIC to "العربية",
-                                AppLanguage.ENGLISH to "EN"
-                            ).forEach { (lang, codeLabel) ->
-                                val isSel = currentLang == lang
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Surface(
-                                    onClick = { onLanguageChange(lang) },
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isSel) primaryGold else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                                    modifier = Modifier.heightIn(min = 38.dp)
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = primaryGold.copy(alpha = 0.16f)
                                 ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(
-                                            text = codeLabel,
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isSel) onPrimary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
+                                    Text(
+                                        text = "${currentLang.flag} ${currentLang.displayName}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = primaryGold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
                                 }
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = str("choose_language"),
+                                    tint = primaryGold,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -380,6 +389,16 @@ fun AccountingSideDrawerContent(
                 }
             }
         }
+    }
+
+    if (showLanguageModal) {
+        AppLanguagePickerDialog(
+            currentLanguage = currentLang,
+            onLanguageSelected = { selected ->
+                onLanguageChange(selected)
+            },
+            onDismiss = { showLanguageModal = false }
+        )
     }
 }
 
