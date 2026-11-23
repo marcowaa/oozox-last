@@ -15,6 +15,8 @@ const i18nRoutes = require('./routes/i18nRoutes');
 const businessRoutes = require('./routes/businessRoutes');
 const hrRoutes = require('./routes/hrRoutes');
 const taskRoutes = require('./routes/taskRoutes');
+const otpRoutes = require('./routes/otpRoutes');
+const telegramWebhookRoutes = require('./routes/telegramWebhookRoutes');
 const { sanitizeNoSql } = require('./middlewares/sanitizeMiddleware');
 const { i18nMiddleware } = require('./middlewares/i18nMiddleware');
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
@@ -95,6 +97,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/business', businessRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/otp', otpRoutes);
+app.use('/api/webhooks/telegram', telegramWebhookRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
