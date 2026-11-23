@@ -319,20 +319,15 @@ fun VoiceAccountingDialog(
                                     )
                                 }
                             }
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = {
                                     speechManager.destroy()
                                     onDismiss()
                                 },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "إغلاق",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "إغلاق",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
 
@@ -494,17 +489,13 @@ fun VoiceAccountingDialog(
                         }
 
                         if (parsedRecord != null) {
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = { if (isPlayingAudio) stopSpokenAudio() else playSpokenAudio() },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlayingAudio) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
-                                    contentDescription = "استماع",
-                                    tint = adaptiveGoldPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                                imageVector = if (isPlayingAudio) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "استماع",
+                                tint = adaptiveGoldPrimary,
+                                containerColor = adaptiveGoldPrimary.copy(alpha = 0.14f)
+                            )
                         }
                     }
 

@@ -69,11 +69,14 @@ import com.example.data.model.HashtagAccountEntity
 import com.example.data.model.HashtagEntryDirection
 import com.example.data.model.HashtagEntryEntity
 import com.example.data.model.HashtagEntryType
+import com.example.data.model.HiddenSubAccountEntity
 import com.example.data.model.InvoiceEntity
 import com.example.data.model.MessageEntity
 import com.example.data.model.MessageStatus
 import com.example.data.model.MessageType
 import com.example.data.model.ProjectEntity
+import com.example.data.model.ProjectMemberEntity
+import com.example.data.model.ProjectMemberRole
 import com.example.data.model.ProjectTaskEntity
 import com.example.data.model.TransactionEntity
 import com.example.data.model.UserEntity
@@ -87,11 +90,13 @@ import com.example.ui.components.ClearingHouseDialog
 import com.example.ui.components.CoverPhotoEditorDialog
 import com.example.ui.components.CreatePhysicalFieldTaskDialog
 import com.example.ui.components.GroupMembersAndAddDialog
+import com.example.ui.components.GroupProjectWorkspaceSheet
 import com.example.ui.components.ImageFrameAspectMode
 import com.example.ui.components.MediaChooserKind
 import com.example.ui.components.MediaPreviewItem
 import com.example.ui.components.MediaPreviewModal
 import com.example.ui.components.MediaSourceChooserCard
+import com.example.ui.components.ProjectAccountingEntryDialog
 import com.example.ui.components.VideoEditorDialog
 import com.example.ui.components.VoiceAccountingDialog
 import com.example.ui.components.VoiceDictationAssistantDialog
@@ -107,6 +112,7 @@ import com.example.util.BlockManager
 import com.example.util.DocumentInfo
 import com.example.util.FileUtils
 import com.example.util.GoldUtils
+import com.example.util.ProjectIndustryCatalog
 import com.example.util.ReportExporter
 import com.example.util.SmartVoiceAccountingParser
 import com.example.util.SpeechToTextManager
@@ -170,15 +176,23 @@ fun ChatDetailScreen(
     onRecordHashtagOperation: ((tag: String, entryType: HashtagEntryType, description: String, amount: Double, direction: HashtagEntryDirection, projectId: String?, projectName: String?, paymentMethod: String, isExternalBusiness: Boolean) -> Unit)? = null,
     workGroups: List<WorkGroupEntity> = emptyList(),
     allGroupMembers: List<GroupMemberEntity> = emptyList(),
+    allProjectMembers: List<ProjectMemberEntity> = emptyList(),
+    allEmployees: List<HiddenSubAccountEntity> = emptyList(),
     allContacts: List<ContactEntity> = emptyList(),
     projectTasks: List<ProjectTaskEntity> = emptyList(),
     onInsertFieldTask: (ProjectTaskEntity) -> Unit = {},
     onSubmitTaskProof: (taskId: String, uri: String?, type: String, notes: String?, userId: String?, userName: String?) -> Unit = { _, _, _, _, _, _ -> },
     onConfirmAndArchiveTask: (taskId: String, amount: Double, notes: String?) -> Unit = { _, _, _ -> },
+    onUpdateProjectTaskStatus: (taskId: String, status: String) -> Unit = { _, _ -> },
     onOpenGroupChatById: (String) -> Unit = {},
     onAddGroupMembers: (contacts: List<ContactEntity>, manualName: String, manualPhone: String, roleLabel: String, isGroupAdmin: Boolean) -> Unit = { _, _, _, _, _ -> },
     onRemoveGroupMember: (GroupMemberEntity) -> Unit = {},
-    onToggleGroupMemberAdmin: (GroupMemberEntity) -> Unit = {}
+    onToggleGroupMemberAdmin: (GroupMemberEntity) -> Unit = {},
+    onOpenProjectDetail: (String) -> Unit = {},
+    onAddProjectAccountingEntry: (projectId: String, projectName: String, title: String, amount: Double, isIncome: Boolean, category: String) -> Unit = { _, _, _, _, _, _ -> },
+    onAddProjectMemberWithPerms: (projectId: String, name: String, phone: String, role: ProjectMemberRole, task: String, userId: String?, isAdmin: Boolean, canPost: Boolean, canEdit: Boolean, canExport: Boolean, canDirect: Boolean) -> Unit = { _, _, _, _, _, _, _, _, _, _, _ -> },
+    onPromoteProjectMember: (projectId: String, ProjectMemberEntity) -> Unit = { _, _ -> },
+    onRemoveProjectMember: (projectId: String, ProjectMemberEntity) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val ttsHelper = remember { TextToSpeechHelper(context) }
@@ -570,14 +584,32 @@ fun ChatDetailScreen(
     var chatTaskPendingProof by remember { mutableStateOf<ProjectTaskEntity?>(null) }
     var chatTaskPendingVerify by remember { mutableStateOf<ProjectTaskEntity?>(null) }
 
+    var showProjectWorkspaceSheet by remember { mutableStateOf(false) }
+    var showQuickProjectAccounting by remember { mutableStateOf(false) }
+
     val linkedWorkGroup = remember(chat, workGroups) {
         if (chat == null) null
         else workGroups.firstOrNull { wg ->
-            (chat.groupId != null && wg.id == chat.groupId) || wg.id == chat.contactId || chat.id == "chat_wg_${wg.id}"
+            (chat.groupId != null && wg.id == chat.groupId) ||
+                wg.id == chat.contactId ||
+                chat.id == "wg_chat_${wg.id}" ||
+                chat.id == "chat_wg_${wg.id}"
         }
     }
     val linkedProject = remember(linkedWorkGroup, allProjects) {
         if (linkedWorkGroup == null) null else allProjects.firstOrNull { it.workGroupId == linkedWorkGroup.id }
+    }
+    val linkedProjectTasks = remember(linkedProject, linkedWorkGroup, projectTasks) {
+        when {
+            linkedProject != null -> projectTasks.filter {
+                it.projectId == linkedProject.id || (linkedWorkGroup != null && it.workGroupId == linkedWorkGroup.id)
+            }
+            linkedWorkGroup != null -> projectTasks.filter { it.workGroupId == linkedWorkGroup.id }
+            else -> emptyList()
+        }
+    }
+    val linkedProjectMembers = remember(linkedProject, allProjectMembers) {
+        if (linkedProject == null) emptyList() else allProjectMembers.filter { it.projectId == linkedProject.id }
     }
     val parentCompanyGroup = remember(linkedWorkGroup, workGroups) {
         val pId = linkedWorkGroup?.parentGroupId
@@ -602,11 +634,15 @@ fun ChatDetailScreen(
                 }
             )
     }
-    val mentionCandidates = remember(activeGroupMembers, linkedProject, allContacts, chat) {
+    val mentionCandidates = remember(activeGroupMembers, linkedProjectMembers, linkedProject, allContacts, chat) {
         val candidates = linkedSetOf<String>()
         activeGroupMembers.forEach { m ->
             val handle = m.username.trim().removePrefix("@")
             if (handle.isNotBlank()) candidates.add("@$handle - ${m.roleLabel}")
+        }
+        linkedProjectMembers.forEach { pm ->
+            val handle = pm.userName.trim().removePrefix("@")
+            if (handle.isNotBlank()) candidates.add("@$handle - ${pm.assignedTask ?: pm.role}")
         }
         linkedProject?.coManagerName?.takeIf { it.isNotBlank() }?.let { co ->
             candidates.add("@${co.removePrefix("@")} - مدير تنفيذي")
@@ -786,6 +822,8 @@ fun ChatDetailScreen(
                 chatSearchQuery = chatSearchQuery,
                 activeSpatialMode = activeSpatialMode,
                 isTopModesRailExpanded = isTopModesRailExpanded,
+                linkedProject = linkedProject,
+                linkedProjectTasksCount = linkedProjectTasks.size,
                 onBackClick = onBackClick,
                 onShowMessengerOptions = { showMessengerOptionsSheet = true },
                 onCallAttempt = { activeCallType = it },
@@ -808,6 +846,11 @@ fun ChatDetailScreen(
                 onSelectSpatialMode = { mode ->
                     activeSpatialMode = mode
                     isTopModesRailExpanded = false
+                },
+                onOpenProjectWorkspace = { showProjectWorkspaceSheet = true },
+                onOpenQuickProjectAccounting = { showQuickProjectAccounting = true },
+                onOpenFullProjectDetail = {
+                    linkedProject?.let { proj -> onOpenProjectDetail(proj.id) }
                 }
             )
 
@@ -944,7 +987,7 @@ fun ChatDetailScreen(
             onOpenQuickHashtag = { showQuickHashtagSheet = true },
             onOpenCreateTask = { showCreateTaskInChatDialog = true },
             onOpenAddGroupMembers = {
-                groupMembersInitialTab = 1
+                groupMembersInitialTab = 0
                 showGroupMembersDialog = true
             }
         )
@@ -1386,6 +1429,58 @@ fun ChatDetailScreen(
             onConfirmAndArchive = { amount, notes ->
                 onConfirmAndArchiveTask(targetTask.id, amount, notes)
                 chatTaskPendingVerify = null
+            }
+        )
+    }
+
+    val activeProject = linkedProject
+    if (showProjectWorkspaceSheet && activeProject != null) {
+        GroupProjectWorkspaceSheet(
+            project = activeProject,
+            workGroup = linkedWorkGroup,
+            projectTasks = linkedProjectTasks,
+            projectMembers = linkedProjectMembers,
+            groupMembers = activeGroupMembers,
+            employees = allEmployees,
+            onAddAccountingEntry = { title, amount, isIncome, category ->
+                onAddProjectAccountingEntry(activeProject.id, activeProject.name, title, amount, isIncome, category)
+            },
+            onOpenCreateTask = {
+                showCreateTaskInChatDialog = true
+            },
+            onUpdateTaskStatus = onUpdateProjectTaskStatus,
+            onSubmitTaskProof = { task ->
+                chatTaskPendingProof = task
+            },
+            onVerifyTask = { task ->
+                chatTaskPendingVerify = task
+            },
+            onAddProjectMemberWithPerms = { name, phone, role, task, userId, isAdmin, canPost, canEdit, canExport, canDirect ->
+                onAddProjectMemberWithPerms(activeProject.id, name, phone, role, task, userId, isAdmin, canPost, canEdit, canExport, canDirect)
+            },
+            onPromoteToManager = { member ->
+                onPromoteProjectMember(activeProject.id, member)
+            },
+            onRemoveMember = { member ->
+                onRemoveProjectMember(activeProject.id, member)
+            },
+            onOpenFullProjectDetail = {
+                onOpenProjectDetail(activeProject.id)
+            },
+            onDismiss = { showProjectWorkspaceSheet = false }
+        )
+    }
+
+    if (showQuickProjectAccounting && activeProject != null) {
+        val profile = remember(activeProject.type) {
+            ProjectIndustryCatalog.resolveAccountingProfile(activeProject.type)
+        }
+        ProjectAccountingEntryDialog(
+            profile = profile,
+            onDismiss = { showQuickProjectAccounting = false },
+            onConfirmEntry = { title, amount, isIncome, category ->
+                onAddProjectAccountingEntry(activeProject.id, activeProject.name, title, amount, isIncome, category)
+                showQuickProjectAccounting = false
             }
         )
     }

@@ -436,22 +436,14 @@ fun InlineChatVideoPlayer(
                     }
                 }
 
-                IconButton(
+                OozoxCircleIconButton(
                     onClick = onExpandFullscreen,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Fullscreen,
-                        contentDescription = "ملء الشاشة",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    imageVector = Icons.Default.Fullscreen,
+                    contentDescription = "ملء الشاشة",
+                    tint = Color.White,
+                    containerColor = Color.Black.copy(alpha = 0.55f),
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             } else {
                 val exoPlayer = remember(videoUri) {
                     ExoPlayer.Builder(context).build().apply {

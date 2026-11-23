@@ -204,42 +204,28 @@ fun FinancialAccountantDialog(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (onOpenVoiceBusinessAgent != null) {
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = onOpenVoiceBusinessAgent,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(OozoxTeal.copy(alpha = 0.18f))
-                                .border(1.dp, OozoxTeal.copy(alpha = 0.5f), CircleShape)
-                                .testTag("open_voice_business_agent_from_accountant")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = "الوكيل الصوتي",
-                                tint = OozoxTeal,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            .testTag("close_accountant_sheet_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "الوكيل الصوتي",
+                            tint = OozoxTeal,
+                            containerColor = OozoxTeal.copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, OozoxTeal.copy(alpha = 0.5f)),
+                            modifier = Modifier.testTag("open_voice_business_agent_from_accountant")
                         )
                     }
+
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.testTag("close_accountant_sheet_button")
+                    )
                 }
             }
 

@@ -329,7 +329,7 @@ fun VoiceTransactionReviewDialog(
                         }
 
                         // Playback Control Button
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = {
                                 if (isAiSpeaking) {
                                     stopAiReadback()
@@ -337,19 +337,12 @@ fun VoiceTransactionReviewDialog(
                                     startAiReadback()
                                 }
                             },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(if (isAiSpeaking) StatusOrange.copy(alpha = 0.2f) else GoldPrimary.copy(alpha = 0.2f))
-                                .testTag("toggle_voice_readback_btn")
-                        ) {
-                            Icon(
-                                imageVector = if (isAiSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = if (isAiSpeaking) "إيقاف الصوت" else "إعادة القراءة الصوتية",
-                                tint = if (isAiSpeaking) StatusOrange else GoldPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                            imageVector = if (isAiSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = if (isAiSpeaking) "إيقاف الصوت" else "إعادة القراءة الصوتية",
+                            tint = if (isAiSpeaking) StatusOrange else GoldPrimary,
+                            containerColor = if (isAiSpeaking) StatusOrange.copy(alpha = 0.2f) else GoldPrimary.copy(alpha = 0.2f),
+                            modifier = Modifier.testTag("toggle_voice_readback_btn")
+                        )
                     }
                 }
 

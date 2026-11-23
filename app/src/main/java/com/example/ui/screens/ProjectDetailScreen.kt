@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,12 +19,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.GroupMemberEntity
@@ -55,13 +58,18 @@ import java.util.UUID
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.PrimaryScrollableTabRow
+import com.example.data.model.HiddenSubAccountEntity
 import com.example.data.model.ShiftHandoverEntity
 import com.example.ui.components.CreateProjectShiftHandoverDialog
+import com.example.ui.components.OozoxCircleIconButton
 import com.example.ui.components.ProjectAccountingEntryDialog
 import com.example.ui.components.ProjectDetailSideDrawerContent
+import com.example.ui.components.ProjectTaskAssignDialog
 import com.example.ui.components.ShiftCustodyHandoverDialog
+import com.example.ui.components.buildUnifiedProjectRoster
+import com.example.util.LocalAppLanguage
 import com.example.util.ProjectIndustryCatalog
+import com.example.util.tr
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,10 +82,14 @@ fun ProjectDetailScreen(
     projectAuditLogs: List<com.example.data.model.ProjectAuditLogEntity> = emptyList(),
     projectTasks: List<ProjectTaskEntity> = emptyList(),
     shiftHandovers: List<ShiftHandoverEntity> = emptyList(),
+    employees: List<HiddenSubAccountEntity> = emptyList(),
     onLoadExcelSheet: (suspend (String, String?) -> Pair<com.example.util.SmartSpreadsheetTemplate, MutableList<com.example.util.SmartSpreadsheetRow>>)? = null,
     onSaveExcelSheet: ((String, com.example.util.SmartSpreadsheetTemplate, List<com.example.util.SmartSpreadsheetRow>) -> Unit)? = null,
     onAddProjectMember: (name: String, phone: String, role: com.example.data.model.ProjectMemberRole, task: String) -> Unit = { _, _, _, _ -> },
+    onAddProjectMemberWithPerms: ((name: String, phone: String, role: com.example.data.model.ProjectMemberRole, task: String, userId: String?, isAdmin: Boolean, canPost: Boolean, canEdit: Boolean, canExport: Boolean, canDirect: Boolean) -> Unit)? = null,
     onPromoteToManager: (com.example.data.model.ProjectMemberEntity) -> Unit = {},
+    onRemoveProjectMember: (com.example.data.model.ProjectMemberEntity) -> Unit = {},
+    onOpenGroupChat: (() -> Unit)? = null,
     onAddAccountingEntry: (title: String, amount: Double, isIncome: Boolean, accountCategory: String) -> Unit = { _, _, _, _ -> },
     onAddShiftHandover: (ShiftHandoverEntity) -> Unit = {},
     onReceiveShiftHandoverFull: (
@@ -108,9 +120,12 @@ fun ProjectDetailScreen(
                 TopAppBar(
                     title = { Text("تفاصيل المشروع...", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = GoldPrimary)
-                        }
+                        OozoxCircleIconButton(
+                            onClick = onBackClick,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "رجوع",
+                            tint = adaptiveGoldPrimary
+                        )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
@@ -135,13 +150,6 @@ fun ProjectDetailScreen(
     var taskToVerifyAndArchive by remember { mutableStateOf<ProjectTaskEntity?>(null) }
     var showDeleteProjectConfirmDialog by remember { mutableStateOf(false) }
     var taskPendingDelete by remember { mutableStateOf<ProjectTaskEntity?>(null) }
-
-    var newTaskTitle by remember { mutableStateOf("") }
-    var newTaskDesc by remember { mutableStateOf("") }
-    var newTaskAssignee by remember { mutableStateOf("") }
-    var newTaskPriority by remember { mutableStateOf(TaskPriority.MEDIUM.name) }
-    var newTaskDueDate by remember { mutableStateOf("") }
-    var newTaskCost by remember { mutableStateOf("") }
 
     val projectLink = "https://oozox.app/projects/${project.id}"
     val shareContent = remember(project) {
@@ -196,6 +204,9 @@ fun ProjectDetailScreen(
         val projectTagged = shiftHandovers.filter { it.notes?.contains("[مشروع: ${project.name}]") == true }
         projectTagged.ifEmpty { shiftHandovers }
     }
+    val unifiedRoster = remember(projectMembers, members) {
+        buildUnifiedProjectRoster(projectMembers, members)
+    }
 
     BackHandler(enabled = drawerState.isOpen) {
         coroutineScope.launch { drawerState.close() }
@@ -209,6 +220,7 @@ fun ProjectDetailScreen(
                 project = project,
                 profile = accountingProfile,
                 onSelectTab = { selectedTabIndex = it },
+                onOpenGroupChat = onOpenGroupChat,
                 onAssignFieldTask = { showCreateFieldTaskDialog = true },
                 onOpenSmartExcel = { showExcelStudio = true },
                 onOpenRbacAndPromotion = { showRbacDialog = true },
@@ -248,30 +260,46 @@ fun ProjectDetailScreen(
                         }
                     },
                     navigationIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            OozoxCircleIconButton(
                                 onClick = { coroutineScope.launch { drawerState.open() } },
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .testTag("project_detail_drawer_btn")
-                            ) {
-                                Icon(Icons.Default.Menu, contentDescription = "قائمة أدوات المشروع", tint = adaptiveGoldPrimary)
-                            }
-                            IconButton(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "قائمة أدوات المشروع",
+                                tint = adaptiveGoldPrimary,
+                                modifier = Modifier.testTag("project_detail_drawer_btn")
+                            )
+                            OozoxCircleIconButton(
                                 onClick = onBackClick,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = adaptiveGoldPrimary)
-                            }
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "رجوع",
+                                tint = adaptiveGoldPrimary
+                            )
                         }
                     },
                     actions = {
-                        IconButton(
-                            onClick = { showRbacDialog = true },
-                            modifier = Modifier.testTag("project_detail_rbac_btn")
-                        ) {
-                            Icon(Icons.Default.AdminPanelSettings, contentDescription = "الفريق والصلاحيات", tint = GoldPrimary)
+                        if (onOpenGroupChat != null) {
+                            OozoxCircleIconButton(
+                                onClick = onOpenGroupChat,
+                                imageVector = Icons.Default.Forum,
+                                contentDescription = "مجموعة دردشة المشروع",
+                                tint = adaptiveGoldPrimary,
+                                containerColor = adaptiveGoldPrimary.copy(alpha = 0.14f),
+                                border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.35f)),
+                                modifier = Modifier.testTag("project_detail_open_chat_btn")
+                            )
                         }
+                        OozoxCircleIconButton(
+                            onClick = { showRbacDialog = true },
+                            imageVector = Icons.Default.AdminPanelSettings,
+                            contentDescription = "الفريق والصلاحيات",
+                            tint = adaptiveGoldPrimary,
+                            containerColor = adaptiveGoldPrimary.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.35f)),
+                            modifier = Modifier.testTag("project_detail_rbac_btn")
+                        )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
@@ -406,6 +434,74 @@ fun ProjectDetailScreen(
                                 val net = project.totalIncome - project.totalExpenses
                                 Text("الرصيد: ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(GoldUtils.formatCurrency(net), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (net >= 0) StatusGreen else StatusRed)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Linked Group Chat Quick Card
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenGroupChat?.invoke() }
+                        .testTag("overview_linked_chat_card")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                color = adaptiveGoldPrimary.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Forum,
+                                        contentDescription = null,
+                                        tint = adaptiveGoldPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = "مجموعة عمل المشروع (${workGroup?.name ?: project.name})",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${unifiedRoster.size} أعضاء مسجلين • إدارة ومتابعة متزامنة فورية",
+                                    fontSize = 11.sp,
+                                    color = adaptiveGoldPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        if (onOpenGroupChat != null) {
+                            Button(
+                                onClick = onOpenGroupChat,
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.White),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text(tr("proj_group.open_chat", "فتح الدردشة"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -748,39 +844,75 @@ fun ProjectDetailScreen(
 
             if (selectedTabIndex == 2) {
             item {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Checklist, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("مهام وبنود التنفيذ (مزامنة Offline)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Checklist, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "مهام وبنود التنفيذ",
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                        }
+                        Surface(
+                            color = adaptiveGoldPrimary.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(0.8.dp, adaptiveGoldPrimary.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = "مزامنة أوفلاين",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = adaptiveGoldPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Button(
                             onClick = { showCreateFieldTaskDialog = true },
                             colors = ButtonDefaults.buttonColors(containerColor = GoldAccent, contentColor = Color.Black),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("create_field_task_btn")
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("create_field_task_btn")
                         ) {
                             Icon(Icons.Default.AssignmentInd, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("إسناد مهمة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("إسناد مهمة", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
 
                         Button(
                             onClick = { showAddTaskDialog = true },
                             colors = ButtonDefaults.buttonColors(containerColor = adaptiveGoldPrimary, contentColor = adaptiveOnPrimary),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.heightIn(min = 48.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, tint = adaptiveOnPrimary, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("بند سريع", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = adaptiveOnPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("بند سريع", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = adaptiveOnPrimary, maxLines = 1)
                         }
                     }
                 }
@@ -859,14 +991,14 @@ fun ProjectDetailScreen(
                                     }
                                 }
 
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = { taskPendingDelete = task },
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .testTag("delete_task_btn_${task.id}")
-                                ) {
-                                    Icon(Icons.Default.DeleteOutline, contentDescription = "حذف المهمة", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                                }
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "حذف المهمة",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                                    modifier = Modifier.testTag("delete_task_btn_${task.id}")
+                                )
                             }
 
                             Row(
@@ -1001,9 +1133,10 @@ fun ProjectDetailScreen(
                                             val totalHoursRem = diffMs / 3600000L
                                             val daysRem = totalHoursRem / 24L
                                             val remHoursPart = totalHoursRem % 24L
+                                            val remMinsPart = (diffMs % 3600000L) / 60000L
                                             val remainingLabel = when {
-                                                daysRem >= 1L -> "${daysRem} يوم و ${remHoursPart} س"
-                                                else -> "${totalHoursRem} س و ${(diffMs % 3600000L) / 60000L} د"
+                                                daysRem >= 1L -> com.example.util.trFmt("task.remaining_days_hours_fmt", "days" to daysRem.toString(), "hours" to remHoursPart.toString())
+                                                else -> com.example.util.trFmt("task.remaining_hours_mins_fmt", "hours" to totalHoursRem.toString(), "mins" to remMinsPart.toString())
                                             }
                                             Text(
                                                 text = if (isOverdue) "🛑 تجاوزت المهمة موعد التسليم المحدد!"
@@ -1081,26 +1214,187 @@ fun ProjectDetailScreen(
                 }
             }
 
-            // Workgroup Members List
+            // Unified Project & WorkGroup Team Roster Section (Fixes screenshot empty area)
             item {
-                Text("فريق العمل والأعضاء المسجلين", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "فريق العمل والأعضاء المسجلين (${unifiedRoster.size})",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldPrimary
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (onOpenGroupChat != null) {
+                            FilledTonalButton(
+                                onClick = onOpenGroupChat,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = adaptiveGoldPrimary.copy(alpha = 0.14f),
+                                    contentColor = adaptiveGoldPrimary
+                                )
+                            ) {
+                                Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("دردشة المجموعة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = { showRbacDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.White),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.testTag("project_detail_add_member_tab2_btn")
+                        ) {
+                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(tr("proj_group.add_member_cta", "إضافة موظف"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
-            items(members, key = { it.id }) { m ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            if (unifiedRoster.isEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("project_detail_empty_team_card")
                     ) {
-                        Icon(Icons.Default.Group, contentDescription = null, tint = GoldAccent)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(m.username, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(m.roleLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.Groups, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(32.dp))
+                            Text(tr("proj_group.no_members_yet", "لا يوجد موظفون أو أعضاء مضافون في المشروع بعد"), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("أضف أعضاء الفريق أو اختر من موظفي الشركة لربطهم تلقائياً بمجموعة الدردشة.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Button(
+                                onClick = { showRbacDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.White),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("إضافة موظف وتحديد صلاحياته", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            } else {
+                items(unifiedRoster, key = { it.key }) { item ->
+                    val roleEnum = item.projectMember?.let { pm ->
+                        ProjectMemberRole.entries.firstOrNull { it.name == pm.role }
+                    }
+                    val canPromote = roleEnum != null && roleEnum != ProjectMemberRole.OWNER && roleEnum != ProjectMemberRole.EXECUTIVE_MANAGER
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(0.8.dp, adaptiveGoldPrimary.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth().testTag("team_card_${item.key}")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(adaptiveGoldPrimary.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.displayName, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = MaterialTheme.colorScheme.onSurface)
+                                        val sub = listOfNotNull(
+                                            item.jobTitle.takeIf { it.isNotBlank() },
+                                            item.phone.takeIf { it.isNotBlank() }
+                                        ).joinToString(" • ")
+                                        if (sub.isNotBlank()) {
+                                            Text(sub, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    color = adaptiveGoldPrimary.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = roleEnum?.localizedLabel(LocalAppLanguage.current) ?: item.roleBadge,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = adaptiveGoldPrimary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            if (item.permissions.isNotEmpty()) {
+                                Text(
+                                    text = item.permissions.joinToString(" • "),
+                                    fontSize = 10.5.sp,
+                                    color = adaptiveGoldPrimary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            val pm = item.projectMember
+                            if (pm != null && roleEnum != ProjectMemberRole.OWNER) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (canPromote) {
+                                        FilledTonalButton(
+                                            onClick = { onPromoteToManager(pm) },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(
+                                                containerColor = StatusGreen.copy(alpha = 0.14f),
+                                                contentColor = StatusGreen
+                                            )
+                                        ) {
+                                            Icon(Icons.Default.Upgrade, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("ترقية لمدير", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    OozoxCircleIconButton(
+                                        onClick = { onRemoveProjectMember(pm) },
+                                        imageVector = Icons.Default.DeleteOutline,
+                                        contentDescription = "إزالة العضو",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1358,10 +1652,14 @@ fun ProjectDetailScreen(
         com.example.ui.components.ProjectRbacDialog(
             projectId = project.id,
             members = projectMembers,
+            groupMembers = members,
+            employees = employees,
             onAddMember = { name, phone, role, task ->
                 onAddProjectMember(name, phone, role, task)
             },
+            onAddMemberWithPermissions = onAddProjectMemberWithPerms,
             onPromoteToManager = onPromoteToManager,
+            onRemoveMember = onRemoveProjectMember,
             onDismiss = { showRbacDialog = false }
         )
     }
@@ -1438,9 +1736,12 @@ fun ProjectDetailScreen(
                         )
                     }
 
-                    IconButton(onClick = { showShareModal = false }) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    OozoxCircleIconButton(
+                        onClick = { showShareModal = false },
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 // Project Preview Card
@@ -1489,20 +1790,16 @@ fun ProjectDetailScreen(
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier.weight(1f)
                                 )
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = {
                                         clipboardManager.setText(AnnotatedString(projectLink))
                                         Toast.makeText(context, "تم نسخ رابط المشروع بنجاح 📋", Toast.LENGTH_SHORT).show()
                                     },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "نسخ الرابط",
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "نسخ الرابط",
+                                    tint = adaptiveGoldPrimary,
+                                    containerColor = adaptiveGoldPrimary.copy(alpha = 0.12f)
+                                )
                             }
                         }
                     }
@@ -1577,213 +1874,18 @@ fun ProjectDetailScreen(
     }
 
     if (showAddTaskDialog) {
-        var taskTimingMode by remember { mutableStateOf("DAYS") } // NOW, HOURS, DAYS
-        var taskHoursText by remember { mutableStateOf("6") }
-        var taskDaysText by remember { mutableStateOf("3") }
-        val scrollStateDialog = rememberScrollState()
-
-        val calculatedDurationMs: Long = when (taskTimingMode) {
-            "NOW" -> 15L * 60L * 1000L
-            "HOURS" -> ((taskHoursText.toIntOrNull() ?: 1).coerceIn(1, 720)).toLong() * 3600L * 1000L
-            else -> ((taskDaysText.toIntOrNull() ?: 1).coerceIn(1, 365)).toLong() * 24L * 3600L * 1000L
-        }
-        val calculatedDurationNum: Int = when (taskTimingMode) {
-            "NOW" -> 0
-            "HOURS" -> (taskHoursText.toIntOrNull() ?: 1).coerceIn(1, 720)
-            else -> (taskDaysText.toIntOrNull() ?: 1).coerceIn(1, 365)
-        }
-        val calculatedDurationText: String = when (taskTimingMode) {
-            "NOW" -> com.example.util.tr("task.mode_now")
-            "HOURS" -> "$calculatedDurationNum ساعة"
-            else -> "$calculatedDurationNum يوم"
-        }
-
-        AlertDialog(
-            onDismissRequest = { showAddTaskDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AddTask, contentDescription = null, tint = GoldPrimary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("إسناد مهمة جديدة للمشروع", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
+        ProjectTaskAssignDialog(
+            projectId = project.id,
+            projectName = project.name,
+            workGroupId = workGroup?.id,
+            onDismiss = { showAddTaskDialog = false },
+            onAssignTask = { task ->
+                onAddFieldTask(task)
+                showAddTaskDialog = false
             },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scrollStateDialog)
-                        .padding(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedTextField(
-                        value = newTaskTitle,
-                        onValueChange = { newTaskTitle = it },
-                        label = { Text("عنوان المهمة / البند") },
-                        placeholder = { Text("توريد خامات / مراجعة هندسية") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newTaskDesc,
-                        onValueChange = { newTaskDesc = it },
-                        label = { Text("تفاصيل ومواصفات التنفيذ (اختياري)") },
-                        maxLines = 3,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newTaskAssignee,
-                        onValueChange = { newTaskAssignee = it },
-                        label = { Text("اسم المكلف / الموظف المسؤول") },
-                        placeholder = { Text("م. أحمد") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = com.example.util.tr("task.timing_mode_label"),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GoldPrimary
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            "NOW" to com.example.util.tr("task.mode_now"),
-                            "HOURS" to com.example.util.tr("task.mode_hours"),
-                            "DAYS" to com.example.util.tr("task.mode_days")
-                        ).forEach { (mKey, mLabel) ->
-                            FilterChip(
-                                selected = taskTimingMode == mKey,
-                                onClick = {
-                                    taskTimingMode = mKey
-                                    if (mKey == "NOW") newTaskPriority = TaskPriority.URGENT.name
-                                },
-                                label = { Text(mLabel, fontSize = 10.sp, maxLines = 1) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    if (taskTimingMode == "HOURS") {
-                        OutlinedTextField(
-                            value = taskHoursText,
-                            onValueChange = { taskHoursText = it.filter { c -> c.isDigit() }.take(3) },
-                            label = { Text(com.example.util.tr("task.custom_hours_label")) },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else if (taskTimingMode == "DAYS") {
-                        OutlinedTextField(
-                            value = taskDaysText,
-                            onValueChange = { taskDaysText = it.filter { c -> c.isDigit() }.take(3) },
-                            label = { Text(com.example.util.tr("task.custom_days_label")) },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = newTaskCost,
-                        onValueChange = { newTaskCost = it },
-                        label = { Text("التكلفة التقديرية أو الميزانية") },
-                        placeholder = { Text("0.0") },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("الأولوية:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        listOf(
-                            TaskPriority.LOW.name to "منخفضة",
-                            TaskPriority.MEDIUM.name to "متوسطة",
-                            TaskPriority.HIGH.name to "عالية",
-                            TaskPriority.URGENT.name to "طوارئ"
-                        ).forEach { (pKey, pLabel) ->
-                            FilterChip(
-                                selected = newTaskPriority == pKey,
-                                onClick = { newTaskPriority = pKey },
-                                label = { Text(pLabel, fontSize = 10.sp) }
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { showAddTaskDialog = false },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Text(com.example.util.tr("common.cancel"), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Button(
-                        onClick = {
-                            if (newTaskTitle.isNotBlank()) {
-                                val cost = newTaskCost.toDoubleOrNull() ?: 0.0
-                                val deadlineTs = System.currentTimeMillis() + calculatedDurationMs
-                                val dueFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(deadlineTs))
-                                val assigneeName = newTaskAssignee.trim().ifBlank { "فريق المشروع" }
-                                val task = ProjectTaskEntity(
-                                    id = "proj_task_${System.currentTimeMillis()}",
-                                    projectId = project.id,
-                                    projectName = project.name,
-                                    title = newTaskTitle.trim(),
-                                    description = newTaskDesc.trim().ifBlank { null },
-                                    assignedToUserId = null,
-                                    assignedToName = assigneeName,
-                                    assignedToPhone = null,
-                                    priority = if (taskTimingMode == "NOW") TaskPriority.URGENT.name else newTaskPriority,
-                                    status = TaskStatus.PENDING.name,
-                                    dueDate = dueFmt,
-                                    costEstimate = cost,
-                                    isSynced = true,
-                                    workGroupId = workGroup?.id,
-                                    assignedMembersList = assigneeName,
-                                    deadlineDurationText = calculatedDurationText,
-                                    deadlineTimestamp = deadlineTs,
-                                    urgencyAlertLevel = if (taskTimingMode == "NOW") "CRITICAL" else "NORMAL",
-                                    financialAmount = cost,
-                                    timingMode = taskTimingMode,
-                                    durationValue = calculatedDurationNum
-                                )
-                                onAddFieldTask(task)
-                                newTaskTitle = ""
-                                newTaskDesc = ""
-                                newTaskAssignee = ""
-                                newTaskCost = ""
-                                newTaskDueDate = ""
-                                showAddTaskDialog = false
-                            } else {
-                                Toast.makeText(context, "يرجى كتابة عنوان المهمة", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = adaptiveGoldPrimary, contentColor = adaptiveOnPrimary),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Text("إسناد المهمة", color = adaptiveOnPrimary, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            dismissButton = {}
+            onShowValidationError = { msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
         )
     }
 

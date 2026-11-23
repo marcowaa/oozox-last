@@ -384,22 +384,15 @@ fun MediaPreviewModal(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = onDismiss,
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.12f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "إغلاق",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "إغلاق",
+                                tint = Color.White,
+                                containerColor = Color.White.copy(alpha = 0.14f)
+                            )
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
 
                             Column {
                                 Text(
@@ -423,63 +416,42 @@ fun MediaPreviewModal(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             if (isVideo && exoPlayer != null) {
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = { isMuted = !isMuted },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.12f))
-                                ) {
-                                    Icon(
-                                        imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                                        contentDescription = if (isMuted) "تشغيل الصوت" else "كتم الصوت",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                    imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = if (isMuted) "تشغيل الصوت" else "كتم الصوت",
+                                    tint = Color.White,
+                                    containerColor = Color.White.copy(alpha = 0.14f)
+                                )
                             }
 
                             if (!isVideo && scale > 1.05f) {
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = {
                                         scale = 1f
                                         offset = Offset.Zero
                                     },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(GoldPrimary.copy(alpha = 0.2f))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ZoomOutMap,
-                                        contentDescription = "إعادة ضبط التكبير",
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                    imageVector = Icons.Default.ZoomOutMap,
+                                    contentDescription = "إعادة ضبط التكبير",
+                                    tint = GoldPrimary,
+                                    containerColor = GoldPrimary.copy(alpha = 0.2f)
+                                )
                             }
 
                             if (onForward != null) {
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = {
                                         onDismiss()
                                         onForward()
                                     },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(GoldPrimary.copy(alpha = 0.25f))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = "إعادة توجيه",
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "إعادة توجيه",
+                                    tint = GoldPrimary,
+                                    containerColor = GoldPrimary.copy(alpha = 0.25f)
+                                )
                             }
                         }
                     }

@@ -43,6 +43,7 @@ fun ProjectDetailSideDrawerContent(
     project: ProjectEntity,
     profile: ProjectAccountingProfile,
     onSelectTab: (Int) -> Unit,
+    onOpenGroupChat: (() -> Unit)? = null,
     onAssignFieldTask: () -> Unit = {},
     onOpenSmartExcel: () -> Unit,
     onOpenRbacAndPromotion: () -> Unit,
@@ -114,12 +115,11 @@ fun ProjectDetailSideDrawerContent(
                         }
                     }
 
-                    IconButton(
+                    OozoxCircleIconButton(
                         onClick = onCloseDrawer,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق القائمة")
-                    }
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق القائمة"
+                    )
                 }
             }
 
@@ -222,6 +222,15 @@ fun ProjectDetailSideDrawerContent(
 
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (onOpenGroupChat != null) {
+                            ProjectDrawerActionItem(
+                                icon = Icons.Default.Forum,
+                                title = "مجموعة دردشة المشروع",
+                                subtitle = "الانتقال الفوري لدردشة الفريق والمهام",
+                                tint = GoldPrimary,
+                                onClick = { onCloseDrawer(); onOpenGroupChat() }
+                            )
+                        }
                         ProjectDrawerActionItem(
                             icon = Icons.Default.AssignmentInd,
                             title = "إسناد مهمة مع منشن للموظف",
@@ -360,9 +369,11 @@ fun ProjectAccountingEntryDialog(
                         Text("تسجيل قيد محاسبي مخصص", fontSize = 15.5.sp, fontWeight = FontWeight.Bold)
                         Text(profile.sectorNameAr, fontSize = 11.sp, color = GoldPrimary)
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق")
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق"
+                    )
                 }
 
                 // Income vs Expense Toggle
@@ -408,8 +419,17 @@ fun ProjectAccountingEntryDialog(
                                 selectedAccount = acc
                                 if (title.isBlank()) title = acc
                             },
-                            label = { Text(acc, fontSize = 11.sp) },
-                            shape = RoundedCornerShape(8.dp)
+                            label = { Text(acc, fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = adaptiveGoldPrimary.copy(alpha = 0.18f),
+                                selectedLabelColor = adaptiveGoldPrimary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selectedAccount == acc,
+                                selectedBorderColor = adaptiveGoldPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
                         )
                     }
                 }
@@ -536,9 +556,11 @@ fun CreateProjectShiftHandoverDialog(
                         Text("تسليم شفت وعهدة", fontSize = 15.5.sp, fontWeight = FontWeight.Bold)
                         Text("توثيق الماليات والبضائع لمشروع ${project.name}", fontSize = 11.sp, color = GoldPrimary)
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق")
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق"
+                    )
                 }
 
                 LazyColumn(

@@ -7,8 +7,10 @@ const {
   updateEmployee,
   deleteEmployee,
   addPayrollAdjustment,
+  deletePayrollAdjustment,
   listPayrollAdjustments,
   createEmployeeLeave,
+  deleteEmployeeLeave,
   listEmployeeLeaves,
   checkInWithGeofence,
   geofenceHeartbeat,
@@ -51,6 +53,12 @@ router.post(
   validate(schemas.createPayrollAdjustment),
   addPayrollAdjustment
 );
+router.delete(
+  '/payroll/:id',
+  validate(schemas.objectIdParam, 'params'),
+  requirePermission('managePayroll'),
+  deletePayrollAdjustment
+);
 
 router.get('/leaves', listEmployeeLeaves);
 router.post(
@@ -58,6 +66,12 @@ router.post(
   requirePermission('manageStaff'),
   validate(schemas.createEmployeeLeave),
   createEmployeeLeave
+);
+router.delete(
+  '/leaves/:id',
+  validate(schemas.objectIdParam, 'params'),
+  requirePermission('manageStaff'),
+  deleteEmployeeLeave
 );
 
 router.get('/attendance', listAttendanceRecords);

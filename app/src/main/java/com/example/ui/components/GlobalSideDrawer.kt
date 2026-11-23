@@ -169,30 +169,21 @@ fun GlobalSideDrawerContent(
                     }
                 }
 
-                IconButton(
+                OozoxCircleIconButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCloseDrawer()
                     },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("drawer_close_button")
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.testTag("drawer_close_button")
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AppIcon(
-                            imageVector = AppIcons.MenuClose,
-                            contentDescription = tr("common.close"),
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            size = AppIconSize.SM
-                        )
-                    }
+                    AppIcon(
+                        imageVector = AppIcons.MenuClose,
+                        contentDescription = tr("common.close"),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        size = AppIconSize.SM
+                    )
                 }
             }
 

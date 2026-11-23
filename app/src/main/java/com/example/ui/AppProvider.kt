@@ -37,6 +37,8 @@ import com.example.ui.components.LocalAppToast
 import com.example.ui.components.ToastNotificationHost
 import com.example.ui.components.PersistentConnectivityBanner
 import com.example.ui.components.GlobalConnectivityBanner
+import com.example.ui.components.OozoxCircleButtonDefaults
+import com.example.ui.components.OozoxCircleIconButton
 import com.example.ui.spatial.SpatialLayoutEngineProvider
 import com.example.ui.theme.AppThemePalette
 import com.example.ui.theme.GoldLight
@@ -269,13 +271,10 @@ fun GlobalThemeToggleButton(
         tint ?: if (isDark) GoldPrimary else RealGoldAmber
     }
 
-    IconButton(
+    OozoxCircleIconButton(
         onClick = { themeController.toggleTheme() },
-        modifier = modifier
-            .testTag("global_theme_toggle_button")
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(backgroundColor ?: defaultBg)
+        containerColor = backgroundColor ?: defaultBg,
+        modifier = modifier.testTag("global_theme_toggle_button")
     ) {
         AnimatedContent(
             targetState = isDark,
@@ -289,7 +288,7 @@ fun GlobalThemeToggleButton(
                 contentDescription = if (targetIsDark) tr("theme.switch_to_light") else tr("theme.switch_to_dark"),
                 tint = defaultTint,
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(OozoxCircleButtonDefaults.IconSize)
                     .graphicsLayer { rotationZ = rotationAngle }
             )
         }

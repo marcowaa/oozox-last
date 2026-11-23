@@ -18,6 +18,9 @@ import com.example.data.model.ChatEntity
 import com.example.data.model.ContactEntity
 import com.example.data.model.GroupMemberEntity
 import com.example.data.model.MessageEntity
+import com.example.data.model.ProjectMemberEntity
+import com.example.data.model.ProjectMemberInput
+import com.example.data.model.ProjectMemberRole
 import com.example.data.model.ProjectTaskEntity
 import com.example.data.model.ProjectType
 import com.example.data.model.UserEntity
@@ -544,5 +547,190 @@ class WorkGroupFoldersAndTasksTest {
         assertEquals(listOf(c1), capturedContacts)
         assertEquals("وليد الموزع", capturedManualName)
         assertEquals("01511223344", capturedManualPhone)
+    }
+
+    @Test
+    fun projectCreation_withGranularMemberRolesAndPermissions_autoCreatesChatAndSyncsBothTables() = runBlocking {
+        val viewModel = MainViewModel(app)
+        val owner = UserEntity(
+            id = "owner_granular_1",
+            name = "م. عصام المالك",
+            phone = "01011112233",
+            username = "essam_owner",
+            type = UserType.BUSINESSMAN.name
+        )
+        db.userDao().insertUser(owner)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val uniqueProjName = "مشروع الأبراج_${UUID.randomUUID().toString().take(5)}"
+        val member1 = ProjectMemberInput(
+            name = "م. خالد الفني",
+            phone = "01122339900",
+            roleTask = "مراجعة واعتماد المخططات",
+            role = ProjectMemberRole.AUDITOR,
+            isGroupAdmin = false,
+            canPostAccounting = false,
+            canEditRecords = true,
+            canExportReports = true,
+            canMessageDirectly = true
+        )
+        val member2 = ProjectMemberInput(
+            name = "أ. هاني المالي",
+            phone = "01233448877",
+            roleTask = "محاسب تكاليف",
+            role = ProjectMemberRole.FINANCIAL_PARTNER,
+            isGroupAdmin = false,
+            canPostAccounting = true,
+            canEditRecords = true,
+            canExportReports = true,
+            canMessageDirectly = true
+        )
+
+        viewModel.createWorkGroupAndProject(
+            groupName = "", // Blank -> should automatically resolve to clean project name!
+            groupDesc = "تشييد وبناء متكامل",
+            projectName = uniqueProjName,
+            capital = 600000.0,
+            projectType = ProjectType.CONSTRUCTION,
+            coManagerPhone = "01088776655",
+            coManagerName = "م. نادر التنفيذي",
+            memberInputs = listOf(member1, member2)
+        )
+
+        var createdProject = db.projectDao().getAllProjects().first().firstOrNull { it.name == uniqueProjName }
+        pumpMainLooperUntil {
+            createdProject = runBlocking { db.projectDao().getAllProjects().first().firstOrNull { it.name == uniqueProjName } }
+            val p = createdProject ?: return@pumpMainLooperUntil false
+            runBlocking {
+                db.chatDao().getChatByGroupId(p.workGroupId) != null &&
+                    db.workGroupDao().getGroupMembersSync(p.workGroupId).size >= 4 &&
+                    db.projectMemberDao().getMembersForProjectSync(p.id).size >= 3
+            }
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNotNull("Project must be created", createdProject)
+        val p = createdProject!!
+        val groupChat = db.chatDao().getChatByGroupId(p.workGroupId)
+        assertNotNull("Chat group must be auto-created with project name", groupChat)
+        assertEquals(uniqueProjName, groupChat!!.contactName)
+        assertTrue(groupChat.isGroup)
+
+        val projectMembers = db.projectMemberDao().getMembersForProjectSync(p.id)
+        val groupMembers = db.workGroupDao().getGroupMembersSync(p.workGroupId)
+
+        // Verify ProjectMember records
+        val pmKhaled = projectMembers.firstOrNull { it.userName == "م. خالد الفني" }
+        assertNotNull(pmKhaled)
+        assertEquals(ProjectMemberRole.AUDITOR.name, pmKhaled!!.role)
+        assertEquals("مراجعة واعتماد المخططات", pmKhaled.assignedTask)
+
+        val pmHany = projectMembers.firstOrNull { it.userName == "أ. هاني المالي" }
+        assertNotNull(pmHany)
+        assertEquals(ProjectMemberRole.FINANCIAL_PARTNER.name, pmHany!!.role)
+
+        // Verify GroupMember matching records and permissions
+        val gmKhaled = groupMembers.firstOrNull { it.username == "م. خالد الفني" }
+        assertNotNull(gmKhaled)
+        assertFalse(gmKhaled!!.isGroupAdmin)
+        assertFalse(gmKhaled.canPostAccounting)
+        assertTrue(gmKhaled.canEditRecords)
+        assertTrue(gmKhaled.canExportReports)
+
+        val gmHany = groupMembers.firstOrNull { it.username == "أ. هاني المالي" }
+        assertNotNull(gmHany)
+        assertTrue(gmHany!!.canPostAccounting)
+        assertTrue(gmHany.canEditRecords)
+
+        // Verify Co-Manager admin permissions in both
+        val gmNader = groupMembers.firstOrNull { it.username.contains("نادر") }
+        assertNotNull(gmNader)
+        assertTrue(gmNader!!.isGroupAdmin)
+
+        // Verify Welcome message posted to group chat
+        val msgs = db.messageDao().getAllMessagesForChatSync(groupChat.id)
+            .map { com.example.util.RoomLocalAES256Engine.decryptMessage(it, null, context) }
+        assertTrue("Welcome message must list added members", msgs.any { it.type == "SYSTEM" && it.content.contains("خالد") && it.content.contains("هاني") })
+    }
+
+    @Test
+    fun projectWorkspace_bidirectionalDataSharing_andAccountingSync() = runBlocking {
+        val viewModel = MainViewModel(app)
+        val owner = UserEntity(
+            id = "owner_sync_1",
+            name = "م. فؤاد المدير",
+            phone = "01022334455",
+            username = "fouad_admin",
+            type = UserType.BUSINESSMAN.name
+        )
+        db.userDao().insertUser(owner)
+
+        val projId = "proj_sync_${UUID.randomUUID().toString().take(6)}"
+        val wgId = "wg_sync_${UUID.randomUUID().toString().take(6)}"
+        val wg = WorkGroupEntity(id = wgId, name = "مشروع اللؤلؤة", ownerId = owner.id)
+        db.workGroupDao().insertWorkGroup(wg)
+        val chat = repository.ensureWorkGroupChat(wg, displayTitle = "مشروع اللؤلؤة")
+
+        val project = com.example.data.model.ProjectEntity(
+            id = projId,
+            name = "مشروع اللؤلؤة",
+            workGroupId = wgId,
+            estimatedCapital = 500000.0,
+            type = "CONSTRUCTION",
+            location = "الجيزة"
+        )
+        db.projectDao().insertProject(project)
+
+        // 1. Add project member via ViewModel and verify synced to GroupMember
+        viewModel.addProjectMember(
+            projectId = projId,
+            userName = "م. ماجد الموقع",
+            userPhone = "01099881122",
+            role = ProjectMemberRole.PROCUREMENT_OFFICER,
+            task = "إشراف أعمال صب الخرسانة والتوريد",
+            isGroupAdmin = false,
+            canPostAccounting = false,
+            canEditRecords = true,
+            canExportReports = true,
+            canMessageDirectly = true
+        )
+
+        pumpMainLooperUntil {
+            runBlocking {
+                db.projectMemberDao().getMembersForProjectSync(projId).any { it.userName == "م. ماجد الموقع" } &&
+                    db.workGroupDao().getGroupMembersSync(wgId).any { it.username == "م. ماجد الموقع" }
+            }
+        }
+        val gmMajed = db.workGroupDao().getGroupMembersSync(wgId).first { it.username == "م. ماجد الموقع" }
+        assertEquals("إشراف أعمال صب الخرسانة والتوريد", gmMajed.roleLabel)
+        assertTrue(gmMajed.canEditRecords)
+
+        // 2. Add accounting entry and verify project balances and chat system message
+        viewModel.addProjectAccountingEntry(
+            projectId = projId,
+            projectName = "مشروع اللؤلؤة",
+            title = "دفعة حديد تسليح",
+            amount = 45000.0,
+            isIncome = false,
+            accountCategory = "مواد خام"
+        )
+
+        var chatMsgs: List<MessageEntity> = emptyList()
+        pumpMainLooperUntil {
+            val updatedP = runBlocking { db.projectDao().getProjectById(projId) }
+            chatMsgs = runBlocking {
+                db.messageDao().getAllMessagesForChatSync(chat.id)
+                    .map { com.example.util.RoomLocalAES256Engine.decryptMessage(it, null, context) }
+            }
+            updatedP != null && updatedP.totalExpenses == 45000.0 && chatMsgs.any { it.content.contains("دفعة حديد تسليح") }
+        }
+
+        val updatedP = db.projectDao().getProjectById(projId)!!
+        assertEquals(45000.0, updatedP.totalExpenses, 0.001)
+
+        assertTrue(
+            "Chat must receive financial transaction message, actual contents: ${chatMsgs.map { it.content }}",
+            chatMsgs.any { it.content.contains("دفعة حديد تسليح") }
+        )
     }
 }

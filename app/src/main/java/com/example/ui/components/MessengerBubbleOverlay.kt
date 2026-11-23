@@ -890,23 +890,21 @@ private fun ExpandedMessengerChatDialog(
 
                     // Action Controls (Full Chat, Float Outside, Minimize, Close)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = onOpenFullChat,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInFull,
-                                contentDescription = "فتح المحادثة كاملة",
-                                tint = GoldPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.OpenInFull,
+                            contentDescription = "فتح المحادثة كاملة",
+                            tint = GoldPrimary,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
 
                         // Float outside the app (Messenger system overlay)
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = {
                                 if (MessengerBubbleManager.canDrawOverlays(context)) {
                                     MessengerBubbleManager.minimizeBubble()
@@ -915,39 +913,33 @@ private fun ExpandedMessengerChatDialog(
                                     MessengerBubbleManager.setShowPermissionDialog(true)
                                 }
                             },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Layers,
-                                contentDescription = "تشغيل كفقاعة عائمة خارج التطبيق",
-                                tint = GoldLight,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "تشغيل كفقاعة عائمة خارج التطبيق",
+                            tint = GoldLight,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = onMinimize,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Remove,
-                                contentDescription = "تصغير إلى فقاعة",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(19.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "تصغير إلى فقاعة",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = onClose,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "إغلاق هذه الفقاعة",
-                                tint = StatusRed,
-                                modifier = Modifier.size(19.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق هذه الفقاعة",
+                            tint = StatusRed,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
                     }
                 }
 
@@ -1131,11 +1123,11 @@ private fun ExpandedMessengerChatDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.sendMessage(
@@ -1144,19 +1136,12 @@ private fun ExpandedMessengerChatDialog(
                                     type = MessageType.VOICE.name
                                 )
                             },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(GoldPrimary.copy(alpha = 0.15f))
-                                .border(1.dp, GoldPrimary.copy(alpha = 0.4f), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = "تسجيل صوتي",
-                                tint = GoldPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "تسجيل صوتي",
+                            tint = GoldPrimary,
+                            containerColor = GoldPrimary.copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.4f))
+                        )
 
                         OutlinedTextField(
                             value = textInput,
@@ -1180,7 +1165,7 @@ private fun ExpandedMessengerChatDialog(
                             singleLine = true
                         )
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = {
                                 val trimmed = textInput.trim()
                                 if (trimmed.isNotBlank()) {
@@ -1189,19 +1174,12 @@ private fun ExpandedMessengerChatDialog(
                                     textInput = ""
                                 }
                             },
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(adaptiveGoldPrimary)
-                                .testTag("messenger_bubble_send_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "إرسال",
-                                tint = adaptiveOnPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "إرسال",
+                            tint = adaptiveOnPrimary,
+                            containerColor = adaptiveGoldPrimary,
+                            modifier = Modifier.testTag("messenger_bubble_send_button")
+                        )
                     }
                 }
             }
@@ -1517,7 +1495,7 @@ private fun SettingsTabBody(
                 }
                 IconButton(
                     onClick = { MessengerBubbleManager.setSoundEnabled(context, !bubbleState.soundEnabled) },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = if (bubbleState.soundEnabled) Icons.Default.CheckCircle else Icons.Default.Cancel,
@@ -1569,7 +1547,7 @@ private fun SettingsTabBody(
                 }
                 IconButton(
                     onClick = { MessengerBubbleManager.setAutoExpandOnNewMessage(context, !bubbleState.autoExpandOnNewMessage) },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = if (bubbleState.autoExpandOnNewMessage) Icons.Default.CheckCircle else Icons.Default.Cancel,
@@ -1625,7 +1603,7 @@ private fun SettingsTabBody(
                             MessengerBubbleManager.requestPermissionWithAutoLaunch(context)
                         }
                     },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = if (hasOverlay) Icons.Default.CheckCircle else Icons.Default.Settings,

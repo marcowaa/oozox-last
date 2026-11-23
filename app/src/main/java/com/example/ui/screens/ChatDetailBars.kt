@@ -46,10 +46,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.AssignmentInd
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
@@ -66,6 +69,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhoneDisabled
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Tune
@@ -103,6 +107,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import com.example.ui.components.OozoxCircleButtonDefaults
+import com.example.ui.components.OozoxCircleIconButton
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -115,6 +121,7 @@ import com.example.data.model.InvoiceEntity
 import com.example.data.model.InvoiceStatus
 import com.example.data.model.MessageEntity
 import com.example.data.model.MessageType
+import com.example.data.model.ProjectEntity
 import com.example.data.model.UserEntity
 import com.example.data.model.UserType
 import com.example.data.model.WorkGroupEntity
@@ -161,6 +168,8 @@ internal fun ChatDetailTopBar(
     chatSearchQuery: String,
     activeSpatialMode: ChatSpatialMode,
     isTopModesRailExpanded: Boolean,
+    linkedProject: ProjectEntity? = null,
+    linkedProjectTasksCount: Int = 0,
     onBackClick: () -> Unit,
     onShowMessengerOptions: () -> Unit,
     onCallAttempt: (CallType) -> Unit,
@@ -174,7 +183,10 @@ internal fun ChatDetailTopBar(
     onOpenGroupMembersDialog: (initialTab: Int) -> Unit,
     onOpenCreateTaskDialog: () -> Unit,
     onOpenGroupChatById: (String) -> Unit,
-    onSelectSpatialMode: (ChatSpatialMode) -> Unit
+    onSelectSpatialMode: (ChatSpatialMode) -> Unit,
+    onOpenProjectWorkspace: () -> Unit = {},
+    onOpenQuickProjectAccounting: () -> Unit = {},
+    onOpenFullProjectDetail: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -357,11 +369,16 @@ internal fun ChatDetailTopBar(
         WorkGroupHierarchyStrip(
             activeGroupMembersCount = activeGroupMembers.size,
             isCurrentUserGroupManager = isCurrentUserGroupManager,
+            linkedProject = linkedProject,
+            linkedProjectTasksCount = linkedProjectTasksCount,
             parentCompanyGroup = parentCompanyGroup,
             subDepartmentGroups = subDepartmentGroups,
             onOpenGroupMembersDialog = onOpenGroupMembersDialog,
             onOpenCreateTaskDialog = onOpenCreateTaskDialog,
-            onOpenGroupChatById = onOpenGroupChatById
+            onOpenGroupChatById = onOpenGroupChatById,
+            onOpenProjectWorkspace = onOpenProjectWorkspace,
+            onOpenQuickProjectAccounting = onOpenQuickProjectAccounting,
+            onOpenFullProjectDetail = onOpenFullProjectDetail
         )
     }
 
@@ -568,11 +585,16 @@ private fun ChatStreamFilterAndSearchSection(
 private fun WorkGroupHierarchyStrip(
     activeGroupMembersCount: Int,
     isCurrentUserGroupManager: Boolean,
+    linkedProject: ProjectEntity? = null,
+    linkedProjectTasksCount: Int = 0,
     parentCompanyGroup: WorkGroupEntity?,
     subDepartmentGroups: List<WorkGroupEntity>,
     onOpenGroupMembersDialog: (Int) -> Unit,
     onOpenCreateTaskDialog: () -> Unit,
-    onOpenGroupChatById: (String) -> Unit
+    onOpenGroupChatById: (String) -> Unit,
+    onOpenProjectWorkspace: () -> Unit = {},
+    onOpenQuickProjectAccounting: () -> Unit = {},
+    onOpenFullProjectDetail: () -> Unit = {}
 ) {
     Surface(
         color = GoldPrimary.copy(alpha = 0.08f),
@@ -589,6 +611,65 @@ private fun WorkGroupHierarchyStrip(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (linkedProject != null) {
+                val netBalance = linkedProject.totalIncome - linkedProject.totalExpenses
+                Surface(
+                    onClick = onOpenProjectWorkspace,
+                    shape = RoundedCornerShape(12.dp),
+                    color = GoldPrimary,
+                    modifier = Modifier.testTag("chat_header_manage_project_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Apartment, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        Text(
+                            text = "إدارة المشروع (${GoldUtils.formatCurrency(netBalance)} • $linkedProjectTasksCount مهام)",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = onOpenQuickProjectAccounting,
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF10B981).copy(alpha = 0.14f),
+                    border = BorderStroke(0.8.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
+                    modifier = Modifier.testTag("chat_header_project_entry_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
+                        Text("قيد مالي", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                    }
+                }
+
+                Surface(
+                    onClick = onOpenFullProjectDetail,
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(0.8.dp, GoldPrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier.testTag("chat_header_open_project_page_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(12.dp))
+                        Text("صفحة المشروع", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                    }
+                }
+            }
+
             if (isCurrentUserGroupManager) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -1676,23 +1757,16 @@ private fun ComposerInputRow(
             .fillMaxWidth()
             .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        IconButton(
+        OozoxCircleIconButton(
             onClick = onOpenAttachmentSheet,
-            modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
-                .testTag("chat_attachment_plus_btn")
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "إرفاق وأدوات",
-                tint = GoldPrimary,
-                modifier = Modifier.size(21.dp)
-            )
-        }
+            imageVector = Icons.Default.Add,
+            contentDescription = "إرفاق وأدوات",
+            tint = GoldPrimary,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+            modifier = Modifier.testTag("chat_attachment_plus_btn")
+        )
 
         when {
             isInlineRecordingAudio -> {
@@ -1821,7 +1895,7 @@ private fun ComposerInputRow(
             voiceDraftPath != null
 
         if (hasContentToSend) {
-            IconButton(
+            OozoxCircleIconButton(
                 onClick = {
                     when {
                         voiceDraftPath != null -> {
@@ -1884,35 +1958,19 @@ private fun ComposerInputRow(
                         }
                     }
                 },
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(adaptiveGoldPrimary)
-                    .testTag("chat_send_btn")
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "إرسال",
-                    tint = adaptiveOnPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = "إرسال",
+                tint = adaptiveOnPrimary,
+                containerColor = adaptiveGoldPrimary,
+                modifier = Modifier.testTag("chat_send_btn")
+            )
         } else {
             val cancelThresholdPx = with(density) { 84.dp.toPx() }
             val swipeDownCameraThresholdPx = with(density) { 22.dp.toPx() }
 
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            isInlineRecordingAudio && isInlineRecordCancelZone -> StatusRed
-                            isInlineRecordingAudio -> Color(0xFFEF4444)
-                            isActionButtonCameraMode -> Color(0xFF10B981)
-                            else -> GoldPrimary
-                        }
-                    )
+                    .size(OozoxCircleButtonDefaults.TouchSize)
                     .pointerInput(isActionButtonCameraMode, isImeOpen) {
                         if (isImeOpen) {
                             detectTapGestures(
@@ -2011,17 +2069,30 @@ private fun ComposerInputRow(
                     .testTag("chat_mic_camera_toggle_btn"),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = when {
-                        isInlineRecordingAudio && isInlineRecordCancelZone -> Icons.Default.Close
-                        isInlineRecordingAudio -> Icons.Default.Mic
-                        isActionButtonCameraMode -> Icons.Default.CameraAlt
-                        else -> Icons.Default.Mic
+                Surface(
+                    shape = CircleShape,
+                    color = when {
+                        isInlineRecordingAudio && isInlineRecordCancelZone -> StatusRed
+                        isInlineRecordingAudio -> Color(0xFFEF4444)
+                        isActionButtonCameraMode -> Color(0xFF10B981)
+                        else -> GoldPrimary
                     },
-                    contentDescription = if (isActionButtonCameraMode) "كاميرا" else "تسجيل صوتي",
-                    tint = adaptiveOnPrimary,
-                    modifier = Modifier.size(20.dp)
-                )
+                    modifier = Modifier.size(OozoxCircleButtonDefaults.CircleSize)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = when {
+                                isInlineRecordingAudio && isInlineRecordCancelZone -> Icons.Default.Close
+                                isInlineRecordingAudio -> Icons.Default.Mic
+                                isActionButtonCameraMode -> Icons.Default.CameraAlt
+                                else -> Icons.Default.Mic
+                            },
+                            contentDescription = if (isActionButtonCameraMode) "كاميرا" else "تسجيل صوتي",
+                            tint = adaptiveOnPrimary,
+                            modifier = Modifier.size(OozoxCircleButtonDefaults.IconSize)
+                        )
+                    }
+                }
             }
         }
     }

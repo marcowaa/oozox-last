@@ -98,6 +98,8 @@ import com.example.ui.components.MediaChooserKind
 import com.example.ui.components.MediaPreviewItem
 import com.example.ui.components.MediaPreviewModal
 import com.example.ui.components.MediaSourceChooserCard
+import com.example.ui.components.OozoxCircleButtonDefaults
+import com.example.ui.components.OozoxCircleIconButton
 import com.example.ui.components.OozoxThumbnailImage
 import com.example.ui.components.VideoEditorDialog
 import com.example.ui.screens.DocumentMessageItem
@@ -2070,70 +2072,58 @@ private fun FloatingExpandedChatWindowContent(
                         }
 
                         // Video Call Button
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = { startInBubbleCall(CallType.VIDEO) },
-                            modifier = Modifier
-                                .size(38.dp)
-                                .testTag("bubble_video_call_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Videocam,
-                                contentDescription = "مكالمة فيديو",
-                                tint = adaptiveGoldPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = "مكالمة فيديو",
+                            tint = adaptiveGoldPrimary,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp,
+                            modifier = Modifier.testTag("bubble_video_call_btn")
+                        )
 
                         // Audio Call Button
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = { startInBubbleCall(CallType.AUDIO) },
-                            modifier = Modifier
-                                .size(38.dp)
-                                .testTag("bubble_audio_call_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Call,
-                                contentDescription = "مكالمة صوتية",
-                                tint = Color(0xFF10B981),
-                                modifier = Modifier.size(19.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "مكالمة صوتية",
+                            tint = Color(0xFF10B981),
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp,
+                            modifier = Modifier.testTag("bubble_audio_call_btn")
+                        )
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = { MessengerBubbleManager.setDoNotDisturb(context, true) },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsOff,
-                                contentDescription = "وضع عدم الإزعاج",
-                                tint = colors.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.NotificationsOff,
+                            contentDescription = "وضع عدم الإزعاج",
+                            tint = colors.onSurfaceVariant,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = { onOpenInFullApp(activeChatId) },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInNew,
-                                contentDescription = "فتح في التطبيق",
-                                tint = GoldPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = "فتح في التطبيق",
+                            tint = GoldPrimary,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = onMinimize,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Remove,
-                                contentDescription = "تصغير كفقاعة",
-                                tint = colors.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "تصغير كفقاعة",
+                            tint = colors.onSurfaceVariant,
+                            containerColor = Color.Transparent,
+                            circleSize = 32.dp,
+                            touchSize = 36.dp
+                        )
                     }
 
                     HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.4f), thickness = 0.8.dp)
@@ -2446,28 +2436,19 @@ private fun FloatingExpandedChatWindowContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(colors.surface)
-                            .padding(horizontal = 8.dp, vertical = 7.dp),
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = { showAttachmentPanel = !showAttachmentPanel },
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (showAttachmentPanel) GoldPrimary.copy(alpha = 0.18f)
-                                    else colors.surfaceVariant.copy(alpha = 0.55f)
-                                )
-                                .testTag("floating_bubble_attach_btn")
-                        ) {
-                            Icon(
-                                imageVector = if (showAttachmentPanel) Icons.Default.Close else Icons.Default.Add,
-                                contentDescription = "إرفاق",
-                                tint = if (showAttachmentPanel) GoldPrimary else colors.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                            imageVector = if (showAttachmentPanel) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = "إرفاق",
+                            tint = if (showAttachmentPanel) GoldPrimary else colors.onSurfaceVariant,
+                            containerColor = if (showAttachmentPanel) GoldPrimary.copy(alpha = 0.18f)
+                            else colors.surfaceVariant.copy(alpha = 0.55f),
+                            modifier = Modifier.testTag("floating_bubble_attach_btn")
+                        )
 
                         when {
                             isInlineRecordingAudio -> {
@@ -2673,7 +2654,7 @@ private fun FloatingExpandedChatWindowContent(
                             voiceDraftPath != null
 
                         if (hasContentToSend) {
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = {
                                     when {
                                         voiceDraftPath != null -> {
@@ -2699,7 +2680,7 @@ private fun FloatingExpandedChatWindowContent(
                                             replyingToMessage = null
                                         }
                                         attachedDocumentInfo != null -> {
-                                            val doc = attachedDocumentInfo ?: return@IconButton
+                                            val doc = attachedDocumentInfo ?: return@OozoxCircleIconButton
                                             val payload = "${doc.uri}||${doc.fileName}||${doc.fileSize}||${messageInputText.trim()}"
                                             coroutineScope.launch {
                                                 val user = currentUser
@@ -2740,34 +2721,18 @@ private fun FloatingExpandedChatWindowContent(
                                         }
                                     }
                                 },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(GoldPrimary)
-                                    .testTag("floating_bubble_send_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "إرسال",
-                                    tint = Color.Black,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "إرسال",
+                                tint = Color.Black,
+                                containerColor = GoldPrimary,
+                                modifier = Modifier.testTag("floating_bubble_send_button")
+                            )
                         } else {
                             val cancelThresholdPx = with(density) { 80.dp.toPx() }
                             val swipeDownCamPx = with(density) { 22.dp.toPx() }
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            isInlineRecordingAudio && isInlineRecordCancelZone -> Color(0xFFEF4444)
-                                            isInlineRecordingAudio -> Color(0xFFEF4444)
-                                            isActionCameraMode -> Color(0xFF10B981)
-                                            else -> GoldPrimary
-                                        }
-                                    )
+                                    .size(OozoxCircleButtonDefaults.TouchSize)
                                     .pointerInput(isActionCameraMode, activeChatId) {
                                         awaitEachGesture {
                                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -2865,17 +2830,30 @@ private fun FloatingExpandedChatWindowContent(
                                     .testTag("floating_bubble_mic_cam_btn"),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = when {
-                                        isInlineRecordingAudio && isInlineRecordCancelZone -> Icons.Default.Close
-                                        isInlineRecordingAudio -> Icons.Default.Mic
-                                        isActionCameraMode -> Icons.Default.Videocam
-                                        else -> Icons.Default.Mic
+                                Surface(
+                                    shape = CircleShape,
+                                    color = when {
+                                        isInlineRecordingAudio && isInlineRecordCancelZone -> Color(0xFFEF4444)
+                                        isInlineRecordingAudio -> Color(0xFFEF4444)
+                                        isActionCameraMode -> Color(0xFF10B981)
+                                        else -> GoldPrimary
                                     },
-                                    contentDescription = if (isActionCameraMode) "تسجيل فيديو" else "تسجيل صوتي",
-                                    tint = if (isInlineRecordingAudio || isActionCameraMode) Color.White else Color.Black,
-                                    modifier = Modifier.size(19.dp)
-                                )
+                                    modifier = Modifier.size(OozoxCircleButtonDefaults.CircleSize)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = when {
+                                                isInlineRecordingAudio && isInlineRecordCancelZone -> Icons.Default.Close
+                                                isInlineRecordingAudio -> Icons.Default.Mic
+                                                isActionCameraMode -> Icons.Default.Videocam
+                                                else -> Icons.Default.Mic
+                                            },
+                                            contentDescription = if (isActionCameraMode) "تسجيل فيديو" else "تسجيل صوتي",
+                                            tint = if (isInlineRecordingAudio || isActionCameraMode) Color.White else Color.Black,
+                                            modifier = Modifier.size(OozoxCircleButtonDefaults.IconSize)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -3386,9 +3364,11 @@ private fun BubbleFinancialInspectorOverlay(
                         Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = GoldPrimary)
                         Text("تفاصيل القيد: $token", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق")
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق"
+                    )
                 }
 
                 if (matchingInvoice != null) {

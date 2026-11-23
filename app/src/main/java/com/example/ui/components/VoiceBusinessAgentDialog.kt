@@ -407,41 +407,30 @@ fun VoiceBusinessAgentDialog(
                             )
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OozoxCircleIconButton(
                                 onClick = {
                                     val newVal = !isSpeechConfirmationEnabled
                                     isSpeechConfirmationEnabled = newVal
                                     AiVoiceAgentPreferences.setSpeechConfirmationEnabled(context, newVal)
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSpeechConfirmationEnabled) OozoxTeal.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant)
-                            ) {
-                                Icon(
-                                    imageVector = if (isSpeechConfirmationEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.VolumeOff,
-                                    contentDescription = "الصوت",
-                                    tint = if (isSpeechConfirmationEnabled) OozoxTeal else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                imageVector = if (isSpeechConfirmationEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.VolumeOff,
+                                contentDescription = "الصوت",
+                                tint = if (isSpeechConfirmationEnabled) OozoxTeal else MaterialTheme.colorScheme.onSurfaceVariant,
+                                containerColor = if (isSpeechConfirmationEnabled) OozoxTeal.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant
+                            )
 
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = onDismiss,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "إغلاق",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "إغلاق",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            )
                         }
                     }
 

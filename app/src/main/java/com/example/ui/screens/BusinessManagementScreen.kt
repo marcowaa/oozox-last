@@ -1,7 +1,5 @@
 package com.example.ui.screens
 
-import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -15,9 +13,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
@@ -25,11 +23,12 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.util.WorkplaceLocationPolicyManager
 import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * Enterprise Business Management & Company Hub Screen:
  * Comprehensive system for company sector setup, staff credentials, granular RBAC,
- * salaries, bonuses & deductions, leave scheduling, mandatory GPS geofenced check-in,
+ * salaries, bonuses & deductions, leave scheduling, mandatory GPS geofenced login/check-in,
  * all projects & accounts management, and company-wide staff group task assignments.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +42,7 @@ fun BusinessManagementScreen(
     allShiftHandovers: List<ShiftHandoverEntity> = emptyList(),
     allComplaints: List<FinancialComplaintEntity> = emptyList(),
     allProjects: List<ProjectEntity> = emptyList(),
+    allProjectTasks: List<ProjectTaskEntity> = emptyList(),
     allHashtagAccounts: List<HashtagAccountEntity> = emptyList(),
     allHashtagEntries: List<HashtagEntryEntity> = emptyList(),
     allDailyRecords: List<DailyAccountingRecordEntity> = emptyList(),
@@ -53,6 +53,7 @@ fun BusinessManagementScreen(
     allWorkGroups: List<WorkGroupEntity> = emptyList(),
     allGroupMembers: List<GroupMemberEntity> = emptyList(),
     onLoginSubAccount: (String, String) -> Boolean = { _, _ -> false },
+    onLoginEmployeeWithMandatoryGps: suspend (String, String) -> Pair<Boolean, WorkplaceLocationPolicyManager.LocationPolicyCheckResult?> = { _, _ -> false to null },
     onLogoutSubAccount: () -> Unit = {},
     onAddShiftHandover: (ShiftHandoverEntity) -> Unit = {},
     onReceiveShift: (handoverId: String, receiverId: String, receiverName: String, notes: String?) -> Unit = { _, _, _, _ -> },
@@ -88,6 +89,7 @@ fun BusinessManagementScreen(
         baseSalary: Double,
         salaryCurrency: String,
         geofenceEnforced: Boolean,
+        isActiveEmployee: Boolean,
         canCreateInvoices: Boolean,
         canViewReports: Boolean,
         canSetProductPrices: Boolean,
@@ -99,33 +101,51 @@ fun BusinessManagementScreen(
         permManageAccounting: Boolean,
         permApproveDiscounts: Boolean,
         permDirectChat: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onDeleteEmployee: (String) -> Unit = {},
     onAddPayrollAdjustment: (HiddenSubAccountEntity, String, Double, String, String) -> Unit = { _, _, _, _, _ -> },
+    onDeletePayrollAdjustment: (String) -> Unit = {},
     onAddEmployeeLeave: (HiddenSubAccountEntity, String, String, String, String) -> Unit = { _, _, _, _, _ -> },
+    onDeleteEmployeeLeave: (String) -> Unit = {},
     onClockInMandatoryGps: suspend (HiddenSubAccountEntity) -> WorkplaceLocationPolicyManager.LocationPolicyCheckResult = {
-        WorkplaceLocationPolicyManager.LocationPolicyCheckResult(true, "COMPLIANT_IN_BOUNDS", "تم استلام العمل بنجاح", 0f, true, false)
+        WorkplaceLocationPolicyManager.LocationPolicyCheckResult(true, "COMPLIANT_IN_BOUNDS", "✓", 0f, true, false)
     },
     onOpenCompanyGroupChat: () -> Unit = {},
     onAssignTaskToCompanyGroup: (ProjectTaskEntity) -> Unit = {},
+    onUpdateTaskStatus: (String, String) -> Unit = { _, _ -> },
     onOpenProject: (String) -> Unit = {},
     onOpenSubscriptions: () -> Unit = {},
     onOpenCompanyAccounting: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
-    val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+
+    // RBAC permissions derived from activeSubAccount (Owner mode has full access)
+    val isOwnerMode = activeSubAccount == null
+    val canManageBusiness = isOwnerMode || activeSubAccount?.permManageBusiness == true
+    val canManageStaff = isOwnerMode || activeSubAccount?.permManageStaff == true
+    val canManagePayroll = isOwnerMode || activeSubAccount?.permManagePayroll == true
+    val canAssignTasks = isOwnerMode || activeSubAccount?.permAssignTasks == true
+    val canManageAccounting = isOwnerMode || activeSubAccount?.permManageAccounting == true
 
     // Dialog states
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
+    var showEmployeeLoginDialog by remember { mutableStateOf(false) }
     var employeeBeingEdited by remember { mutableStateOf<HiddenSubAccountEntity?>(null) }
     var employeeForAdjustment by remember { mutableStateOf<HiddenSubAccountEntity?>(null) }
     var employeeForLeave by remember { mutableStateOf<HiddenSubAccountEntity?>(null) }
     var employeePendingDelete by remember { mutableStateOf<HiddenSubAccountEntity?>(null) }
     var showAssignTaskModal by remember { mutableStateOf(false) }
 
-    val activeCompanyName = remember(businessProfile) {
-        businessProfile?.companyName?.ifBlank { "منظومة الشركة والمؤسسة" } ?: "منظومة الشركة والمؤسسة"
+    val defaultCompanyTitle = tr("biz.default_company_name")
+    val activeCompanyName = remember(businessProfile, defaultCompanyTitle) {
+        businessProfile?.companyName?.ifBlank { defaultCompanyTitle } ?: defaultCompanyTitle
+    }
+    val companyGroupId = remember(businessProfile) {
+        businessProfile?.companyGroupId?.ifBlank { "wg_company_main" } ?: "wg_company_main"
+    }
+    val companyGroupTasks = remember(allProjectTasks, companyGroupId) {
+        allProjectTasks.filter { it.workGroupId == companyGroupId || it.projectId == "company_main_tasks" }
     }
 
     Scaffold(
@@ -143,58 +163,75 @@ fun BusinessManagementScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             IconButton(
                                 onClick = onOpenDrawer,
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(48.dp)
                             ) {
-                                Icon(Icons.Default.Menu, contentDescription = "القائمة الجانبية", tint = GoldPrimary)
+                                Icon(Icons.Default.Menu, contentDescription = tr("biz.enterprise_title"), tint = GoldPrimary)
                             }
 
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .background(OozoxTeal.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.BusinessCenter, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.BusinessCenter, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(18.dp))
                             }
 
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = activeCompanyName,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = tr("biz.enterprise_sub"),
                                     fontSize = 10.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            IconButton(
-                                onClick = onOpenCompanyGroupChat,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(OozoxTeal.copy(alpha = 0.15f))
-                            ) {
-                                Icon(Icons.Default.Groups, contentDescription = "مجموعة الموظفين", tint = OozoxTeal, modifier = Modifier.size(20.dp))
-                            }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                            OozoxCircleIconButton(
+                                onClick = { showEmployeeLoginDialog = true },
+                                imageVector = Icons.Default.Badge,
+                                contentDescription = tr("hr.login_portal_btn"),
+                                tint = GoldPrimary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.testTag("topbar_employee_login_btn")
+                            )
 
-                            IconButton(
-                                onClick = { showAddEmployeeDialog = true },
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(GoldPrimary.copy(alpha = 0.2f))
-                            ) {
-                                Icon(Icons.Default.PersonAddAlt1, contentDescription = "إضافة موظف", tint = GoldPrimary, modifier = Modifier.size(20.dp))
+                            OozoxCircleIconButton(
+                                onClick = onOpenCompanyGroupChat,
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = tr("hr.staff_group_title"),
+                                tint = OozoxTeal,
+                                containerColor = OozoxTeal.copy(alpha = 0.15f),
+                                modifier = Modifier.testTag("topbar_company_group_btn")
+                            )
+
+                            if (canManageStaff) {
+                                OozoxCircleIconButton(
+                                    onClick = { showAddEmployeeDialog = true },
+                                    imageVector = Icons.Default.PersonAddAlt1,
+                                    contentDescription = tr("hr.add_employee"),
+                                    tint = GoldPrimary,
+                                    containerColor = GoldPrimary.copy(alpha = 0.2f),
+                                    modifier = Modifier.testTag("topbar_add_employee_btn")
+                                )
                             }
                         }
                     }
@@ -209,25 +246,25 @@ fun BusinessManagementScreen(
                         Tab(
                             selected = selectedTabIndex == 0,
                             onClick = { selectedTabIndex = 0 },
-                            text = { Text(tr("biz.tab_overview"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text(tr("biz.tab_overview"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             icon = { Icon(Icons.Default.Dashboard, contentDescription = null, modifier = Modifier.size(17.dp)) }
                         )
                         Tab(
                             selected = selectedTabIndex == 1,
                             onClick = { selectedTabIndex = 1 },
-                            text = { Text(tr("biz.tab_company"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text(tr("biz.tab_company"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             icon = { Icon(Icons.Default.Apartment, contentDescription = null, modifier = Modifier.size(17.dp)) }
                         )
                         Tab(
                             selected = selectedTabIndex == 2,
                             onClick = { selectedTabIndex = 2 },
-                            text = { Text(tr("biz.tab_hr"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text(tr("biz.tab_hr"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             icon = { Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(17.dp)) }
                         )
                         Tab(
                             selected = selectedTabIndex == 3,
                             onClick = { selectedTabIndex = 3 },
-                            text = { Text(tr("biz.tab_geofence"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 3) FontWeight.Bold else FontWeight.Normal) },
+                            text = { Text(tr("biz.tab_geofence"), fontSize = 11.5.sp, fontWeight = if (selectedTabIndex == 3) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             icon = { Icon(Icons.Default.ShareLocation, contentDescription = null, modifier = Modifier.size(17.dp)) }
                         )
                     }
@@ -236,61 +273,132 @@ fun BusinessManagementScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (selectedTabIndex) {
-                0 -> BusinessOverviewTab(
-                    businessProfile = businessProfile,
-                    allProjects = allProjects,
-                    allHashtagAccounts = allHashtagAccounts,
-                    allHashtagEntries = allHashtagEntries,
-                    allInvoices = allInvoices,
-                    allSubAccounts = allSubAccounts,
-                    allPayrollAdjustments = allPayrollAdjustments,
-                    allAttendanceRecords = allAttendanceRecords,
-                    onOpenProject = onOpenProject,
-                    onOpenCompanyAccounting = onOpenCompanyAccounting,
-                    onOpenCompanyGroupChat = onOpenCompanyGroupChat,
-                    onAssignTaskToGroup = { showAssignTaskModal = true },
-                    onSwitchToTab = { selectedTabIndex = it }
-                )
-                1 -> BusinessSetupTab(
-                    businessProfile = businessProfile,
-                    onSaveProfile = onSaveBusinessProfile
-                )
-                2 -> BusinessHrPayrollTab(
-                    allEmployees = allSubAccounts,
-                    allPayrollAdjustments = allPayrollAdjustments,
-                    allEmployeeLeaves = allEmployeeLeaves,
-                    onAddEmployeeClick = { showAddEmployeeDialog = true },
-                    onEditEmployeeClick = { employeeBeingEdited = it },
-                    onAdjustPayrollClick = { employeeForAdjustment = it },
-                    onAddLeaveClick = { employeeForLeave = it },
-                    onDeleteEmployeeClick = { employeePendingDelete = it }
-                )
-                3 -> BusinessGeofenceGroupTab(
-                    businessProfile = businessProfile,
-                    allEmployees = allSubAccounts,
-                    allAttendanceRecords = allAttendanceRecords,
-                    activeSubAccount = activeSubAccount,
-                    onClockInMandatoryGps = onClockInMandatoryGps,
-                    onOpenCompanyGroupChat = onOpenCompanyGroupChat,
-                    onAssignTaskToGroup = { showAssignTaskModal = true }
-                )
+            // Active Logged-In Employee Session Banner
+            val loggedEmployee = activeSubAccount
+            if (loggedEmployee != null) {
+                Surface(
+                    color = OozoxTeal.copy(alpha = 0.14f),
+                    border = BorderStroke(0.8.dp, OozoxTeal.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = trFmt(
+                                    "hr.active_session_banner_fmt",
+                                    "name" to loggedEmployee.displayName,
+                                    "role" to loggedEmployee.roleTitle
+                                ),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = OozoxTeal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        TextButton(
+                            onClick = onLogoutSubAccount,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.testTag("switch_to_manager_btn")
+                        ) {
+                            Text(tr("hr.switch_to_manager"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                        }
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when (selectedTabIndex) {
+                    0 -> BusinessOverviewTab(
+                        businessProfile = businessProfile,
+                        allProjects = allProjects,
+                        allHashtagAccounts = allHashtagAccounts,
+                        allHashtagEntries = allHashtagEntries,
+                        allDailyRecords = allDailyRecords,
+                        allInvoices = allInvoices,
+                        allSubAccounts = allSubAccounts,
+                        allPayrollAdjustments = allPayrollAdjustments,
+                        allAttendanceRecords = allAttendanceRecords,
+                        canManageAccounting = canManageAccounting,
+                        canAssignTasks = canAssignTasks,
+                        onOpenProject = onOpenProject,
+                        onOpenCompanyAccounting = onOpenCompanyAccounting,
+                        onOpenCompanyGroupChat = onOpenCompanyGroupChat,
+                        onAssignTaskToGroup = { showAssignTaskModal = true },
+                        onSwitchToTab = { selectedTabIndex = it }
+                    )
+                    1 -> BusinessSetupTab(
+                        businessProfile = businessProfile,
+                        canEditBusiness = canManageBusiness,
+                        onSaveProfile = onSaveBusinessProfile
+                    )
+                    2 -> BusinessHrPayrollTab(
+                        allEmployees = allSubAccounts,
+                        allPayrollAdjustments = allPayrollAdjustments,
+                        allEmployeeLeaves = allEmployeeLeaves,
+                        canManageStaff = canManageStaff,
+                        canManagePayroll = canManagePayroll,
+                        onAddEmployeeClick = { showAddEmployeeDialog = true },
+                        onEditEmployeeClick = { employeeBeingEdited = it },
+                        onAdjustPayrollClick = { employeeForAdjustment = it },
+                        onAddLeaveClick = { employeeForLeave = it },
+                        onDeleteEmployeeClick = { employeePendingDelete = it },
+                        onDeletePayrollAdjustment = onDeletePayrollAdjustment,
+                        onDeleteEmployeeLeave = onDeleteEmployeeLeave
+                    )
+                    3 -> BusinessGeofenceGroupTab(
+                        businessProfile = businessProfile,
+                        allEmployees = allSubAccounts,
+                        allAttendanceRecords = allAttendanceRecords,
+                        companyTasks = companyGroupTasks,
+                        activeSubAccount = activeSubAccount,
+                        canAssignTasks = canAssignTasks,
+                        onClockInMandatoryGps = onClockInMandatoryGps,
+                        onOpenEmployeeLoginClick = { showEmployeeLoginDialog = true },
+                        onOpenCompanyGroupChat = onOpenCompanyGroupChat,
+                        onAssignTaskToGroup = { showAssignTaskModal = true },
+                        onUpdateTaskStatus = onUpdateTaskStatus
+                    )
+                }
             }
         }
+    }
+
+    // Modal: Mandatory Employee Login + GPS Verification
+    if (showEmployeeLoginDialog) {
+        EmployeeLoginMandatoryGpsDialog(
+            onDismiss = { showEmployeeLoginDialog = false },
+            onLoginWithMandatoryGps = onLoginEmployeeWithMandatoryGps
+        )
     }
 
     // Modal: Add Employee
     if (showAddEmployeeDialog) {
         AddEditEmployeeDialog(
             employee = null,
+            defaultCurrency = businessProfile?.currency?.ifBlank { "EGP" } ?: "EGP",
             onDismiss = { showAddEmployeeDialog = false },
-            onSave = { id, name, user, phone, pass, role, dept, sal, cur, geo, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
-                onCreateOrUpdateEmployee(id, name, user, phone, pass, role, dept, sal, cur, geo, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat)
+            onSave = { id, name, user, phone, pass, role, dept, sal, cur, geo, activeEmp, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
+                onCreateOrUpdateEmployee(id, name, user, phone, pass, role, dept, sal, cur, geo, activeEmp, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat)
                 showAddEmployeeDialog = false
             }
         )
@@ -301,9 +409,10 @@ fun BusinessManagementScreen(
     if (editTarget != null) {
         AddEditEmployeeDialog(
             employee = editTarget,
+            defaultCurrency = businessProfile?.currency?.ifBlank { "EGP" } ?: "EGP",
             onDismiss = { employeeBeingEdited = null },
-            onSave = { id, name, user, phone, pass, role, dept, sal, cur, geo, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
-                onCreateOrUpdateEmployee(id, name, user, phone, pass, role, dept, sal, cur, geo, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat)
+            onSave = { id, name, user, phone, pass, role, dept, sal, cur, geo, activeEmp, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
+                onCreateOrUpdateEmployee(id, name, user, phone, pass, role, dept, sal, cur, geo, activeEmp, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat)
                 employeeBeingEdited = null
             }
         )
@@ -340,8 +449,8 @@ fun BusinessManagementScreen(
     if (deleteTarget != null) {
         AlertDialog(
             onDismissRequest = { employeePendingDelete = null },
-            title = { Text("حذف الموظف", fontWeight = FontWeight.Bold) },
-            text = { Text("هل أنت متأكد من حذف حساب وصلاحيات الموظف «${deleteTarget.displayName}»؟") },
+            title = { Text(tr("hr.delete_emp_title"), fontWeight = FontWeight.Bold) },
+            text = { Text(trFmt("hr.delete_emp_confirm_fmt", "name" to deleteTarget.displayName)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -350,7 +459,7 @@ fun BusinessManagementScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("تأكيد الحذف", color = Color.White)
+                    Text(tr("hr.confirm_delete"), color = Color.White)
                 }
             },
             dismissButton = {
@@ -363,7 +472,6 @@ fun BusinessManagementScreen(
 
     // Modal: Assign Task to Company Staff Group
     if (showAssignTaskModal) {
-        val companyGroupId = businessProfile?.companyGroupId?.ifBlank { "wg_company_main" } ?: "wg_company_main"
         val groupMembersMentions = remember(allSubAccounts) {
             allSubAccounts.filter { it.isActiveEmployee }.map { "@${it.displayName} (@${it.username})" }
         }

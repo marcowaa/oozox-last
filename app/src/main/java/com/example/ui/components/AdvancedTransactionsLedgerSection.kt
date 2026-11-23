@@ -769,14 +769,13 @@ fun ModernAccountingRecordRow(
                                     Text(acctStr("inspect"), fontSize = 11.5.sp, color = adaptiveStatusOrange, fontWeight = FontWeight.Bold)
                                 }
                             }
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = onDelete,
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .background(adaptiveStatusRed.copy(alpha = 0.12f), CircleShape)
-                            ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = acctStr("delete"), tint = adaptiveStatusRed, modifier = Modifier.size(18.dp))
-                            }
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = acctStr("delete"),
+                                tint = adaptiveStatusRed,
+                                containerColor = adaptiveStatusRed.copy(alpha = 0.12f)
+                            )
                         }
                     }
                 }

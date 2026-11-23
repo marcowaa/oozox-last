@@ -90,19 +90,13 @@ fun BroadcastMessagingDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(
+                    OozoxCircleIconButton(
                         onClick = { if (!isSending) onDismiss() },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "إغلاق",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

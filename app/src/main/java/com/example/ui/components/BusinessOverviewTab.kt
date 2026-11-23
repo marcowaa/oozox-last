@@ -2,10 +2,8 @@ package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,10 +27,11 @@ import com.example.data.model.*
 import com.example.ui.theme.*
 import com.example.util.GoldUtils
 import com.example.util.tr
+import com.example.util.trFmt
 
 /**
  * Business Overview Tab: Executive Dashboard covering All Projects,
- * All Accounts/Hashtags, Staff Headcount, and Company Staff Group.
+ * All Accounts/Hashtags, Daily Ledger, Invoices, Payroll, Staff Headcount, and Company Staff Group.
  */
 @Composable
 fun BusinessOverviewTab(
@@ -40,31 +39,47 @@ fun BusinessOverviewTab(
     allProjects: List<ProjectEntity>,
     allHashtagAccounts: List<HashtagAccountEntity>,
     allHashtagEntries: List<HashtagEntryEntity> = emptyList(),
+    allDailyRecords: List<DailyAccountingRecordEntity> = emptyList(),
     allInvoices: List<InvoiceEntity>,
     allSubAccounts: List<HiddenSubAccountEntity>,
     allPayrollAdjustments: List<PayrollAdjustmentEntity>,
     allAttendanceRecords: List<EmployeeAttendanceEntity>,
+    canManageAccounting: Boolean = true,
+    canAssignTasks: Boolean = true,
     onOpenProject: (String) -> Unit,
     onOpenCompanyAccounting: () -> Unit,
     onOpenCompanyGroupChat: () -> Unit,
     onAssignTaskToGroup: () -> Unit,
     onSwitchToTab: (Int) -> Unit
 ) {
-    val activeStaffCount = remember(allSubAccounts) {
-        allSubAccounts.count { it.isActiveEmployee }
-    }
-    val totalProjectsCapital = remember(allProjects) {
-        allProjects.sumOf { it.estimatedCapital }
-    }
-    val totalInvoicesRevenue = remember(allInvoices) {
-        allInvoices.sumOf { it.totalAmount }
-    }
+    val activeEmployees = remember(allSubAccounts) { allSubAccounts.filter { it.isActiveEmployee } }
+    val activeStaffCount = activeEmployees.size
+
+    val totalProjectsCapital = remember(allProjects) { allProjects.sumOf { it.estimatedCapital } }
+    val totalInvoicesRevenue = remember(allInvoices) { allInvoices.sumOf { it.totalAmount } }
+    val paidInvoices = remember(allInvoices) { allInvoices.count { it.status == InvoiceStatus.PAID.name } }
+    val pendingInvoices = remember(allInvoices) { allInvoices.count { it.status == InvoiceStatus.PENDING.name } }
+    val overdueInvoices = remember(allInvoices) { allInvoices.count { it.status == InvoiceStatus.OVERDUE.name } }
+
     val totalHashtagsBalance = remember(allHashtagEntries) {
         allHashtagEntries.sumOf { if (it.direction == "IN") it.amount else -it.amount }
     }
-    val totalBaseSalaries = remember(allSubAccounts) {
-        allSubAccounts.filter { it.isActiveEmployee }.sumOf { it.baseSalary }
+    val hashtagBalances = remember(allHashtagAccounts, allHashtagEntries) {
+        allHashtagAccounts.map { acct ->
+            val net = allHashtagEntries
+                .filter { it.hashtagId == acct.id }
+                .sumOf { if (it.direction == "IN") it.amount else -it.amount }
+            acct to net
+        }
     }
+    val dailyInflow = remember(allDailyRecords) {
+        allDailyRecords.sumOf { it.incomingAmount }
+    }
+    val dailyOutflow = remember(allDailyRecords) {
+        allDailyRecords.sumOf { it.outgoingAmount }
+    }
+
+    val totalBaseSalaries = remember(activeEmployees) { activeEmployees.sumOf { it.baseSalary } }
     val totalBonuses = remember(allPayrollAdjustments) {
         allPayrollAdjustments.filter { it.type == "BONUS" }.sumOf { it.amount }
     }
@@ -80,13 +95,68 @@ fun BusinessOverviewTab(
         allAttendanceRecords.count { it.status == "OUT_OF_BOUNDS" || it.status == "GPS_DISABLED" || it.locationPolicyViolated }
     }
 
+    val activeLang = com.example.util.LocalAppLanguage.current
+    val defaultSubtitle = tr("biz.default_subtitle")
+    val resolvedSectorLabel = remember(businessProfile, activeLang, defaultSubtitle) {
+        val sectorEnum = BusinessActivitySector.entries.firstOrNull { it.name == businessProfile?.activityType }
+        if (sectorEnum == BusinessActivitySector.CUSTOM) {
+            businessProfile?.customActivityLabel?.ifBlank { sectorEnum.localizedLabel(activeLang) } ?: sectorEnum.localizedLabel(activeLang)
+        } else {
+            sectorEnum?.localizedLabel(activeLang) ?: defaultSubtitle
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .testTag("business_overview_tab"),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // 0. Prompt user to complete Company & HQ GPS Setup if not configured yet
+        if (businessProfile == null || !businessProfile.isSetupCompleted) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = GoldPrimary.copy(alpha = 0.14f)),
+                    border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.55f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = tr("biz.setup_incomplete_title"),
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = tr("biz.setup_incomplete_desc"),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = { onSwitchToTab(1) },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.Black),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.heightIn(min = 42.dp).testTag("complete_setup_cta_btn")
+                        ) {
+                            Text(tr("biz.complete_setup_btn"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
         // 1. Executive Hero KPIs Card
         item {
             Card(
@@ -101,26 +171,26 @@ fun BusinessOverviewTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = businessProfile?.companyName?.ifBlank { "منظومة الشركة والمؤسسة" } ?: "منظومة الشركة والمؤسسة",
+                                text = businessProfile?.companyName?.ifBlank { tr("biz.default_company_name") }
+                                    ?: tr("biz.default_company_name"),
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = businessProfile?.customActivityLabel?.ifBlank {
-                                    businessProfile.activityType
-                                } ?: "إدارة المشاريع والحسابات والكوادر البشرية",
+                                text = resolvedSectorLabel,
                                 fontSize = 11.5.sp,
-                                color = OozoxTeal
+                                color = OozoxTeal,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
@@ -130,7 +200,7 @@ fun BusinessOverviewTab(
                             border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.4f))
                         ) {
                             Text(
-                                text = "مؤسسة رسمية 🏢",
+                                text = tr("biz.official_enterprise_badge"),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = GoldPrimary,
@@ -141,47 +211,44 @@ fun BusinessOverviewTab(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
 
-                    // KPIs Grid
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ExecutiveKpiChip(
                             icon = Icons.Default.WorkOutline,
                             iconTint = OozoxTeal,
-                            label = "المشاريع الجارية",
-                            value = "${allProjects.size} مشاريع",
+                            label = tr("biz.kpi_projects"),
+                            value = trFmt("biz.kpi_projects_count_fmt", "count" to allProjects.size),
                             subValue = GoldUtils.formatCurrency(totalProjectsCapital),
                             modifier = Modifier.weight(1f)
                         )
                         ExecutiveKpiChip(
                             icon = Icons.Default.AccountBalanceWallet,
                             iconTint = GoldPrimary,
-                            label = "إجمالي الفواتير",
-                            value = "${allInvoices.size} فاتورة",
+                            label = tr("biz.kpi_invoices"),
+                            value = trFmt("biz.kpi_invoices_count_fmt", "count" to allInvoices.size),
                             subValue = GoldUtils.formatCurrency(totalInvoicesRevenue),
                             modifier = Modifier.weight(1f)
                         )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ExecutiveKpiChip(
                             icon = Icons.Default.People,
                             iconTint = Color(0xFF3B82F6),
-                            label = "الموظفون والرواتب",
-                            value = "$activeStaffCount موظف",
-                            subValue = "صافي: ${GoldUtils.formatCurrency(netPayroll)}",
+                            label = tr("biz.kpi_staff"),
+                            value = trFmt("biz.kpi_staff_count_fmt", "count" to activeStaffCount),
+                            subValue = trFmt("biz.kpi_net_payroll_fmt", "amount" to GoldUtils.formatCurrency(netPayroll)),
                             modifier = Modifier.weight(1f)
                         )
                         ExecutiveKpiChip(
                             icon = Icons.Default.MyLocation,
                             iconTint = if (violationsTodayCount > 0) Color(0xFFEF4444) else Color(0xFF10B981),
-                            label = "حضور الـ GPS",
-                            value = "$presentTodayCount حاضر",
-                            subValue = if (violationsTodayCount > 0) "🚨 $violationsTodayCount مخالفة" else "✓ النطاق ملتزم",
+                            label = tr("biz.kpi_gps_attendance"),
+                            value = trFmt("biz.kpi_present_fmt", "count" to presentTodayCount),
+                            subValue = if (violationsTodayCount > 0) {
+                                trFmt("biz.kpi_violations_fmt", "count" to violationsTodayCount)
+                            } else {
+                                tr("biz.kpi_compliant_ok")
+                            },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -220,20 +287,24 @@ fun BusinessOverviewTab(
                         }
                         Column {
                             Text(
-                                text = businessProfile?.companyGroupName?.ifBlank { "مجموعة كل الموظفين" } ?: "مجموعة كل الموظفين",
+                                text = businessProfile?.companyGroupName?.ifBlank { tr("hr.staff_group_title") }
+                                    ?: tr("hr.staff_group_title"),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "مجموعة موحدة تشمل $activeStaffCount موظف لإسناد المهام والتنبيهات المباشرة",
+                                text = trFmt("biz.group_banner_desc_fmt", "count" to activeStaffCount),
                                 fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Button(
                             onClick = onOpenCompanyGroupChat,
                             shape = RoundedCornerShape(8.dp),
@@ -243,17 +314,17 @@ fun BusinessOverviewTab(
                         ) {
                             Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("المجموعة", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text(tr("biz.group_open_short"), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        IconButton(
-                            onClick = onAssignTaskToGroup,
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(GoldPrimary.copy(alpha = 0.2f))
-                        ) {
-                            Icon(Icons.Default.AddTask, contentDescription = "إسناد مهمة", tint = GoldPrimary, modifier = Modifier.size(20.dp))
+                        if (canAssignTasks) {
+                            OozoxCircleIconButton(
+                                onClick = onAssignTaskToGroup,
+                                imageVector = Icons.Default.AddTask,
+                                contentDescription = tr("hr.assign_task_group"),
+                                tint = GoldPrimary,
+                                containerColor = GoldPrimary.copy(alpha = 0.2f)
+                            )
                         }
                     }
                 }
@@ -278,7 +349,7 @@ fun BusinessOverviewTab(
                 }
 
                 Text(
-                    text = "${allProjects.size} مشاريع مسجلة",
+                    text = trFmt("biz.projects_count_fmt", "count" to allProjects.size),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -298,12 +369,13 @@ fun BusinessOverviewTab(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
-                        Text("لا توجد مشاريع مضافة حالياً", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(tr("biz.no_projects"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         } else {
             items(allProjects) { project ->
+                val projNet = project.totalIncome - project.totalExpenses
                 Surface(
                     onClick = { onOpenProject(project.id) },
                     shape = RoundedCornerShape(14.dp),
@@ -311,7 +383,7 @@ fun BusinessOverviewTab(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 52.dp)
                         .testTag("project_item_${project.id}")
                 ) {
                     Row(
@@ -346,10 +418,16 @@ fun BusinessOverviewTab(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "${project.type} • رأس المال: ${GoldUtils.formatCurrency(project.estimatedCapital)}",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
+                                    text = trFmt(
+                                        "biz.project_finance_fmt",
+                                        "cap" to GoldUtils.formatCurrency(project.estimatedCapital),
+                                        "inc" to GoldUtils.formatCurrency(project.totalIncome),
+                                        "exp" to GoldUtils.formatCurrency(project.totalExpenses),
+                                        "net" to GoldUtils.formatCurrency(projNet)
+                                    ),
+                                    fontSize = 10.5.sp,
+                                    color = if (projNet >= 0.0) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFEF4444),
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -361,7 +439,7 @@ fun BusinessOverviewTab(
             }
         }
 
-        // 4. All Accounts, Ledgers & Hashtags Section
+        // 4. All Accounts, Ledgers, Hashtags & Invoices Hub
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -378,11 +456,13 @@ fun BusinessOverviewTab(
                     )
                 }
 
-                TextButton(
-                    onClick = onOpenCompanyAccounting,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text("فتح المركز المحاسبي ↗", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = OozoxTeal)
+                if (canManageAccounting) {
+                    TextButton(
+                        onClick = onOpenCompanyAccounting,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(tr("biz.open_accounting_hub"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = OozoxTeal)
+                    }
                 }
             }
         }
@@ -395,46 +475,66 @@ fun BusinessOverviewTab(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("رصيد حسابات الهاشتاج (#):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            text = GoldUtils.formatCurrency(totalHashtagsBalance),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (totalHashtagsBalance >= 0.0) Color(0xFF10B981) else Color(0xFFEF4444)
-                        )
-                    }
+                    AccountMetricRow(
+                        label = tr("biz.hashtags_balance"),
+                        value = GoldUtils.formatCurrency(totalHashtagsBalance),
+                        valueColor = if (totalHashtagsBalance >= 0.0) Color(0xFF10B981) else Color(0xFFEF4444)
+                    )
+                    AccountMetricRow(
+                        label = tr("biz.daily_inflow"),
+                        value = "+ ${GoldUtils.formatCurrency(dailyInflow)}",
+                        valueColor = Color(0xFF10B981)
+                    )
+                    AccountMetricRow(
+                        label = tr("biz.daily_outflow"),
+                        value = "- ${GoldUtils.formatCurrency(dailyOutflow)}",
+                        valueColor = Color(0xFFEF4444)
+                    )
+                    AccountMetricRow(
+                        label = tr("biz.invoices_total_label"),
+                        value = GoldUtils.formatCurrency(totalInvoicesRevenue),
+                        valueColor = GoldPrimary
+                    )
+                    Text(
+                        text = trFmt("biz.invoices_status_fmt", "paid" to paidInvoices, "pending" to pendingInvoices, "overdue" to overdueInvoices),
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                    AccountMetricRow(
+                        label = tr("biz.net_payroll_label"),
+                        value = GoldUtils.formatCurrency(netPayroll),
+                        valueColor = Color(0xFF3B82F6)
+                    )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("إجمالي الفواتير الصادرة:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (hashtagBalances.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                         Text(
-                            text = GoldUtils.formatCurrency(totalInvoicesRevenue),
-                            fontSize = 13.sp,
+                            text = tr("biz.hashtag_accounts_list"),
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = GoldPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("مسير الرواتب الصافي (شهرياً):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            text = GoldUtils.formatCurrency(netPayroll),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF3B82F6)
-                        )
+                        hashtagBalances.take(6).forEach { (acct, bal) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "#${acct.tag}",
+                                    fontSize = 11.5.sp,
+                                    color = OozoxTeal,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = GoldUtils.formatCurrency(bal),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (bal >= 0.0) Color(0xFF10B981) else Color(0xFFEF4444)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -442,17 +542,14 @@ fun BusinessOverviewTab(
 
         // Quick Navigation Tiles
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = { onSwitchToTab(1) },
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.Black),
                     modifier = Modifier.weight(1f).heightIn(min = 44.dp)
                 ) {
-                    Text("بيانات النشاط 🏢", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(tr("biz.tab_company"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Button(
@@ -461,10 +558,22 @@ fun BusinessOverviewTab(
                     colors = ButtonDefaults.buttonColors(containerColor = OozoxTeal, contentColor = Color.White),
                     modifier = Modifier.weight(1f).heightIn(min = 44.dp)
                 ) {
-                    Text("إدارة الموظفين 👥", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(tr("biz.tab_hr"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AccountMetricRow(label: String, value: String, valueColor: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = valueColor)
     }
 }
 
@@ -483,16 +592,13 @@ private fun ExecutiveKpiChip(
         border = BorderStroke(0.8.dp, iconTint.copy(alpha = 0.35f)),
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
+        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
-                Text(label, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(label, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(value, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            Text(subValue, fontSize = 10.sp, color = iconTint, fontWeight = FontWeight.Medium)
+            Text(subValue, fontSize = 10.sp, color = iconTint, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

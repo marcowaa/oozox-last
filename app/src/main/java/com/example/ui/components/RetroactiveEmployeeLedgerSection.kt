@@ -169,19 +169,13 @@ fun RetroactiveEmployeeLedgerDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = onDismiss,
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "رجوع",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "رجوع",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
                             Column {
                                 Text(
                                     text = "كشف الرصيد والعهد بأثر رجعي",
@@ -197,7 +191,7 @@ fun RetroactiveEmployeeLedgerDialog(
                             }
                         }
 
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = {
                                 shareLedgerReport(
                                     context = context,
@@ -209,19 +203,12 @@ fun RetroactiveEmployeeLedgerDialog(
                                     totalDeficits = totalDeficits
                                 )
                             },
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(GoldPrimary.copy(alpha = 0.15f))
-                                .testTag("share_retroactive_ledger_btn")
-                        ) {
-                            Icon(
-                                Icons.Default.Share,
-                                contentDescription = "مشاركة الكشف",
-                                tint = GoldPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "مشاركة الكشف",
+                            tint = GoldPrimary,
+                            containerColor = GoldPrimary.copy(alpha = 0.15f),
+                            modifier = Modifier.testTag("share_retroactive_ledger_btn")
+                        )
                     }
                 }
 

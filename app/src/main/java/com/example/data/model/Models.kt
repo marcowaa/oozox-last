@@ -582,7 +582,14 @@ data class ProjectMemberInput(
     val name: String,
     val phone: String,
     val roleTask: String,
-    val isCoManager: Boolean = false
+    val isCoManager: Boolean = false,
+    val userId: String? = null,
+    val role: ProjectMemberRole = ProjectMemberRole.EXECUTIVE_MANAGER,
+    val isGroupAdmin: Boolean = isCoManager || role.defaultIsAdmin(),
+    val canPostAccounting: Boolean = role.defaultCanPostAccounting(),
+    val canEditRecords: Boolean = isCoManager || role.defaultCanEditRecords(),
+    val canExportReports: Boolean = isCoManager || role.defaultCanExportReports(),
+    val canMessageDirectly: Boolean = true
 )
 
 @Entity(tableName = "gold_transactions")
@@ -806,6 +813,11 @@ enum class ProjectMemberRole(val label: String, val description: String) {
         PROCUREMENT_OFFICER -> com.example.util.Translations.get("proj.role_desc_procurement", language)
         AUDITOR -> com.example.util.Translations.get("proj.role_desc_auditor", language)
     }
+
+    fun defaultIsAdmin(): Boolean = this == OWNER || this == EXECUTIVE_MANAGER
+    fun defaultCanPostAccounting(): Boolean = this != AUDITOR
+    fun defaultCanEditRecords(): Boolean = this == OWNER || this == EXECUTIVE_MANAGER
+    fun defaultCanExportReports(): Boolean = this != PROCUREMENT_OFFICER
 }
 
 @Entity(tableName = "project_members")
@@ -1297,8 +1309,15 @@ enum class BusinessActivitySector(val labelAr: String, val labelEn: String) {
     TECH_SOFTWARE("تقنية وبرمجيات", "Technology & Software"),
     CUSTOM("نشاط مخصص", "Custom Business");
 
-    fun localizedLabel(language: com.example.util.AppLanguage): String =
-        if (language == com.example.util.AppLanguage.ARABIC) labelAr else labelEn
+    fun localizedLabel(language: com.example.util.AppLanguage = com.example.util.Translations.activeLanguage(null)): String {
+        val key = "biz.sector_${name.lowercase()}"
+        val translated = com.example.util.Translations.get(key, language)
+        return if (translated == key) {
+            if (language == com.example.util.AppLanguage.ARABIC) labelAr else labelEn
+        } else {
+            translated
+        }
+    }
 }
 
 @Entity(tableName = "business_profiles")

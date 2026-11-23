@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import com.example.data.model.*
 import com.example.ui.components.OozoxAvatarImage
+import com.example.ui.components.OozoxCircleIconButton
 import com.example.ui.components.OozoxThumbnailImage
 import com.example.ui.components.SecurityVerificationDialog
 import com.example.ui.spatial.CommandCenterDialog
@@ -351,30 +352,22 @@ fun ChatListScreen(
                                 modifier = Modifier.weight(1f, fill = false)
                             ) {
                                 if (onOpenDrawer != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                            .border(1.dp, adaptiveGoldPrimary.copy(alpha = 0.35f), CircleShape)
-                                            .clickable { onOpenDrawer() }
-                                            .testTag("chat_list_open_drawer_button"),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Menu,
-                                            contentDescription = "القائمة الجانبية",
-                                            tint = adaptiveGoldPrimary,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
+                                    OozoxCircleIconButton(
+                                        onClick = onOpenDrawer,
+                                        imageVector = Icons.Default.Menu,
+                                        contentDescription = "القائمة الجانبية",
+                                        tint = adaptiveGoldPrimary,
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.35f)),
+                                        modifier = Modifier.testTag("chat_list_open_drawer_button")
+                                    )
                                 }
                                 OozoxLogoHeader()
                             }
 
                             // End (RTL): Actions (SyncStatus + Search Icon + Unified Clean Action Menu)
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Background Sync Status Indicator
@@ -385,73 +378,47 @@ fun ChatListScreen(
                                 )
 
                                 // Dedicated Gold Section Top Action Button
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                                        .border(1.dp, GoldPrimary.copy(alpha = 0.35f), CircleShape)
-                                        .clickable { onOpenGoldDealClick() }
-                                        .testTag("chat_list_gold_top_button"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.MonetizationOn,
-                                        contentDescription = "قسم الذهب",
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                OozoxCircleIconButton(
+                                    onClick = onOpenGoldDealClick,
+                                    imageVector = Icons.Default.MonetizationOn,
+                                    contentDescription = "قسم الذهب",
+                                    tint = GoldPrimary,
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                    border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.35f)),
+                                    modifier = Modifier.testTag("chat_list_gold_top_button")
+                                )
 
                                 // Top Search Icon Button
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isSearchActive) GoldPrimary.copy(alpha = 0.22f)
-                                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                                        )
-                                        .border(1.dp, GoldPrimary.copy(alpha = if (isSearchActive) 0.7f else 0.35f), CircleShape)
-                                        .clickable {
-                                            isScrollHeaderVisible = true
-                                            if (isSearchActive) {
-                                                isSearchActive = false
-                                                searchQuery = ""
-                                            } else {
-                                                isSearchActive = true
-                                            }
+                                OozoxCircleIconButton(
+                                    onClick = {
+                                        isScrollHeaderVisible = true
+                                        if (isSearchActive) {
+                                            isSearchActive = false
+                                            searchQuery = ""
+                                        } else {
+                                            isSearchActive = true
                                         }
-                                        .testTag("chat_list_search_top_button"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "بحث",
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                    },
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "بحث",
+                                    tint = GoldPrimary,
+                                    containerColor = if (isSearchActive) GoldPrimary.copy(alpha = 0.22f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                    border = BorderStroke(1.dp, GoldPrimary.copy(alpha = if (isSearchActive) 0.7f else 0.35f)),
+                                    modifier = Modifier.testTag("chat_list_search_top_button")
+                                )
 
                                 // More Options Menu
                                 Box {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                                            .border(1.dp, GoldPrimary.copy(alpha = 0.35f), CircleShape)
-                                            .clickable { showMoreOptionsMenu = true }
-                                            .testTag("chat_list_more_menu_button"),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.MoreVert,
-                                            contentDescription = "خيارات المنصة والمحاسبة",
-                                            tint = GoldPrimary,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
+                                    OozoxCircleIconButton(
+                                        onClick = { showMoreOptionsMenu = true },
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "خيارات المنصة والمحاسبة",
+                                        tint = GoldPrimary,
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                        border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.35f)),
+                                        modifier = Modifier.testTag("chat_list_more_menu_button")
+                                    )
 
                                     DropdownMenu(
                                         expanded = showMoreOptionsMenu,
@@ -846,28 +813,15 @@ fun ChatListScreen(
                                     }
 
                                     // Single '+' Button for full Group Management (Create / Edit / Delete / Reorder)
-                                    IconButton(
+                                    OozoxCircleIconButton(
                                         onClick = { showManageTopGroupsDialog = true },
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .testTag("manage_chat_groups_plus_btn")
-                                    ) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = GoldPrimary.copy(alpha = 0.16f),
-                                            border = BorderStroke(0.9.dp, GoldPrimary.copy(alpha = 0.45f)),
-                                            modifier = Modifier.size(34.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Add,
-                                                    contentDescription = "إدارة المجموعات",
-                                                    tint = GoldPrimary,
-                                                    modifier = Modifier.size(19.dp)
-                                                )
-                                            }
-                                        }
-                                    }
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "إدارة المجموعات",
+                                        tint = GoldPrimary,
+                                        containerColor = GoldPrimary.copy(alpha = 0.16f),
+                                        border = BorderStroke(0.9.dp, GoldPrimary.copy(alpha = 0.45f)),
+                                        modifier = Modifier.testTag("manage_chat_groups_plus_btn")
+                                    )
                                 }
 
                         // Active Hidden Vault Banner
@@ -2124,9 +2078,11 @@ private fun EditBuiltInTopGroupDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("تعديل المجموعة", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق")
-                        }
+                        OozoxCircleIconButton(
+                            onClick = onDismiss,
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق"
+                        )
                     }
 
                     OutlinedTextField(
@@ -2289,12 +2245,20 @@ private fun ManageAllTopGroupsDialog(
                                         overflow = TextOverflow.Ellipsis
                                     )
 
-                                    IconButton(onClick = { onEditGroup(cfg) }, modifier = Modifier.size(42.dp)) {
-                                        Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = GoldPrimary, modifier = Modifier.size(18.dp))
-                                    }
-                                    IconButton(onClick = { onDeleteGroup(cfg) }, modifier = Modifier.size(42.dp)) {
-                                        Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = StatusRed, modifier = Modifier.size(18.dp))
-                                    }
+                                    OozoxCircleIconButton(
+                                        onClick = { onEditGroup(cfg) },
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "تعديل",
+                                        tint = GoldPrimary,
+                                        containerColor = GoldPrimary.copy(alpha = 0.12f)
+                                    )
+                                    OozoxCircleIconButton(
+                                        onClick = { onDeleteGroup(cfg) },
+                                        imageVector = Icons.Default.DeleteOutline,
+                                        contentDescription = "حذف",
+                                        tint = StatusRed,
+                                        containerColor = StatusRed.copy(alpha = 0.10f)
+                                    )
                                 }
                             }
                         }
@@ -2415,34 +2379,27 @@ fun CreateGroupFolderDialog(
                             )
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             if (isEditMode && onDeleteGroup != null) {
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = {
                                         onDeleteGroup()
                                         onDismiss()
                                     },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.DeleteOutline,
-                                        contentDescription = "حذف المجلد",
-                                        tint = StatusRed,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "إغلاق",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "حذف المجلد",
+                                    tint = StatusRed,
+                                    containerColor = StatusRed.copy(alpha = 0.12f)
                                 )
                             }
+                            OozoxCircleIconButton(
+                                onClick = onDismiss,
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "إغلاق"
+                            )
                         }
                     }
 

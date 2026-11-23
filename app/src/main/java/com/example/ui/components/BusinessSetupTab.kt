@@ -2,14 +2,17 @@ package com.example.ui.components
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,6 +32,7 @@ import com.example.data.model.BusinessProfileEntity
 import com.example.ui.theme.GoldPrimary
 import com.example.ui.theme.OozoxTeal
 import com.example.util.tr
+import com.example.util.trFmt
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import java.util.Locale
@@ -41,6 +45,7 @@ import java.util.Locale
 @Composable
 fun BusinessSetupTab(
     businessProfile: BusinessProfileEntity?,
+    canEditBusiness: Boolean = true,
     onSaveProfile: (BusinessProfileEntity) -> Unit
 ) {
     val context = LocalContext.current
@@ -87,17 +92,26 @@ fun BusinessSetupTab(
     var geofenceRadius by remember(businessProfile) {
         mutableFloatStateOf((businessProfile?.geofenceRadiusMeters ?: 250).toFloat())
     }
-    var companyGroupName by remember(businessProfile) {
-        mutableStateOf(businessProfile?.companyGroupName?.ifBlank { "مجموعة كل الموظفين" } ?: "مجموعة كل الموظفين")
+    val defaultGroupTitle = tr("hr.staff_group_title")
+    val defaultCompanyNameTitle = tr("biz.default_company_name")
+    var companyGroupName by remember(businessProfile, defaultGroupTitle) {
+        mutableStateOf(
+            businessProfile?.companyGroupName?.ifBlank { defaultGroupTitle }
+                ?: defaultGroupTitle
+        )
     }
     var isLocatingGps by remember { mutableStateOf(false) }
+
+    val msgPermNeeded = tr("biz.gps_perm_needed")
+    val msgCapturedOk = tr("biz.gps_captured_ok")
+    val msgGpsUnavailable = tr("biz.gps_unavailable")
 
     @SuppressLint("MissingPermission")
     fun fetchCurrentLocation() {
         val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         if (!hasFine && !hasCoarse) {
-            Toast.makeText(context, "يرجى منح إذن الموقع لتحديد المقر بدقة", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, msgPermNeeded, Toast.LENGTH_SHORT).show()
             return
         }
         isLocatingGps = true
@@ -108,22 +122,22 @@ fun BusinessSetupTab(
                 if (loc != null) {
                     hqLatitude = loc.latitude
                     hqLongitude = loc.longitude
-                    Toast.makeText(context, "تم التقاط إحداثيات موقعك الحالي كمقر رئيسي ✓", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, msgCapturedOk, Toast.LENGTH_SHORT).show()
                 } else {
                     client.lastLocation.addOnSuccessListener { lastLoc ->
                         if (lastLoc != null) {
                             hqLatitude = lastLoc.latitude
                             hqLongitude = lastLoc.longitude
-                            Toast.makeText(context, "تم التقاط موقع المقر بنجاح ✓", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, msgCapturedOk, Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "تعذر تحديد الموقع بدقة، تأكد من تشغيل GPS", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, msgGpsUnavailable, Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
             }
             .addOnFailureListener {
                 isLocatingGps = false
-                Toast.makeText(context, "خطأ في قراءة الـ GPS: ${it.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, msgGpsUnavailable, Toast.LENGTH_SHORT).show()
             }
     }
 
@@ -135,7 +149,7 @@ fun BusinessSetupTab(
         if (granted) {
             fetchCurrentLocation()
         } else {
-            Toast.makeText(context, "إذن الموقع مرفوض، لا يمكن قراءة GPS آلياً", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, msgPermNeeded, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -154,7 +168,7 @@ fun BusinessSetupTab(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "حدد نشاطك التجاري، بيانات السجل والضريبة، ونطاق الـ GPS لإلزام الموظفين بالحضور داخل المقر.",
+                text = tr("biz.setup_desc"),
                 fontSize = 11.5.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -169,13 +183,12 @@ fun BusinessSetupTab(
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "١. ${tr("biz.activity_type")}:",
+                        text = tr("biz.step_sector"),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = GoldPrimary
                     )
 
-                    // Sector Grid
                     val sectors = BusinessActivitySector.entries
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         sectors.chunked(2).forEach { rowSectors ->
@@ -187,10 +200,11 @@ fun BusinessSetupTab(
                                     val isSelected = selectedSector == sector
                                     FilterChip(
                                         selected = isSelected,
-                                        onClick = { selectedSector = sector },
+                                        onClick = { if (canEditBusiness) selectedSector = sector },
+                                        enabled = canEditBusiness,
                                         label = {
                                             Text(
-                                                text = sector.labelAr,
+                                                text = sector.localizedLabel(),
                                                 fontSize = 11.sp,
                                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                                 maxLines = 1
@@ -214,8 +228,9 @@ fun BusinessSetupTab(
                         OutlinedTextField(
                             value = customSectorText,
                             onValueChange = { customSectorText = it },
+                            enabled = canEditBusiness,
                             label = { Text(tr("biz.custom_activity"), fontSize = 11.5.sp) },
-                            placeholder = { Text("اكتب مسمى النشاط الخاص بك...") },
+                            placeholder = { Text(tr("biz.custom_activity_placeholder")) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -234,7 +249,7 @@ fun BusinessSetupTab(
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "٢. البيانات الرسمية للشركة:",
+                        text = tr("biz.step_identity"),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = GoldPrimary
@@ -243,20 +258,19 @@ fun BusinessSetupTab(
                     OutlinedTextField(
                         value = companyName,
                         onValueChange = { companyName = it },
+                        enabled = canEditBusiness,
                         label = { Text(tr("biz.company_name")) },
-                        placeholder = { Text("مثال: شركة النور للمقاولات والتوريدات") },
+                        placeholder = { Text(tr("biz.company_name_placeholder")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth().testTag("biz_company_name_input")
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = commercialReg,
                             onValueChange = { commercialReg = it },
+                            enabled = canEditBusiness,
                             label = { Text(tr("biz.commercial_reg"), fontSize = 11.5.sp) },
                             placeholder = { Text("123456") },
                             singleLine = true,
@@ -266,6 +280,7 @@ fun BusinessSetupTab(
                         OutlinedTextField(
                             value = taxNumber,
                             onValueChange = { taxNumber = it },
+                            enabled = canEditBusiness,
                             label = { Text(tr("biz.tax_number"), fontSize = 11.5.sp) },
                             placeholder = { Text("987-654-321") },
                             singleLine = true,
@@ -274,14 +289,12 @@ fun BusinessSetupTab(
                         )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = phone,
                             onValueChange = { phone = it },
-                            label = { Text("رقم هاتف المنشأة", fontSize = 11.5.sp) },
+                            enabled = canEditBusiness,
+                            label = { Text(tr("biz.company_phone"), fontSize = 11.5.sp) },
                             placeholder = { Text("010XXXXXXXX") },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
@@ -290,31 +303,49 @@ fun BusinessSetupTab(
                         OutlinedTextField(
                             value = currency,
                             onValueChange = { currency = it.uppercase() },
-                            label = { Text("عملة التعامل", fontSize = 11.5.sp) },
+                            enabled = canEditBusiness,
+                            label = { Text(tr("biz.currency"), fontSize = 11.5.sp) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(0.8f)
                         )
                     }
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("EGP", "SAR", "AED", "KWD", "USD", "EUR").forEach { code ->
+                            FilterChip(
+                                selected = currency == code,
+                                onClick = { if (canEditBusiness) currency = code },
+                                enabled = canEditBusiness,
+                                label = { Text(code, fontSize = 10.5.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = OozoxTeal,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
+                        enabled = canEditBusiness,
                         label = { Text(tr("biz.hq_address"), fontSize = 11.5.sp) },
-                        placeholder = { Text("العنوان بالتفصيل: المدينة، الشارع، المبنى...") },
+                        placeholder = { Text(tr("biz.address_placeholder")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = workStartTime,
                             onValueChange = { workStartTime = it },
-                            label = { Text("بداية الدوام", fontSize = 11.sp) },
+                            enabled = canEditBusiness,
+                            label = { Text(tr("biz.work_start"), fontSize = 11.sp) },
                             placeholder = { Text("09:00") },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
@@ -323,7 +354,8 @@ fun BusinessSetupTab(
                         OutlinedTextField(
                             value = workEndTime,
                             onValueChange = { workEndTime = it },
-                            label = { Text("نهاية الدوام", fontSize = 11.sp) },
+                            enabled = canEditBusiness,
+                            label = { Text(tr("biz.work_end"), fontSize = 11.sp) },
                             placeholder = { Text("17:00") },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
@@ -343,7 +375,7 @@ fun BusinessSetupTab(
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "٣. ${tr("biz.hq_location_title")}:",
+                        text = tr("biz.step_geofence"),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = GoldPrimary
@@ -363,6 +395,7 @@ fun BusinessSetupTab(
                                 )
                             }
                         },
+                        enabled = canEditBusiness && !isLocatingGps,
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = OozoxTeal, contentColor = Color.White),
                         modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
@@ -370,12 +403,23 @@ fun BusinessSetupTab(
                         if (isLocatingGps) {
                             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("جاري التقاط إحداثيات GPS...", fontSize = 12.sp)
+                            Text(tr("biz.gps_capturing"), fontSize = 12.sp)
                         } else {
                             Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(tr("biz.use_current_gps"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    TextButton(
+                        onClick = {
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            } catch (_: Exception) {}
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(tr("biz.open_gps_settings"), fontSize = 11.sp, color = OozoxTeal)
                     }
 
                     if (hqLatitude != null && hqLongitude != null) {
@@ -391,26 +435,30 @@ fun BusinessSetupTab(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "إحداثيات المقر: ${String.format(Locale.US, "%.5f", hqLatitude)}, ${String.format(Locale.US, "%.5f", hqLongitude)}",
+                                    text = trFmt(
+                                        "biz.gps_coords_fmt",
+                                        "lat" to String.format(Locale.US, "%.5f", hqLatitude),
+                                        "lng" to String.format(Locale.US, "%.5f", hqLongitude)
+                                    ),
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF10B981)
                                 )
-                                Text("✓ محدد", fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                                Text(tr("biz.gps_set_ok"), fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
 
-                    // Geofence Radius Slider
                     Text(
-                        text = "نطاق السماح الجغرافي للموظف: ${geofenceRadius.toInt()} متر",
+                        text = trFmt("biz.geofence_radius_slider_fmt", "meters" to geofenceRadius.toInt()),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Slider(
                         value = geofenceRadius,
-                        onValueChange = { geofenceRadius = it },
+                        onValueChange = { if (canEditBusiness) geofenceRadius = it },
+                        enabled = canEditBusiness,
                         valueRange = 50f..1500f,
                         steps = 28,
                         colors = SliderDefaults.colors(thumbColor = GoldPrimary, activeTrackColor = GoldPrimary)
@@ -419,8 +467,9 @@ fun BusinessSetupTab(
                     OutlinedTextField(
                         value = companyGroupName,
                         onValueChange = { companyGroupName = it },
-                        label = { Text("اسم مجموعة كل الموظفين", fontSize = 11.5.sp) },
-                        placeholder = { Text("مجموعة موظفي الشركة") },
+                        enabled = canEditBusiness,
+                        label = { Text(tr("biz.company_group_name"), fontSize = 11.5.sp) },
+                        placeholder = { Text(tr("hr.staff_group_title")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -434,12 +483,12 @@ fun BusinessSetupTab(
             Button(
                 onClick = {
                     val resolvedLabel = if (selectedSector == BusinessActivitySector.CUSTOM) {
-                        customSectorText.trim().ifBlank { "نشاط مخصص" }
+                        customSectorText.trim().ifBlank { selectedSector.localizedLabel() }
                     } else {
-                        selectedSector.labelAr
+                        selectedSector.localizedLabel()
                     }
                     val profile = (businessProfile ?: BusinessProfileEntity()).copy(
-                        companyName = companyName.trim().ifBlank { "شركتي" },
+                        companyName = companyName.trim().ifBlank { defaultCompanyNameTitle },
                         activityType = selectedSector.name,
                         customActivityLabel = resolvedLabel,
                         commercialRegistration = commercialReg.trim(),
@@ -452,13 +501,13 @@ fun BusinessSetupTab(
                         hqLatitude = hqLatitude,
                         hqLongitude = hqLongitude,
                         geofenceRadiusMeters = geofenceRadius.toInt().coerceIn(50, 5000),
-                        companyGroupName = companyGroupName.trim().ifBlank { "مجموعة كل الموظفين" },
+                        companyGroupName = companyGroupName.trim().ifBlank { defaultGroupTitle },
                         isSetupCompleted = true,
                         updatedAt = System.currentTimeMillis()
                     )
                     onSaveProfile(profile)
                 },
-                enabled = companyName.isNotBlank(),
+                enabled = canEditBusiness && companyName.isNotBlank(),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = Color.Black),
                 modifier = Modifier

@@ -233,6 +233,43 @@ data class ApiCreateTaskRequest(
     val financialNotes: String = ""
 )
 
+@Serializable
+data class ApiUpdateEmployeeRequest(
+    val fullName: String? = null,
+    val phone: String? = null,
+    val password: String? = null,
+    val roleTitle: String? = null,
+    val department: String? = null,
+    val baseSalary: Double? = null,
+    val salaryCurrency: String? = null,
+    val geofenceEnforced: Boolean? = null,
+    val isActive: Boolean? = null,
+    val permissions: ApiEmployeePermissionsDto? = null
+)
+
+@Serializable
+data class ApiPayrollAdjustmentRequest(
+    val employeeId: String,
+    val type: String,
+    val amount: Double,
+    val reason: String,
+    val effectiveDate: String
+)
+
+@Serializable
+data class ApiEmployeeLeaveRequest(
+    val employeeId: String,
+    val leaveType: String,
+    val startDate: String,
+    val endDate: String,
+    val notes: String = ""
+)
+
+@Serializable
+data class ApiUpdateTaskStatusRequest(
+    val status: String
+)
+
 interface OozoxApiService {
     @GET("health")
     suspend fun getHealth(): Response<ApiEnvelope<ApiHealthData>>
@@ -287,14 +324,53 @@ interface OozoxApiService {
     @PATCH("notifications/{id}/read")
     suspend fun markNotificationRead(@Path("id") id: String): Response<ApiEnvelope<Unit>>
 
+    @GET("business/profile")
+    suspend fun getBusinessProfile(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("business/summary")
+    suspend fun getBusinessSummary(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
     @retrofit2.http.PUT("business/profile")
     suspend fun upsertBusinessProfile(@Body request: ApiBusinessProfileRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("hr/employees")
+    suspend fun getEmployees(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
 
     @POST("hr/employees")
     suspend fun createEmployee(@Body request: ApiCreateEmployeeRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
 
+    @PATCH("hr/employees/{id}")
+    suspend fun updateEmployee(
+        @Path("id") employeeId: String,
+        @Body request: ApiUpdateEmployeeRequest
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @DELETE("hr/employees/{id}")
+    suspend fun deleteEmployee(@Path("id") employeeId: String): Response<ApiEnvelope<Unit>>
+
     @POST("hr/employee-login")
     suspend fun employeeLogin(@Body request: ApiEmployeeLoginRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("hr/payroll")
+    suspend fun getPayrollAdjustments(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("hr/payroll")
+    suspend fun addPayrollAdjustment(@Body request: ApiPayrollAdjustmentRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @DELETE("hr/payroll/{id}")
+    suspend fun deletePayrollAdjustment(@Path("id") adjustmentId: String): Response<ApiEnvelope<Unit>>
+
+    @GET("hr/leaves")
+    suspend fun getEmployeeLeaves(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("hr/leaves")
+    suspend fun addEmployeeLeave(@Body request: ApiEmployeeLeaveRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @DELETE("hr/leaves/{id}")
+    suspend fun deleteEmployeeLeave(@Path("id") leaveId: String): Response<ApiEnvelope<Unit>>
+
+    @GET("hr/attendance")
+    suspend fun getAttendanceRecords(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
 
     @POST("hr/attendance/check-in")
     suspend fun checkInAttendance(@Body request: ApiAttendanceGeoRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
@@ -302,6 +378,18 @@ interface OozoxApiService {
     @POST("hr/attendance/heartbeat")
     suspend fun sendAttendanceHeartbeat(@Body request: ApiAttendanceGeoRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
 
+    @GET("tasks")
+    suspend fun getWorkTasks(
+        @Query("projectId") projectId: String? = null,
+        @Query("workGroupId") workGroupId: String? = null
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
     @POST("tasks")
     suspend fun createWorkTask(@Body request: ApiCreateTaskRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @PATCH("tasks/{id}/status")
+    suspend fun updateWorkTaskStatus(
+        @Path("id") taskId: String,
+        @Body request: ApiUpdateTaskStatusRequest
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
 }

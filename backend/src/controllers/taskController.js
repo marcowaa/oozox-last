@@ -2,25 +2,26 @@ const WorkTask = require('../models/WorkTask');
 const { successResponse, errorResponse } = require('../utils/response');
 const { resolveBusinessForActor } = require('./businessController');
 const BusinessProfile = require('../models/BusinessProfile');
+const { t } = require('../i18n');
 
 function computeTaskDeadline(timingMode, durationValue, lang = 'ar') {
   const now = Date.now();
   if (timingMode === 'NOW') {
     return {
       deadlineAt: new Date(now + 30 * 60 * 1000),
-      deadlineDurationText: lang === 'en' ? 'Immediately (Now)' : 'الآن / حالاً (فوري)',
+      deadlineDurationText: t(lang, 'task.mode_now'),
     };
   }
   const safeVal = Math.max(1, Number(durationValue) || 1);
   if (timingMode === 'DAYS') {
     return {
       deadlineAt: new Date(now + safeVal * 24 * 60 * 60 * 1000),
-      deadlineDurationText: lang === 'en' ? `Within ${safeVal} day(s)` : `خلال ${safeVal} يوم`,
+      deadlineDurationText: t(lang, 'task.within_days_fmt', { count: safeVal }),
     };
   }
   return {
     deadlineAt: new Date(now + safeVal * 60 * 60 * 1000),
-    deadlineDurationText: lang === 'en' ? `Within ${safeVal} hour(s)` : `خلال ${safeVal} ساعة`,
+    deadlineDurationText: t(lang, 'task.within_hours_fmt', { count: safeVal }),
   };
 }
 

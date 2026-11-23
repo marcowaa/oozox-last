@@ -808,31 +808,26 @@ fun MinimizedFloatingCallCard(
                 }
 
                 // Mute toggle
-                IconButton(
+                OozoxCircleIconButton(
                     onClick = onToggleMute,
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                        contentDescription = "كتم",
-                        tint = if (isMuted) Color(0xFFEF4444) else GoldLight,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                    contentDescription = "كتم",
+                    tint = if (isMuted) Color(0xFFEF4444) else GoldLight,
+                    containerColor = Color.White.copy(alpha = 0.08f),
+                    circleSize = OozoxCircleButtonDefaults.CircleSize,
+                    touchSize = 40.dp
+                )
 
                 // End call button
-                FilledIconButton(
+                OozoxCircleIconButton(
                     onClick = onEndCall,
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFDC2626)),
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CallEnd,
-                        contentDescription = "إنهاء",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    imageVector = Icons.Default.CallEnd,
+                    contentDescription = "إنهاء",
+                    tint = Color.White,
+                    containerColor = Color(0xFFDC2626),
+                    circleSize = OozoxCircleButtonDefaults.CircleSize,
+                    touchSize = 40.dp
+                )
             }
         }
     }

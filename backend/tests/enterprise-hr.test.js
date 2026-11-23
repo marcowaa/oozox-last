@@ -214,4 +214,34 @@ describe('Enterprise Business, HR, Geofence & Task Flows', () => {
     expect(nowTaskRes.statusCode).toBe(201);
     expect(nowTaskRes.body.data.task.priority).toBe('URGENT');
   });
+
+  it('7. Triggers manager alert on out-of-bounds heartbeat and supports deleting payroll/leave records', async () => {
+    const hbOut = await request(app)
+      .post('/api/hr/attendance/heartbeat')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ gpsEnabled: true, latitude: 30.08, longitude: 31.28 });
+    expect(hbOut.statusCode).toBe(200);
+    expect(hbOut.body.data.evaluation.inBounds).toBe(false);
+    expect(hbOut.body.data.evaluation.managerAlerted).toBe(true);
+
+    const payList = await request(app)
+      .get('/api/hr/payroll')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(payList.statusCode).toBe(200);
+    const firstAdjId = payList.body.data.adjustments[0]._id;
+    const delPay = await request(app)
+      .delete(`/api/hr/payroll/${firstAdjId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(delPay.statusCode).toBe(200);
+
+    const leavesList = await request(app)
+      .get('/api/hr/leaves')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(leavesList.statusCode).toBe(200);
+    const firstLeaveId = leavesList.body.data.leaves[0]._id;
+    const delLeave = await request(app)
+      .delete(`/api/hr/leaves/${firstLeaveId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(delLeave.statusCode).toBe(200);
+  });
 });

@@ -82,6 +82,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    val allProjectMembers: StateFlow<List<ProjectMemberEntity>> = repository.allProjectMembers.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
     val allTraderRequests: StateFlow<List<TraderRequestEntity>> = repository.allTraderRequests.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
@@ -269,12 +273,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 task.projectName,
                 "تم إسناد المهمة وإرسال إشعار للموظف: ${task.title}"
             )
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    val parsedAssignees = assignees.split(" | ", "، ", ",").map { it.trim() }.filter { it.isNotBlank() }
+                    com.example.util.RetrofitClient.apiService().createWorkTask(
+                        com.example.util.ApiCreateTaskRequest(
+                            projectId = task.projectId,
+                            projectName = task.projectName,
+                            workGroupId = task.workGroupId ?: "wg_company_main",
+                            title = task.title,
+                            description = task.description.orEmpty(),
+                            timingMode = task.timingMode,
+                            durationValue = task.durationValue,
+                            assignees = parsedAssignees.ifEmpty { listOf("فريق العمل") },
+                            priority = task.priority,
+                            financialAmount = task.financialAmount,
+                            financialNotes = task.financialNotes.orEmpty()
+                        )
+                    )
+                } catch (_: Exception) {}
+            }
         }
     }
 
     fun updateProjectTaskStatus(taskId: String, status: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.updateProjectTaskStatus(taskId, status)
+            val task = repository.getProjectTaskByIdSync(taskId)
+            if (task != null) {
+                val statusLabel = when (status) {
+                    TaskStatus.COMPLETED.name -> "مكتملة ✅"
+                    TaskStatus.IN_PROGRESS.name -> "قيد التنفيذ ⏳"
+                    else -> "قيد الانتظار 📌"
+                }
+                repository.addProjectAuditLog(
+                    ProjectAuditLogEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        projectId = task.projectId,
+                        action = "تحديث حالة مهمة",
+                        actorName = currentUser.value?.name ?: "المدير",
+                        actorPhone = currentUser.value?.phone ?: "",
+                        details = "تم تحديث (${task.title}) إلى: $statusLabel"
+                    )
+                )
+                val targetWgId = task.workGroupId
+                    ?: repository.getProjectByIdSync(task.projectId)?.workGroupId
+                if (!targetWgId.isNullOrBlank()) {
+                    repository.postSystemMessageToWorkGroupChat(
+                        workGroupId = targetWgId,
+                        content = "تم تحديث حالة مهمة (${task.title}) إلى $statusLabel"
+                    )
+                }
+            }
             com.example.ui.components.ToastNotificationBus.showProjectUpdate("المشاريع", "تم تحديث حالة المهمة بنجاح")
             onComplete()
         }
@@ -536,6 +586,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 com.example.util.HiddenAccountSecurityEngine.setActiveSubAccount(null)
             }
             repository.deleteSubAccount(accountId)
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().deleteEmployee(accountId)
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -1854,7 +1909,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         coManagerPhone: String? = null,
         coManagerName: String? = null,
         membersInfo: String = "",
-        customProjectTypeName: String? = null
+        customProjectTypeName: String? = null,
+        memberInputs: List<ProjectMemberInput> = emptyList()
     ) {
         viewModelScope.launch {
             val user = currentUser.value
@@ -1865,17 +1921,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     phone = "",
                     username = "admin"
                 )
-            val wg = repository.createWorkGroup(groupName, groupDesc, user.id)
+            val cleanProjectName = projectName.trim()
+            val resolvedGroupName = groupName.trim().ifBlank { cleanProjectName }
+            val resolvedMembersInfo = membersInfo.ifBlank {
+                memberInputs.joinToString(" | ") { mem ->
+                    "@${mem.name.trim()} (${mem.phone.trim()}) - ${mem.roleTask.trim().ifBlank { mem.role.label }}"
+                }
+            }
+
+            val wg = repository.createWorkGroup(resolvedGroupName, groupDesc, user.id)
             val resolvedType = customProjectTypeName?.takeIf { it.isNotBlank() } ?: projectType.name
             val proj = repository.createProject(
-                name = projectName,
+                name = cleanProjectName,
                 workGroupId = wg.id,
                 capital = capital,
                 type = resolvedType,
                 location = location,
                 coManagerPhone = coManagerPhone,
                 coManagerName = coManagerName,
-                membersInfo = membersInfo
+                membersInfo = resolvedMembersInfo
             )
 
             // Creator / primary manager
@@ -1940,11 +2004,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         assignedTask = "إدارة تنفيذية"
                     )
                 )
-                addedLabels.add("@${coManagerName.trim()}")
+                addedLabels.add("@${coManagerName.trim()} (مدير تنفيذي)")
             }
 
-            // Additional members from membersInfo: "@Name (Phone) - Role | ..."
-            if (membersInfo.isNotBlank()) {
+            if (memberInputs.isNotEmpty()) {
+                memberInputs.forEach { input ->
+                    val memberName = input.name.trim().removePrefix("@").trim()
+                    if (memberName.isNotBlank()) {
+                        val matchedContact = allContacts.value.firstOrNull {
+                            it.name.equals(memberName, ignoreCase = true) ||
+                                (input.phone.isNotBlank() && it.phone == input.phone.trim())
+                        }
+                        val matchedEmployee = allSubAccounts.value.firstOrNull {
+                            it.id == input.userId ||
+                                it.displayName.equals(memberName, ignoreCase = true) ||
+                                (!it.phone.isNullOrBlank() && it.phone == input.phone.trim())
+                        }
+                        val memberUserId = input.userId?.takeIf { it.isNotBlank() }
+                            ?: matchedEmployee?.id
+                            ?: matchedContact?.id
+                            ?: "pm_${java.util.UUID.randomUUID().toString().take(8)}"
+                        val memberPhone = input.phone.trim()
+                            .ifBlank { matchedEmployee?.phone.orEmpty() }
+                            .ifBlank { matchedContact?.phone.orEmpty() }
+                        val resolvedJobTitle = input.roleTask.trim().ifBlank { input.role.label }
+
+                        repository.saveGroupMember(
+                            GroupMemberEntity(
+                                id = java.util.UUID.randomUUID().toString(),
+                                groupId = wg.id,
+                                userId = memberUserId,
+                                username = memberName,
+                                phone = memberPhone,
+                                roleLabel = resolvedJobTitle,
+                                canPostAccounting = input.canPostAccounting || input.isGroupAdmin,
+                                canExportReports = input.canExportReports || input.isGroupAdmin,
+                                canEditRecords = input.canEditRecords || input.isGroupAdmin,
+                                canMessageDirectly = input.canMessageDirectly || input.isGroupAdmin,
+                                isGroupAdmin = input.isGroupAdmin
+                            )
+                        )
+                        repository.addProjectMember(
+                            ProjectMemberEntity(
+                                id = java.util.UUID.randomUUID().toString(),
+                                projectId = proj.id,
+                                userId = memberUserId,
+                                userName = memberName,
+                                userPhone = memberPhone,
+                                role = input.role.name,
+                                assignedTask = resolvedJobTitle
+                            )
+                        )
+                        addedLabels.add("@$memberName ($resolvedJobTitle)")
+                    }
+                }
+            } else if (membersInfo.isNotBlank()) {
+                // Backward-compatible fallback for callers passing formatted membersInfo only
                 membersInfo.split("|").map { it.trim() }.filter { it.isNotBlank() }.forEach { entry ->
                     val beforeDash = entry.substringBefore(" - ").trim()
                     val roleText = entry.substringAfter(" - ", "عضو مشروع").trim()
@@ -1957,6 +2072,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         val memberUserId = matchedContact?.id ?: "pm_${java.util.UUID.randomUUID().toString().take(8)}"
                         val memberPhone = phoneInParens.ifBlank { matchedContact?.phone ?: "" }
+                        val mappedRole = ProjectMemberRole.entries.firstOrNull { it.label == roleText }
+                            ?: ProjectMemberRole.EXECUTIVE_MANAGER
                         repository.saveGroupMember(
                             GroupMemberEntity(
                                 id = java.util.UUID.randomUUID().toString(),
@@ -1964,16 +2081,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 userId = memberUserId,
                                 username = memberName,
                                 phone = memberPhone,
-                                roleLabel = roleText.ifBlank { "عضو فريق المشروع" },
-                                canPostAccounting = true,
-                                canExportReports = false,
-                                canEditRecords = false,
+                                roleLabel = roleText.ifBlank { mappedRole.label },
+                                canPostAccounting = mappedRole.defaultCanPostAccounting(),
+                                canExportReports = mappedRole.defaultCanExportReports(),
+                                canEditRecords = mappedRole.defaultCanEditRecords(),
                                 canMessageDirectly = true,
-                                isGroupAdmin = false
+                                isGroupAdmin = mappedRole.defaultIsAdmin()
                             )
                         )
-                        val mappedRole = ProjectMemberRole.entries.firstOrNull { it.label == roleText }
-                            ?: ProjectMemberRole.EXECUTIVE_MANAGER
                         repository.addProjectMember(
                             ProjectMemberEntity(
                                 id = java.util.UUID.randomUUID().toString(),
@@ -1985,26 +2100,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 assignedTask = roleText
                             )
                         )
-                        addedLabels.add("@$memberName")
+                        addedLabels.add("@$memberName ($roleText)")
                     }
                 }
             }
 
+            repository.addProjectAuditLog(
+                ProjectAuditLogEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    projectId = proj.id,
+                    action = "تأسيس المشروع ومجموعة الدردشة",
+                    actorName = user.name,
+                    actorPhone = user.phone,
+                    details = "تم إنشاء المشروع ($cleanProjectName) وربطه بمجموعة الدردشة ($resolvedGroupName) مع ${addedLabels.size + 1} عضو"
+                )
+            )
+
             val membersSummary = if (addedLabels.isNotEmpty()) {
-                " • الأعضاء: ${addedLabels.joinToString("، ")}"
+                " • الموظفون المضافون: ${addedLabels.joinToString("، ")}"
             } else ""
             repository.ensureWorkGroupChat(
                 workGroup = wg,
-                displayTitle = groupName.ifBlank { projectName },
-                initialSystemMessage = "تم إنشاء مجموعة عمل المشروع ($projectName)$membersSummary — يمكنكم إسناد المهام ومتابعة التنفيذ هنا"
+                displayTitle = resolvedGroupName,
+                initialSystemMessage = "تم إنشاء مجموعة دردشة المشروع ($cleanProjectName)$membersSummary — البيانات والحسابات والمهام مشتركة ومزامنة مباشرة مع قسم المشاريع"
             )
 
             NotificationHelper.showProjectUpdateNotification(
                 context = getApplication(),
                 projectId = wg.id,
-                projectName = projectName,
-                title = "تم إنشاء مشروع جديد ️",
-                updateMessage = "تم تأسيس '$projectName' بنجاح برأس مال ${GoldUtils.formatCurrency(capital)}"
+                projectName = cleanProjectName,
+                title = "تم إنشاء مشروع ومجموعة عمل جديدة",
+                updateMessage = "تم تأسيس '$cleanProjectName' وإنشاء مجموعة الدردشة '$resolvedGroupName' برأس مال ${GoldUtils.formatCurrency(capital)}"
             )
         }
     }
@@ -2394,25 +2520,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Feature 5: RBAC for Projects ---
+    // --- Feature 5: RBAC for Projects (Bidirectionally synced with WorkGroup Chat) ---
     fun addProjectMember(
         projectId: String,
         userName: String,
         userPhone: String,
         role: ProjectMemberRole,
-        task: String?
+        task: String?,
+        userIdOverride: String? = null,
+        isGroupAdmin: Boolean = role.defaultIsAdmin(),
+        canPostAccounting: Boolean = role.defaultCanPostAccounting(),
+        canEditRecords: Boolean = role.defaultCanEditRecords(),
+        canExportReports: Boolean = role.defaultCanExportReports(),
+        canMessageDirectly: Boolean = true
     ) {
         viewModelScope.launch {
+            val resolvedUserId = userIdOverride?.takeIf { it.isNotBlank() }
+                ?: allSubAccounts.value.firstOrNull {
+                    it.displayName.equals(userName.trim(), ignoreCase = true) ||
+                        (!it.phone.isNullOrBlank() && it.phone == userPhone.trim())
+                }?.id
+                ?: allContacts.value.firstOrNull {
+                    it.name.equals(userName.trim(), ignoreCase = true) ||
+                        (userPhone.isNotBlank() && it.phone == userPhone.trim())
+                }?.id
+                ?: java.util.UUID.randomUUID().toString()
+
             val member = ProjectMemberEntity(
                 id = java.util.UUID.randomUUID().toString(),
                 projectId = projectId,
-                userId = java.util.UUID.randomUUID().toString(),
-                userName = userName,
-                userPhone = userPhone,
+                userId = resolvedUserId,
+                userName = userName.trim(),
+                userPhone = userPhone.trim(),
                 role = role.name,
-                assignedTask = task
+                assignedTask = task?.trim()?.takeIf { it.isNotBlank() }
             )
             repository.addProjectMember(member)
+            repository.syncProjectMemberToWorkGroup(
+                projectId = projectId,
+                member = member,
+                isGroupAdmin = isGroupAdmin,
+                canPostAccounting = canPostAccounting,
+                canEditRecords = canEditRecords,
+                canExportReports = canExportReports,
+                canMessageDirectly = canMessageDirectly
+            )
 
             val auditLog = ProjectAuditLogEntity(
                 id = java.util.UUID.randomUUID().toString(),
@@ -2420,7 +2572,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 action = "إضافة عضو وسند دور",
                 actorName = currentUser.value?.name ?: "المالك",
                 actorPhone = currentUser.value?.phone ?: "",
-                details = "تم تعيين $userName بصفة ${role.label}"
+                details = "تم تعيين ${userName.trim()} بصفة ${role.label}"
             )
             repository.addProjectAuditLog(auditLog)
 
@@ -2429,7 +2581,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 projectId = projectId,
                 projectName = "فريق المشروع",
                 title = "تعيين عضو جديد",
-                updateMessage = "تم إسناد مهمة ($userName) بصفة ${role.label}"
+                updateMessage = "تم إسناد مهمة (${userName.trim()}) بصفة ${role.label}"
             )
         }
     }
@@ -2440,6 +2592,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             repository.updateProjectMemberRole(member.id, ProjectMemberRole.EXECUTIVE_MANAGER.name)
+            repository.syncProjectMemberToWorkGroup(
+                projectId = projectId,
+                member = member.copy(role = ProjectMemberRole.EXECUTIVE_MANAGER.name),
+                isGroupAdmin = true,
+                canPostAccounting = true,
+                canEditRecords = true,
+                canExportReports = true,
+                canMessageDirectly = true
+            )
             repository.addProjectAuditLog(
                 ProjectAuditLogEntity(
                     id = java.util.UUID.randomUUID().toString(),
@@ -2459,6 +2620,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             com.example.ui.components.ToastNotificationBus.showToast(
                 message = "تمت ترقية ${member.userName} بصلاحيات مدير تنفيذي بنجاح ⭐",
+                type = com.example.ui.components.AppToastType.SUCCESS
+            )
+        }
+    }
+
+    fun removeProjectMember(projectId: String, member: ProjectMemberEntity) {
+        viewModelScope.launch(safeExceptionHandler) {
+            repository.removeProjectMemberWithGroupSync(projectId, member)
+            com.example.ui.components.ToastNotificationBus.showToast(
+                message = "تمت إزالة ${member.userName} من المشروع والمجموعة",
+                type = com.example.ui.components.AppToastType.INFO
+            )
+        }
+    }
+
+    fun updateGroupMemberRoleAndPermissions(
+        member: GroupMemberEntity,
+        roleLabel: String,
+        projectRole: ProjectMemberRole?,
+        isAdmin: Boolean,
+        canPostAccounting: Boolean,
+        canEditRecords: Boolean,
+        canExportReports: Boolean,
+        canMessageDirectly: Boolean
+    ) {
+        viewModelScope.launch(safeExceptionHandler) {
+            repository.updateGroupMemberRoleAndPermissions(
+                member = member,
+                roleLabel = roleLabel,
+                projectRole = projectRole,
+                isAdmin = isAdmin,
+                canPostAccounting = canPostAccounting,
+                canEditRecords = canEditRecords,
+                canExportReports = canExportReports,
+                canMessageDirectly = canMessageDirectly
+            )
+            repository.postSystemMessageToWorkGroupChat(
+                workGroupId = member.groupId,
+                content = "تم تحديث وظيفة وصلاحيات @${member.username.removePrefix("@")} (${roleLabel.ifBlank { member.roleLabel }})"
+            )
+            com.example.ui.components.ToastNotificationBus.showToast(
+                message = "تم تحديث وظيفة وصلاحيات ${member.username} في المشروع والمجموعة ✅",
                 type = com.example.ui.components.AppToastType.SUCCESS
             )
         }
@@ -2486,6 +2689,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     details = "$title • المبلغ: ${GoldUtils.formatCurrency(amount)}"
                 )
             )
+            val linkedProj = repository.getProjectByIdSync(projectId)
+            if (linkedProj != null) {
+                repository.postSystemMessageToWorkGroupChat(
+                    workGroupId = linkedProj.workGroupId,
+                    content = "📊 قيد مالي ($prefix - $accountCategory): $title • ${GoldUtils.formatCurrency(amount)}"
+                )
+            }
             com.example.ui.components.ToastNotificationBus.showToast(
                 message = "تم تسجيل $prefix ($title) في حسابات $projectName ✅",
                 type = com.example.ui.components.AppToastType.SUCCESS
@@ -3609,6 +3819,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         baseSalary: Double,
         salaryCurrency: String,
         geofenceEnforced: Boolean,
+        isActiveEmployee: Boolean = true,
         canCreateInvoices: Boolean,
         canViewReports: Boolean,
         canSetProductPrices: Boolean,
@@ -3668,40 +3879,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 permManageAccounting = permManageAccounting,
                 permApproveDiscounts = permApproveDiscounts,
                 permDirectChat = permDirectChat,
-                isActiveEmployee = true
+                isActiveEmployee = isActiveEmployee
             )
 
             repository.addHiddenSubAccount(employee)
             val profile = repository.getBusinessProfileSync()
             repository.syncEmployeeToCompanyGroup(employee, profile)
 
-            if (existing == null && com.example.util.RetrofitClient.hasActiveSession() && password.isNotBlank()) {
+            val permsDto = com.example.util.ApiEmployeePermissionsDto(
+                manageBusiness = permManageBusiness,
+                manageStaff = permManageStaff,
+                managePayroll = permManagePayroll,
+                manageProjects = permManageProjects,
+                assignTasks = permAssignTasks,
+                manageAccounting = permManageAccounting,
+                createInvoices = canCreateInvoices,
+                approveDiscounts = permApproveDiscounts,
+                viewReports = canViewReports,
+                directChat = permDirectChat
+            )
+
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
                 try {
-                    com.example.util.RetrofitClient.apiService().createEmployee(
-                        com.example.util.ApiCreateEmployeeRequest(
-                            fullName = employee.displayName,
-                            username = employee.username,
-                            phone = employee.phone.orEmpty(),
-                            password = password.trim(),
-                            roleTitle = employee.roleTitle,
-                            department = employee.department,
-                            baseSalary = employee.baseSalary,
-                            salaryCurrency = employee.salaryCurrency,
-                            geofenceEnforced = employee.geofenceEnforced,
-                            permissions = com.example.util.ApiEmployeePermissionsDto(
-                                manageBusiness = permManageBusiness,
-                                manageStaff = permManageStaff,
-                                managePayroll = permManagePayroll,
-                                manageProjects = permManageProjects,
-                                assignTasks = permAssignTasks,
-                                manageAccounting = permManageAccounting,
-                                createInvoices = canCreateInvoices,
-                                approveDiscounts = permApproveDiscounts,
-                                viewReports = canViewReports,
-                                directChat = permDirectChat
+                    if (existing == null && password.isNotBlank()) {
+                        com.example.util.RetrofitClient.apiService().createEmployee(
+                            com.example.util.ApiCreateEmployeeRequest(
+                                fullName = employee.displayName,
+                                username = employee.username,
+                                phone = employee.phone.orEmpty(),
+                                password = password.trim(),
+                                roleTitle = employee.roleTitle,
+                                department = employee.department,
+                                baseSalary = employee.baseSalary,
+                                salaryCurrency = employee.salaryCurrency,
+                                geofenceEnforced = employee.geofenceEnforced,
+                                permissions = permsDto
                             )
                         )
-                    )
+                    } else if (existing != null) {
+                        com.example.util.RetrofitClient.apiService().updateEmployee(
+                            employeeId = employee.id,
+                            request = com.example.util.ApiUpdateEmployeeRequest(
+                                fullName = employee.displayName,
+                                phone = employee.phone.orEmpty(),
+                                password = password.trim().ifBlank { null },
+                                roleTitle = employee.roleTitle,
+                                department = employee.department,
+                                baseSalary = employee.baseSalary,
+                                salaryCurrency = employee.salaryCurrency,
+                                geofenceEnforced = employee.geofenceEnforced,
+                                isActive = employee.isActiveEmployee,
+                                permissions = permsDto
+                            )
+                        )
+                    }
                 } catch (_: Exception) {}
             }
 
@@ -3737,11 +3968,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 createdByName = currentUser.value?.name ?: "المدير"
             )
             repository.insertPayrollAdjustment(adj)
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().addPayrollAdjustment(
+                        com.example.util.ApiPayrollAdjustmentRequest(
+                            employeeId = employee.id,
+                            type = type,
+                            amount = amount,
+                            reason = reason.trim(),
+                            effectiveDate = effectiveDate
+                        )
+                    )
+                } catch (_: Exception) {}
+            }
             val actionLabel = if (type == "BONUS") "حافز مالي +" else "خصم مالي -"
             com.example.ui.components.ToastNotificationBus.showToast(
                 message = "تم تسجيل $actionLabel ${GoldUtils.formatCurrency(amount)} للموظف ${employee.displayName}",
                 type = com.example.ui.components.AppToastType.SUCCESS
             )
+        }
+    }
+
+    fun deletePayrollAdjustment(id: String) {
+        viewModelScope.launch(safeExceptionHandler) {
+            repository.deletePayrollAdjustment(id)
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().deletePayrollAdjustment(id)
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -3773,11 +4028,68 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 approvedByName = currentUser.value?.name ?: "المدير"
             )
             repository.insertEmployeeLeave(leave)
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().addEmployeeLeave(
+                        com.example.util.ApiEmployeeLeaveRequest(
+                            employeeId = employee.id,
+                            leaveType = leaveType,
+                            startDate = startDate,
+                            endDate = endDate,
+                            notes = notes.trim()
+                        )
+                    )
+                } catch (_: Exception) {}
+            }
             com.example.ui.components.ToastNotificationBus.showToast(
                 message = "تم اعتماد إجازة (${days} يوم) للموظف ${employee.displayName}",
                 type = com.example.ui.components.AppToastType.SUCCESS
             )
         }
+    }
+
+    fun deleteEmployeeLeave(id: String) {
+        viewModelScope.launch(safeExceptionHandler) {
+            repository.deleteEmployeeLeave(id)
+            if (com.example.util.RetrofitClient.hasActiveSession()) {
+                try {
+                    com.example.util.RetrofitClient.apiService().deleteEmployeeLeave(id)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    suspend fun loginEmployeeWithMandatoryGps(
+        usernameOrPhone: String,
+        password: String
+    ): Pair<Boolean, com.example.util.WorkplaceLocationPolicyManager.LocationPolicyCheckResult?> {
+        val cleanUser = usernameOrPhone.trim().removePrefix("@")
+        val cleanSecret = password.trim()
+        val matched = allSubAccounts.value.find {
+            val matchesId = it.phone.equals(cleanUser, ignoreCase = true) ||
+                it.username.equals(cleanUser, ignoreCase = true)
+            val matchesPass = com.example.util.HiddenAccountSecurityEngine.verifyPassword(cleanSecret, it)
+            matchesId && matchesPass && it.isActiveEmployee
+        } ?: return false to null
+
+        if (com.example.util.RetrofitClient.hasActiveSession()) {
+            try {
+                com.example.util.RetrofitClient.apiService().employeeLogin(
+                    com.example.util.ApiEmployeeLoginRequest(
+                        username = matched.username,
+                        password = cleanSecret
+                    )
+                )
+            } catch (_: Exception) {}
+        }
+
+        val gpsResult = clockInEmployeeWithMandatoryGps(matched)
+        if (!matched.geofenceEnforced || gpsResult.isCompliant) {
+            _activeSubAccount.value = matched
+            com.example.util.HiddenAccountSecurityEngine.setActiveSubAccount(matched)
+            repository.updateSubAccount(matched.copy(lastActiveAt = System.currentTimeMillis()))
+        }
+        return true to gpsResult
     }
 
     suspend fun clockInEmployeeWithMandatoryGps(
@@ -3787,15 +4099,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val profile = repository.getBusinessProfileSync()
         val groupId = profile?.companyGroupId?.ifBlank { "wg_company_main" } ?: "wg_company_main"
 
-        val result = com.example.util.WorkplaceLocationPolicyManager.enforceLoginLocationPolicy(
-            context = appCtx,
-            employeeId = employee.id,
-            employeeName = employee.displayName,
-            workplaceLat = profile?.hqLatitude,
-            workplaceLng = profile?.hqLongitude,
-            radiusMeters = profile?.geofenceRadiusMeters ?: 250,
-            workplaceName = profile?.companyName?.ifBlank { "مقر العمل الرئيسي" } ?: "مقر العمل الرئيسي"
-        )
+        val result = if (employee.geofenceEnforced) {
+            com.example.util.WorkplaceLocationPolicyManager.enforceLoginLocationPolicy(
+                context = appCtx,
+                employeeId = employee.id,
+                employeeName = employee.displayName,
+                workplaceLat = profile?.hqLatitude,
+                workplaceLng = profile?.hqLongitude,
+                radiusMeters = profile?.geofenceRadiusMeters ?: 250,
+                workplaceName = profile?.companyName?.ifBlank { "مقر العمل الرئيسي" } ?: "مقر العمل الرئيسي"
+            )
+        } else {
+            com.example.util.WorkplaceLocationPolicyManager.LocationPolicyCheckResult(
+                isCompliant = true,
+                status = "COMPLIANT_IN_BOUNDS",
+                messageAr = "تم استلام العمل بنجاح (إلزام الموقع مستثنى لهذا الموظف)",
+                isGpsActive = true,
+                shouldAlertManager = false
+            )
+        }
 
         val curDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
         val curTime = java.text.SimpleDateFormat("hh:mm a", java.util.Locale("ar")).format(java.util.Date())
@@ -3828,7 +4150,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.saveAttendance(attendance)
 
         if (!result.isCompliant && result.shouldAlertManager) {
-            // Post automated violation notice in Company Staff Group for the manager
             val wg = repository.getWorkGroupByIdSync(groupId)
             if (wg != null) {
                 val chat = repository.ensureWorkGroupChat(wg, displayTitle = wg.name)
@@ -3840,12 +4161,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     type = MessageType.SYSTEM.name
                 )
             }
+        } else {
+            try {
+                val oneTimeReq = androidx.work.OneTimeWorkRequestBuilder<com.example.service.GeofenceMonitoringWorker>().build()
+                androidx.work.WorkManager.getInstance(appCtx).enqueue(oneTimeReq)
+            } catch (_: Exception) {}
         }
 
         if (com.example.util.RetrofitClient.hasActiveSession()) {
             try {
                 com.example.util.RetrofitClient.apiService().checkInAttendance(
                     com.example.util.ApiAttendanceGeoRequest(
+                        employeeId = employee.id,
                         gpsEnabled = result.isGpsActive,
                         latitude = result.currentLatitude,
                         longitude = result.currentLongitude

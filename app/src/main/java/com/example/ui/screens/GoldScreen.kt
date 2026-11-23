@@ -53,6 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.ui.components.OozoxCircleButtonDefaults
+import com.example.ui.components.OozoxCircleIconButton
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.*
 import com.example.ui.components.*
@@ -269,38 +271,30 @@ fun GoldScreen(
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            IconButton(
+                            OozoxCircleIconButton(
                                 onClick = onRefresh,
-                                modifier = Modifier.size(44.dp)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Sync,
                                     contentDescription = "تحديث الأسعار",
                                     tint = primaryAccent,
                                     modifier = Modifier
-                                        .size(20.dp)
+                                        .size(OozoxCircleButtonDefaults.IconSize)
                                         .graphicsLayer { rotationZ = if (isRefreshing) rotationAngle else 0f }
                                 )
                             }
 
-                            FilledTonalIconButton(
+                            OozoxCircleIconButton(
                                 onClick = onAddPurchaseClick,
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = primaryAccent,
-                                    contentColor = onPrimaryAccent
-                                ),
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .testTag("btn_gold_add_quick")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "تسجيل عملية",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "تسجيل عملية",
+                                tint = onPrimaryAccent,
+                                containerColor = primaryAccent,
+                                modifier = Modifier.testTag("btn_gold_add_quick")
+                            )
                         }
                     }
 
@@ -403,18 +397,15 @@ fun GoldScreen(
                                             )
                                         }
 
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedIconButton(
+                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            OozoxCircleIconButton(
                                                 onClick = { showPriceEditModal = true },
-                                                modifier = Modifier.size(44.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Edit,
-                                                    contentDescription = "تعديل السعر",
-                                                    tint = primaryAccent,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "تعديل السعر",
+                                                tint = primaryAccent,
+                                                containerColor = Color.Transparent,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                            )
                                         }
                                     }
 
@@ -887,12 +878,14 @@ fun GoldScreen(
                                                     onCheckedChange = { onToggleAlert(alert.id, it) },
                                                     modifier = Modifier.testTag("switch_alert_${alert.id}")
                                                 )
-                                                IconButton(
+                                                OozoxCircleIconButton(
                                                     onClick = { onDeleteAlert(alert.id) },
-                                                    modifier = Modifier.size(40.dp).testTag("btn_delete_alert_${alert.id}")
-                                                ) {
-                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = adaptiveStatusRed)
-                                                }
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = "حذف",
+                                                    tint = adaptiveStatusRed,
+                                                    containerColor = adaptiveStatusRed.copy(alpha = 0.12f),
+                                                    modifier = Modifier.testTag("btn_delete_alert_${alert.id}")
+                                                )
                                             }
                                         }
 
@@ -1160,9 +1153,11 @@ fun GoldScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("إصدار فاتورة PDF", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { showQuotationModal = false }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق")
-                        }
+                        OozoxCircleIconButton(
+                            onClick = { showQuotationModal = false },
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق"
+                        )
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                     Column(
@@ -1325,9 +1320,11 @@ fun GoldScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("تنبيه سعر جديد", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { showAddAlertDialog = false }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق")
-                        }
+                        OozoxCircleIconButton(
+                            onClick = { showAddAlertDialog = false },
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق"
+                        )
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                     Column(

@@ -107,6 +107,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
     val allInvoices by viewModel.allInvoices.collectAsStateWithLifecycle()
     val allMerchantProducts by viewModel.allMerchantProducts.collectAsStateWithLifecycle()
     val allProjectTasks by viewModel.allProjectTasks.collectAsStateWithLifecycle()
+    val allProjectMembers by viewModel.allProjectMembers.collectAsStateWithLifecycle()
     val cloudBackups by viewModel.cloudBackups.collectAsStateWithLifecycle()
     val backupStatus by viewModel.backupStatus.collectAsStateWithLifecycle()
     val isBackupProcessing by viewModel.isBackupProcessing.collectAsStateWithLifecycle()
@@ -857,6 +858,11 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             isRefreshing = isRefreshingChats,
                                             onRefresh = onForceSyncAction,
                                             onProjectClick = onProjectClickAction,
+                                            onOpenProjectChat = { proj ->
+                                                viewModel.ensureWorkGroupChatAndOpen(proj.workGroupId) { chatId ->
+                                                    navController.navigate(Screen.ChatDetail(chatId))
+                                                }
+                                            },
                                             onCreateProjectClick = { showNewProjectDialog = true },
                                             onDeleteProject = onDeleteProjectAction
                                         )
@@ -870,6 +876,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             allShiftHandovers = allShiftHandovers,
                                             allComplaints = allFinancialComplaints,
                                             allProjects = allProjects,
+                                            allProjectTasks = allProjectTasks,
                                             allHashtagAccounts = allHashtagAccounts,
                                             allHashtagEntries = allHashtagEntries,
                                             allDailyRecords = allDailyAccountingRecords,
@@ -880,6 +887,9 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             allWorkGroups = allWorkGroups,
                                             allGroupMembers = allGroupMembers,
                                             onLoginSubAccount = { user, pin -> viewModel.loginEmployee(user, pin) },
+                                            onLoginEmployeeWithMandatoryGps = { user, pass ->
+                                                viewModel.loginEmployeeWithMandatoryGps(user, pass)
+                                            },
                                             onLogoutSubAccount = { viewModel.lockToMainAccount() },
                                             onAddShiftHandover = { handover -> viewModel.addShiftHandover(handover) },
                                             onReceiveShift = { id, rId, rName, notes -> viewModel.receiveShiftHandover(id, rId, rName, notes) },
@@ -903,7 +913,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                                 )
                                             },
                                             onSaveBusinessProfile = { profile -> viewModel.saveBusinessProfile(profile) },
-                                            onCreateOrUpdateEmployee = { id, name, user, phone, pass, role, dept, sal, cur, geo, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
+                                            onCreateOrUpdateEmployee = { id, name, user, phone, pass, role, dept, sal, cur, geo, isActive, inv, rep, disc, mBiz, mStaff, mPay, mProj, aTask, mAcct, aDisc, dChat ->
                                                 viewModel.createOrUpdateEnterpriseEmployee(
                                                     existingId = id,
                                                     fullName = name,
@@ -915,6 +925,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                                     baseSalary = sal,
                                                     salaryCurrency = cur,
                                                     geofenceEnforced = geo,
+                                                    isActiveEmployee = isActive,
                                                     canCreateInvoices = inv,
                                                     canViewReports = rep,
                                                     canSetProductPrices = disc,
@@ -932,8 +943,14 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             onAddPayrollAdjustment = { emp, type, amt, reason, date ->
                                                 viewModel.addEmployeePayrollAdjustment(emp, type, amt, reason, date)
                                             },
+                                            onDeletePayrollAdjustment = { adjId ->
+                                                viewModel.deletePayrollAdjustment(adjId)
+                                            },
                                             onAddEmployeeLeave = { emp, type, start, end, notes ->
                                                 viewModel.addEmployeeLeaveRecord(emp, type, start, end, notes)
+                                            },
+                                            onDeleteEmployeeLeave = { leaveId ->
+                                                viewModel.deleteEmployeeLeave(leaveId)
                                             },
                                             onClockInMandatoryGps = { emp -> viewModel.clockInEmployeeWithMandatoryGps(emp) },
                                             onOpenCompanyGroupChat = {
@@ -943,6 +960,9 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             },
                                             onAssignTaskToCompanyGroup = { task ->
                                                 viewModel.insertProjectTask(task)
+                                            },
+                                            onUpdateTaskStatus = { taskId, status ->
+                                                viewModel.updateProjectTaskStatus(taskId, status)
                                             },
                                             onOpenProject = onProjectClickAction,
                                             onOpenSubscriptions = onOpenSubscriptionsAction,
@@ -1251,6 +1271,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         },
                         workGroups = allWorkGroups,
                         allGroupMembers = allGroupMembers,
+                        allProjectMembers = allProjectMembers,
+                        allEmployees = allSubAccounts,
                         allContacts = allContacts,
                         projectTasks = allProjectTasks,
                         onInsertFieldTask = { task ->
@@ -1262,9 +1284,12 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         onConfirmAndArchiveTask = { taskId, amount, notes ->
                             viewModel.confirmAndArchiveFieldTask(taskId, amount, notes)
                         },
+                        onUpdateProjectTaskStatus = { taskId, status ->
+                            viewModel.updateProjectTaskStatus(taskId, status)
+                        },
                         onOpenGroupChatById = { targetGroupId ->
                             val existingGroupChat = allChats.firstOrNull {
-                                it.groupId == targetGroupId || it.id == "chat_wg_$targetGroupId"
+                                it.groupId == targetGroupId || it.id == "wg_chat_$targetGroupId" || it.id == "chat_wg_$targetGroupId"
                             }
                             if (existingGroupChat != null) {
                                 navController.navigate(Screen.ChatDetail(existingGroupChat.id))
@@ -1276,7 +1301,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         },
                         onAddGroupMembers = { chosenContacts, manualName, manualPhone, roleLabel, isAdmin ->
                             val resolvedGroupId = chat.groupId ?: allWorkGroups.firstOrNull {
-                                it.id == chat.contactId || chat.id == "chat_wg_${it.id}"
+                                it.id == chat.contactId || chat.id == "wg_chat_${it.id}" || chat.id == "chat_wg_${it.id}"
                             }?.id
                             viewModel.addMembersToGroupChat(
                                 chatId = route.chatId,
@@ -1293,6 +1318,21 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         },
                         onToggleGroupMemberAdmin = { member ->
                             viewModel.toggleGroupMemberAdmin(member)
+                        },
+                        onOpenProjectDetail = { projId ->
+                            navController.navigate(Screen.ProjectDetail(projId))
+                        },
+                        onAddProjectAccountingEntry = { pId, pName, title, amount, isIncome, category ->
+                            viewModel.addProjectAccountingEntry(pId, pName, title, amount, isIncome, category)
+                        },
+                        onAddProjectMemberWithPerms = { pId, name, phone, role, task, uId, isAdmin, canPost, canEdit, canExport, canDirect ->
+                            viewModel.addProjectMember(pId, name, phone, role, task, uId, isAdmin, canPost, canEdit, canExport, canDirect)
+                        },
+                        onPromoteProjectMember = { pId, member ->
+                            viewModel.promoteProjectMemberToManager(pId, member)
+                        },
+                        onRemoveProjectMember = { pId, member ->
+                            viewModel.removeProjectMember(pId, member)
                         }
                     )
 
@@ -1336,11 +1376,25 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         projectAuditLogs = projectAuditLogs,
                         projectTasks = projectTasks,
                         shiftHandovers = allShiftHandovers,
+                        employees = allSubAccounts,
                         onAddProjectMember = { name, phone, role, task ->
                             viewModel.addProjectMember(route.projectId, name, phone, role, task)
                         },
+                        onAddProjectMemberWithPerms = { name, phone, role, task, uId, isAdmin, canPost, canEdit, canExport, canDirect ->
+                            viewModel.addProjectMember(route.projectId, name, phone, role, task, uId, isAdmin, canPost, canEdit, canExport, canDirect)
+                        },
                         onPromoteToManager = { member ->
                             viewModel.promoteProjectMemberToManager(route.projectId, member)
+                        },
+                        onRemoveProjectMember = { member ->
+                            viewModel.removeProjectMember(route.projectId, member)
+                        },
+                        onOpenGroupChat = {
+                            project?.let { p ->
+                                viewModel.ensureWorkGroupChatAndOpen(p.workGroupId) { chatId ->
+                                    navController.navigate(Screen.ChatDetail(chatId))
+                                }
+                            }
                         },
                         onAddAccountingEntry = { title, amount, isIncome, category ->
                             viewModel.addProjectAccountingEntry(
@@ -1648,7 +1702,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
         if (showNewProjectDialog) {
             NewProjectDialog(
                 contacts = allContacts,
-                onCreateProject = { gName, gDesc, pName, cap, type, loc, coPhone, coName, membersInfo, customTypeName ->
+                employees = allSubAccounts,
+                onCreateProject = { gName, gDesc, pName, cap, type, loc, coPhone, coName, membersInfo, customTypeName, memberInputs ->
                     viewModel.createWorkGroupAndProject(
                         groupName = gName,
                         groupDesc = gDesc,
@@ -1659,7 +1714,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         coManagerPhone = coPhone,
                         coManagerName = coName,
                         membersInfo = membersInfo,
-                        customProjectTypeName = customTypeName
+                        customProjectTypeName = customTypeName,
+                        memberInputs = memberInputs
                     )
                 },
                 onDismiss = { showNewProjectDialog = false }

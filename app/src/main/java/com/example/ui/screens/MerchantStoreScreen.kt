@@ -63,10 +63,12 @@ import com.example.ui.components.CoverPhotoEditorDialog
 import com.example.ui.components.ImageFrameAspectMode
 import com.example.ui.components.MediaChooserKind
 import com.example.ui.components.MediaPreviewItem
+import com.example.ui.components.OozoxCircleIconButton
 import com.example.ui.components.MediaPreviewModal
 import com.example.ui.components.MediaSourceChooserCard
 import com.example.ui.components.OozoxAvatarImage
 import com.example.ui.components.OozoxThumbnailImage
+import com.example.ui.components.PanoramicProductScanDialog
 import com.example.ui.components.VideoEditorDialog
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.MainViewModel
@@ -293,6 +295,7 @@ fun MerchantStoreScreen(
 
     // Dialog States
     var showAddProductDialog by remember { mutableStateOf(false) }
+    var showPanoramicScanDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showAddReviewDialog by remember { mutableStateOf(false) }
     var showUpdateStockDialog by remember { mutableStateOf(false) }
@@ -579,19 +582,32 @@ fun MerchantStoreScreen(
                                 }
 
                                 if (isOwnStore) {
-                                    FilledTonalButton(
-                                        onClick = { showAddProductDialog = true },
-                                        colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = GoldPrimary.copy(alpha = 0.16f),
-                                            contentColor = adaptiveGoldPrimary
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                        shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier.height(36.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("إضافة منتج", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                                        OozoxCircleIconButton(
+                                            onClick = { showPanoramicScanDialog = true },
+                                            imageVector = Icons.Default.Rotate90DegreesCcw,
+                                            contentDescription = "360°",
+                                            tint = OozoxTeal,
+                                            containerColor = OozoxTeal.copy(alpha = 0.16f),
+                                            modifier = Modifier.testTag("open_360_scan_card_btn")
+                                        )
+                                        FilledTonalButton(
+                                            onClick = { showAddProductDialog = true },
+                                            colors = ButtonDefaults.filledTonalButtonColors(
+                                                containerColor = GoldPrimary.copy(alpha = 0.16f),
+                                                contentColor = adaptiveGoldPrimary
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.height(40.dp)
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("إضافة منتج", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                                        }
                                     }
                                 }
                             }
@@ -959,6 +975,18 @@ fun MerchantStoreScreen(
                 )
                 showAddProductDialog = false
             }
+        )
+    }
+
+    if (showPanoramicScanDialog) {
+        PanoramicProductScanDialog(
+            merchantShopName = merchantDisplayName,
+            currentStaffName = currentUser?.name,
+            onSaveProduct = { prod ->
+                viewModel.addMerchantProduct(prod)
+                showPanoramicScanDialog = false
+            },
+            onDismiss = { showPanoramicScanDialog = false }
         )
     }
 
@@ -2566,9 +2594,12 @@ fun AddMerchantReviewDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("إضافة تقييم", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "إغلاق", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 Text("تقييمك لـ $merchantName يساعد العملاء.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

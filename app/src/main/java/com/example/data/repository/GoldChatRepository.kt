@@ -41,6 +41,7 @@ class GoldChatRepository(context: Context) {
     val allWorkGroups: Flow<List<WorkGroupEntity>> = db.workGroupDao().getAllWorkGroups()
     val allGroupMembers: Flow<List<GroupMemberEntity>> = db.workGroupDao().getAllGroupMembers()
     val allProjects: Flow<List<ProjectEntity>> = db.projectDao().getAllProjects()
+    val allProjectMembers: Flow<List<ProjectMemberEntity>> = db.projectMemberDao().getAllProjectMembers()
     val allTraderRequests: Flow<List<TraderRequestEntity>> = db.traderRequestDao().getAllTraderRequests()
     val adminConfig: Flow<AdminConfigEntity?> = db.adminConfigDao().getConfig()
     val allLedgerEntries: Flow<List<LedgerEntryEntity>> = db.immutableLedgerDao().getAllLedgerEntries()
@@ -1000,6 +1001,18 @@ class GoldChatRepository(context: Context) {
         db.clearingSettlementDao().insertSettlement(settlement)
     }
 
+    suspend fun getProjectByIdSync(projectId: String): ProjectEntity? = withContext(Dispatchers.IO) {
+        db.projectDao().getProjectById(projectId)
+    }
+
+    suspend fun getProjectByWorkGroupIdSync(workGroupId: String): ProjectEntity? = withContext(Dispatchers.IO) {
+        db.projectDao().getProjectByWorkGroupIdSync(workGroupId)
+    }
+
+    suspend fun getProjectMembersSync(projectId: String): List<ProjectMemberEntity> = withContext(Dispatchers.IO) {
+        db.projectMemberDao().getMembersForProjectSync(projectId)
+    }
+
     suspend fun addProjectMember(member: ProjectMemberEntity) = withContext(Dispatchers.IO) {
         db.projectMemberDao().insertMember(member)
     }
@@ -1623,6 +1636,27 @@ class GoldChatRepository(context: Context) {
         toInsert.size
     }
 
+    suspend fun postSystemMessageToWorkGroupChat(workGroupId: String, content: String) = withContext(Dispatchers.IO) {
+        if (workGroupId.isBlank() || content.isBlank()) return@withContext
+        val chat = db.chatDao().getChatByGroupId(workGroupId)
+            ?: db.chatDao().getChatById("wg_chat_$workGroupId")
+            ?: db.chatDao().getChatById("chat_wg_$workGroupId")
+            ?: return@withContext
+        sendMessage(
+            chatId = chat.id,
+            senderId = "system",
+            senderName = "النظام",
+            content = content,
+            type = MessageType.SYSTEM.name
+        )
+    }
+
+    private fun ProjectMemberEntity.matchesGroupMember(gm: GroupMemberEntity): Boolean {
+        return userId == gm.userId ||
+            (userPhone.isNotBlank() && gm.phone.isNotBlank() && userPhone.trim() == gm.phone.trim()) ||
+            userName.trim().equals(gm.username.trim(), ignoreCase = true)
+    }
+
     suspend fun updateGroupMemberAdminStatus(member: GroupMemberEntity, isAdmin: Boolean) = withContext(Dispatchers.IO) {
         db.workGroupDao().insertGroupMember(
             member.copy(
@@ -1633,17 +1667,193 @@ class GoldChatRepository(context: Context) {
                 canMessageDirectly = if (isAdmin) true else member.canMessageDirectly
             )
         )
+        val linkedProject = db.projectDao().getProjectByWorkGroupIdSync(member.groupId)
+        if (linkedProject != null) {
+            val projMembers = db.projectMemberDao().getMembersForProjectSync(linkedProject.id)
+            val matched = projMembers.firstOrNull { it.matchesGroupMember(member) }
+            val nextRole = if (isAdmin) ProjectMemberRole.EXECUTIVE_MANAGER else ProjectMemberRole.PROCUREMENT_OFFICER
+            if (matched != null && matched.role != ProjectMemberRole.OWNER.name) {
+                db.projectMemberDao().updateMemberRole(matched.id, nextRole.name)
+            }
+            db.projectAuditLogDao().insertAuditLog(
+                ProjectAuditLogEntity(
+                    id = UUID.randomUUID().toString(),
+                    projectId = linkedProject.id,
+                    action = if (isAdmin) "ترقية صلاحية عضو" else "تعديل صلاحية عضو",
+                    actorName = db.userDao().getCurrentUserSync()?.name ?: "المدير",
+                    actorPhone = db.userDao().getCurrentUserSync()?.phone ?: "",
+                    details = "تم تحديث صلاحية ${member.username} في المجموعة والمشروع (${nextRole.label})"
+                )
+            )
+        }
+    }
+
+    suspend fun updateGroupMemberRoleAndPermissions(
+        member: GroupMemberEntity,
+        roleLabel: String,
+        projectRole: ProjectMemberRole? = null,
+        isAdmin: Boolean,
+        canPostAccounting: Boolean,
+        canEditRecords: Boolean,
+        canExportReports: Boolean,
+        canMessageDirectly: Boolean
+    ) = withContext(Dispatchers.IO) {
+        val cleanRoleLabel = roleLabel.trim().ifBlank { member.roleLabel }
+        val updatedMember = member.copy(
+            roleLabel = cleanRoleLabel,
+            isGroupAdmin = isAdmin,
+            canPostAccounting = canPostAccounting || isAdmin,
+            canEditRecords = canEditRecords || isAdmin,
+            canExportReports = canExportReports || isAdmin,
+            canMessageDirectly = canMessageDirectly || isAdmin
+        )
+        db.workGroupDao().insertGroupMember(updatedMember)
+
+        val linkedProject = db.projectDao().getProjectByWorkGroupIdSync(member.groupId)
+        if (linkedProject != null) {
+            val resolvedRole = projectRole ?: when {
+                isAdmin -> ProjectMemberRole.EXECUTIVE_MANAGER
+                canExportReports && !canEditRecords && !canPostAccounting -> ProjectMemberRole.AUDITOR
+                canExportReports && canPostAccounting -> ProjectMemberRole.FINANCIAL_PARTNER
+                else -> ProjectMemberRole.PROCUREMENT_OFFICER
+            }
+            val projMembers = db.projectMemberDao().getMembersForProjectSync(linkedProject.id)
+            val matched = projMembers.firstOrNull { it.matchesGroupMember(member) }
+            if (matched != null) {
+                db.projectMemberDao().insertMember(
+                    matched.copy(
+                        role = if (matched.role == ProjectMemberRole.OWNER.name) ProjectMemberRole.OWNER.name else resolvedRole.name,
+                        assignedTask = cleanRoleLabel
+                    )
+                )
+            } else {
+                db.projectMemberDao().insertMember(
+                    ProjectMemberEntity(
+                        id = UUID.randomUUID().toString(),
+                        projectId = linkedProject.id,
+                        userId = member.userId,
+                        userName = member.username,
+                        userPhone = member.phone,
+                        role = resolvedRole.name,
+                        assignedTask = cleanRoleLabel
+                    )
+                )
+            }
+            val actor = db.userDao().getCurrentUserSync()
+            db.projectAuditLogDao().insertAuditLog(
+                ProjectAuditLogEntity(
+                    id = UUID.randomUUID().toString(),
+                    projectId = linkedProject.id,
+                    action = "تحديث وظيفة وصلاحيات عضو",
+                    actorName = actor?.name ?: "المدير",
+                    actorPhone = actor?.phone ?: "",
+                    details = "تم تحديث ${member.username}: $cleanRoleLabel (${resolvedRole.label})"
+                )
+            )
+        }
+    }
+
+    suspend fun syncProjectMemberToWorkGroup(
+        projectId: String,
+        member: ProjectMemberEntity,
+        isGroupAdmin: Boolean,
+        canPostAccounting: Boolean,
+        canEditRecords: Boolean,
+        canExportReports: Boolean,
+        canMessageDirectly: Boolean
+    ) = withContext(Dispatchers.IO) {
+        val project = db.projectDao().getProjectById(projectId) ?: return@withContext
+        val wg = db.workGroupDao().getWorkGroupById(project.workGroupId) ?: return@withContext
+        val currentGroupMembers = db.workGroupDao().getGroupMembersSync(wg.id)
+        val existingGm = currentGroupMembers.firstOrNull { member.matchesGroupMember(it) }
+        val roleEnum = ProjectMemberRole.entries.firstOrNull { it.name == member.role }
+            ?: ProjectMemberRole.EXECUTIVE_MANAGER
+        val resolvedLabel = member.assignedTask?.takeIf { it.isNotBlank() } ?: roleEnum.label
+
+        val gmToSave = (existingGm ?: GroupMemberEntity(
+            id = UUID.randomUUID().toString(),
+            groupId = wg.id,
+            userId = member.userId,
+            username = member.userName,
+            phone = member.userPhone,
+            roleLabel = resolvedLabel
+        )).copy(
+            roleLabel = resolvedLabel,
+            isGroupAdmin = isGroupAdmin,
+            canPostAccounting = canPostAccounting || isGroupAdmin,
+            canEditRecords = canEditRecords || isGroupAdmin,
+            canExportReports = canExportReports || isGroupAdmin,
+            canMessageDirectly = canMessageDirectly || isGroupAdmin
+        )
+        db.workGroupDao().insertGroupMember(gmToSave)
+
+        val chat = ensureWorkGroupChat(wg, displayTitle = wg.name)
+        val mention = "@${member.userName.removePrefix("@")}"
+        val msg = if (existingGm == null) {
+            "تمت إضافة $mention بوظيفة ($resolvedLabel • ${roleEnum.label}) إلى المشروع والمجموعة"
+        } else {
+            "تم تحديث دور وصلاحيات $mention إلى ($resolvedLabel • ${roleEnum.label})"
+        }
+        sendMessage(
+            chatId = chat.id,
+            senderId = "system",
+            senderName = "النظام",
+            content = msg,
+            type = MessageType.SYSTEM.name
+        )
+    }
+
+    suspend fun removeProjectMemberWithGroupSync(projectId: String, member: ProjectMemberEntity) = withContext(Dispatchers.IO) {
+        db.projectMemberDao().deleteMember(member.id)
+        val project = db.projectDao().getProjectById(projectId) ?: return@withContext
+        val gmList = db.workGroupDao().getGroupMembersSync(project.workGroupId)
+        gmList.filter { member.matchesGroupMember(it) }.forEach { gm ->
+            db.workGroupDao().deleteGroupMember(gm.id)
+        }
+        val actor = db.userDao().getCurrentUserSync()
+        db.projectAuditLogDao().insertAuditLog(
+            ProjectAuditLogEntity(
+                id = UUID.randomUUID().toString(),
+                projectId = projectId,
+                action = "إزالة عضو من المشروع والمجموعة",
+                actorName = actor?.name ?: "المدير",
+                actorPhone = actor?.phone ?: "",
+                details = "تمت إزالة ${member.userName}"
+            )
+        )
+        postSystemMessageToWorkGroupChat(
+            workGroupId = project.workGroupId,
+            content = "تمت إزالة @${member.userName.removePrefix("@")} من المشروع والمجموعة"
+        )
     }
 
     suspend fun removeGroupMemberFromChat(chatId: String, member: GroupMemberEntity) = withContext(Dispatchers.IO) {
         db.workGroupDao().deleteGroupMember(member.id)
+        val linkedProject = db.projectDao().getProjectByWorkGroupIdSync(member.groupId)
+        if (linkedProject != null) {
+            val projMembers = db.projectMemberDao().getMembersForProjectSync(linkedProject.id)
+            projMembers.filter { it.matchesGroupMember(member) }.forEach { pm ->
+                db.projectMemberDao().deleteMember(pm.id)
+            }
+            val actor = db.userDao().getCurrentUserSync()
+            db.projectAuditLogDao().insertAuditLog(
+                ProjectAuditLogEntity(
+                    id = UUID.randomUUID().toString(),
+                    projectId = linkedProject.id,
+                    action = "إزالة عضو من المجموعة والمشروع",
+                    actorName = actor?.name ?: "المدير",
+                    actorPhone = actor?.phone ?: "",
+                    details = "تمت إزالة ${member.username}"
+                )
+            )
+        }
         val chat = db.chatDao().getChatById(chatId)
         if (chat != null) {
             sendMessage(
                 chatId = chat.id,
                 senderId = "system",
                 senderName = "النظام",
-                content = "تمت إزالة ${member.username} من المجموعة",
+                content = "تمت إزالة ${member.username} من المجموعة والمشروع",
                 type = MessageType.SYSTEM.name
             )
         }

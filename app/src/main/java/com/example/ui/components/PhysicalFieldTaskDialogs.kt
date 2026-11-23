@@ -99,8 +99,8 @@ fun CreatePhysicalFieldTaskDialog(
     }
     val deadlineLabelText: String = when (timingMode) {
         "NOW" -> com.example.util.tr("task.mode_now")
-        "HOURS" -> "$numericDuration ساعة"
-        else -> "$numericDuration يوم"
+        "HOURS" -> com.example.util.trFmt("task.within_hours_fmt", "count" to numericDuration.toString())
+        else -> com.example.util.trFmt("task.within_days_fmt", "count" to numericDuration.toString())
     }
 
     Dialog(
@@ -152,9 +152,11 @@ fun CreatePhysicalFieldTaskDialog(
                             )
                         }
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = com.example.util.tr("common.close"))
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = com.example.util.tr("common.close")
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -469,10 +471,20 @@ fun CreatePhysicalFieldTaskDialog(
                                             modifier = Modifier.weight(1f).testTag("task_hours_input")
                                         )
                                         listOf(2, 6, 12, 24, 48).forEach { preset ->
+                                            val isSelected = hoursValueText == preset.toString()
                                             FilterChip(
-                                                selected = hoursValueText == preset.toString(),
+                                                selected = isSelected,
                                                 onClick = { hoursValueText = preset.toString() },
-                                                label = { Text("${preset}س", fontSize = 10.5.sp) }
+                                                label = { Text("$preset${com.example.util.tr("task.hour_short")}", fontSize = 10.5.sp, maxLines = 1, softWrap = false) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = OozoxTeal.copy(alpha = 0.18f),
+                                                    selectedLabelColor = if (isDarkThemeActive) OozoxTealLight else GoldDark
+                                                ),
+                                                border = FilterChipDefaults.filterChipBorder(
+                                                    enabled = true,
+                                                    selected = isSelected,
+                                                    selectedBorderColor = OozoxTeal
+                                                )
                                             )
                                         }
                                     }
@@ -496,10 +508,20 @@ fun CreatePhysicalFieldTaskDialog(
                                             modifier = Modifier.weight(1f).testTag("task_days_input")
                                         )
                                         listOf(1, 3, 7, 14, 30).forEach { preset ->
+                                            val isSelected = daysValueText == preset.toString()
                                             FilterChip(
-                                                selected = daysValueText == preset.toString(),
+                                                selected = isSelected,
                                                 onClick = { daysValueText = preset.toString() },
-                                                label = { Text("${preset}ي", fontSize = 10.5.sp) }
+                                                label = { Text("$preset${com.example.util.tr("task.day_short")}", fontSize = 10.5.sp, maxLines = 1, softWrap = false) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = OozoxTeal.copy(alpha = 0.18f),
+                                                    selectedLabelColor = if (isDarkThemeActive) OozoxTealLight else GoldDark
+                                                ),
+                                                border = FilterChipDefaults.filterChipBorder(
+                                                    enabled = true,
+                                                    selected = isSelected,
+                                                    selectedBorderColor = OozoxTeal
+                                                )
                                             )
                                         }
                                     }
@@ -518,7 +540,7 @@ fun CreatePhysicalFieldTaskDialog(
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = if (timingMode == "NOW") Color(0xFFEF4444) else OozoxTeal, modifier = Modifier.size(16.dp))
                                             Text(
-                                                text = if (timingMode == "NOW") "تنفيذ فوري (حالاً): يبدأ التتبع والإنذار الآن" else "المدة: $deadlineLabelText • الموعد: $deadlineFormatted",
+                                                text = if (timingMode == "NOW") com.example.util.tr("task.immediate_tracking_msg") else com.example.util.trFmt("task.deadline_summary_fmt", "dur" to deadlineLabelText, "date" to deadlineFormatted),
                                                 fontSize = 11.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (timingMode == "NOW") Color(0xFFEF4444) else OozoxTeal
@@ -693,9 +715,11 @@ fun WorkerSubmitProofDialog(
                             fontSize = 15.sp
                         )
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "إلغاء")
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إلغاء"
+                    )
                 }
 
                 // Task Overview
@@ -866,9 +890,11 @@ fun AdminVerifyTaskDialog(
                             fontSize = 14.5.sp
                         )
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "إلغاء")
-                    }
+                    OozoxCircleIconButton(
+                        onClick = onDismiss,
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إلغاء"
+                    )
                 }
 
                 // Worker Proof Summary

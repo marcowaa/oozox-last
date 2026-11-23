@@ -327,6 +327,9 @@ interface ProjectDao {
     @Query("SELECT * FROM projects WHERE id = :id")
     suspend fun getProjectById(id: String): ProjectEntity?
 
+    @Query("SELECT * FROM projects WHERE workGroupId = :workGroupId LIMIT 1")
+    suspend fun getProjectByWorkGroupIdSync(workGroupId: String): ProjectEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProject(project: ProjectEntity)
 
@@ -413,6 +416,12 @@ interface AdminConfigDao {
 interface ProjectMemberDao {
     @Query("SELECT * FROM project_members WHERE projectId = :projectId")
     fun getMembersForProject(projectId: String): Flow<List<ProjectMemberEntity>>
+
+    @Query("SELECT * FROM project_members WHERE projectId = :projectId")
+    suspend fun getMembersForProjectSync(projectId: String): List<ProjectMemberEntity>
+
+    @Query("SELECT * FROM project_members ORDER BY addedAt DESC")
+    fun getAllProjectMembers(): Flow<List<ProjectMemberEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: ProjectMemberEntity)

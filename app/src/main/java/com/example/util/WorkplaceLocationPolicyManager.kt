@@ -107,17 +107,21 @@ object WorkplaceLocationPolicyManager {
                 fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null),
                 8,
                 TimeUnit.SECONDS
-            )
+            ) ?: Tasks.await(fusedLocationClient.lastLocation, 3, TimeUnit.SECONDS)
         } catch (_: Exception) {
-            null
+            try {
+                Tasks.await(fusedLocationClient.lastLocation, 3, TimeUnit.SECONDS)
+            } catch (_: Exception) {
+                null
+            }
         }
 
         if (location == null) {
-            // Location could not be locked in time
+            // GPS is enabled, coordinates could not be locked yet -> schedule background worker re-check
             return@withContext LocationPolicyCheckResult(
                 isCompliant = true,
                 status = "COMPLIANT_IN_BOUNDS",
-                messageAr = "تم رصد تفعيل الـ GPS وجارٍ مزامنة الإحداثيات الدقيقة بالخلفية.",
+                messageAr = "تم رصد تفعيل الـ GPS وجارٍ مطابقة الإحداثيات في الخلفية.",
                 isGpsActive = true,
                 shouldAlertManager = false
             )

@@ -548,21 +548,13 @@ private fun NotificationToneItemRow(
             Spacer(modifier = Modifier.width(6.dp))
 
             // Play / Stop preview button
-            FilledTonalIconButton(
+            OozoxCircleIconButton(
                 onClick = onTogglePlay,
-                modifier = Modifier.size(48.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (isPlaying) adaptiveGoldPrimary else adaptiveGoldPrimary.copy(alpha = 0.15f),
-                    contentColor = if (isPlaying) adaptiveOnPrimary else adaptiveGoldPrimary
-                )
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) tr("tone.stop_cd") else tr("tone.play_cd"),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+                imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) tr("tone.stop_cd") else tr("tone.play_cd"),
+                tint = if (isPlaying) adaptiveOnPrimary else adaptiveGoldPrimary,
+                containerColor = if (isPlaying) adaptiveGoldPrimary else adaptiveGoldPrimary.copy(alpha = 0.15f)
+            )
         }
     }
 }

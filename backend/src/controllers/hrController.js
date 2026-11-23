@@ -245,6 +245,26 @@ const addPayrollAdjustment = async (req, res, next) => {
   }
 };
 
+// @desc    Delete payroll adjustment
+// @route   DELETE /api/hr/payroll/:id
+// @access  Private (managePayroll)
+const deletePayrollAdjustment = async (req, res, next) => {
+  try {
+    const business = await resolveBusinessForActor(req);
+    if (!business) return errorResponse(res, 404, req.t('api.user_not_found'));
+
+    const deleted = await PayrollAdjustment.findOneAndDelete({
+      _id: req.params.id,
+      business: business._id,
+    });
+    if (!deleted) return errorResponse(res, 404, req.t('api.user_not_found'));
+
+    return successResponse(res, 200, req.t('api.hr_payroll_deleted'), null);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    List payroll adjustments for business
 // @route   GET /api/hr/payroll
 // @access  Private
@@ -294,6 +314,26 @@ const createEmployeeLeave = async (req, res, next) => {
     });
 
     return successResponse(res, 201, req.t('api.hr_leave_saved'), { leave });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete leave record
+// @route   DELETE /api/hr/leaves/:id
+// @access  Private (manageStaff)
+const deleteEmployeeLeave = async (req, res, next) => {
+  try {
+    const business = await resolveBusinessForActor(req);
+    if (!business) return errorResponse(res, 404, req.t('api.user_not_found'));
+
+    const deleted = await EmployeeLeave.findOneAndDelete({
+      _id: req.params.id,
+      business: business._id,
+    });
+    if (!deleted) return errorResponse(res, 404, req.t('api.user_not_found'));
+
+    return successResponse(res, 200, req.t('api.hr_leave_deleted'), null);
   } catch (error) {
     next(error);
   }
@@ -519,8 +559,10 @@ module.exports = {
   updateEmployee,
   deleteEmployee,
   addPayrollAdjustment,
+  deletePayrollAdjustment,
   listPayrollAdjustments,
   createEmployeeLeave,
+  deleteEmployeeLeave,
   listEmployeeLeaves,
   checkInWithGeofence,
   geofenceHeartbeat,

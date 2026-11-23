@@ -27,17 +27,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.data.model.ContactEntity
+import com.example.data.model.HiddenSubAccountEntity
 import com.example.data.model.ProjectMemberInput
+import com.example.data.model.ProjectMemberRole
 import com.example.data.model.ProjectType
 import com.example.ui.theme.*
+import com.example.util.LocalAppLanguage
 import com.example.util.ProjectIndustryCatalog
 import com.example.util.tr
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewProjectDialog(
     contacts: List<ContactEntity> = emptyList(),
+    employees: List<HiddenSubAccountEntity> = emptyList(),
     onCreateProject: (
         groupName: String,
         groupDesc: String?,
@@ -48,11 +55,14 @@ fun NewProjectDialog(
         coManagerPhone: String?,
         coManagerName: String?,
         membersInfo: String,
-        customProjectTypeName: String
+        customProjectTypeName: String,
+        memberInputs: List<ProjectMemberInput>
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val currentLanguage = LocalAppLanguage.current
     var groupName by remember { mutableStateOf("") }
+    var hasCustomGroupName by remember { mutableStateOf(false) }
     var projectName by remember { mutableStateOf("") }
     var capitalStr by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ProjectType.CONSTRUCTION) }
@@ -64,7 +74,7 @@ fun NewProjectDialog(
                 ?: ProjectType.CONSTRUCTION.displayLabel()
         )
     }
-    var selectedWorkMode by remember { mutableStateOf("PHYSICAL_OPERATIONS") } // "FINANCIAL_ONLY" or "PHYSICAL_OPERATIONS"
+    var selectedWorkMode by remember { mutableStateOf("PHYSICAL_OPERATIONS") }
     var selectedLocation by remember { mutableStateOf("القاهرة - التجمع الخامس (الموقع الميداني)") }
     var customLocationText by remember { mutableStateOf("") }
 
@@ -73,12 +83,21 @@ fun NewProjectDialog(
     var coManagerPhone by remember { mutableStateOf("") }
     var showCoManagerPicker by remember { mutableStateOf(false) }
 
-    // Participant Mentions & Roles list
+    // Employee / Member addition state with job role & granular permissions
+    var memberUserIdInput by remember { mutableStateOf<String?>(null) }
     var memberNameInput by remember { mutableStateOf("") }
     var memberPhoneInput by remember { mutableStateOf("") }
     var memberRoleTaskInput by remember { mutableStateOf("") }
+    var selectedMemberRole by remember { mutableStateOf(ProjectMemberRole.EXECUTIVE_MANAGER) }
+    var permGroupAdmin by remember { mutableStateOf(ProjectMemberRole.EXECUTIVE_MANAGER.defaultIsAdmin()) }
+    var permPostAccounting by remember { mutableStateOf(ProjectMemberRole.EXECUTIVE_MANAGER.defaultCanPostAccounting()) }
+    var permEditRecords by remember { mutableStateOf(ProjectMemberRole.EXECUTIVE_MANAGER.defaultCanEditRecords()) }
+    var permExportReports by remember { mutableStateOf(ProjectMemberRole.EXECUTIVE_MANAGER.defaultCanExportReports()) }
+    var permDirectChat by remember { mutableStateOf(true) }
+
     val membersList = remember { mutableStateListOf<ProjectMemberInput>() }
     var showMemberContactPicker by remember { mutableStateOf(false) }
+    var showEmployeePicker by remember { mutableStateOf(false) }
 
     val presetLocations = listOf(
         "القاهرة - التجمع الخامس (الموقع الميداني)",
@@ -149,17 +168,12 @@ fun NewProjectDialog(
                         }
                     }
 
-                    IconButton(
+                    OozoxCircleIconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "إغلاق",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "إغلاق",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 HorizontalDivider(
@@ -193,22 +207,55 @@ fun NewProjectDialog(
                                 )
 
                                 OutlinedTextField(
-                                    value = groupName,
-                                    onValueChange = { groupName = it },
-                                    label = { Text("اسم مجموعة العمل (مثال: تحالف المقاولات)", fontSize = 12.sp) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                OutlinedTextField(
                                     value = projectName,
-                                    onValueChange = { projectName = it },
+                                    onValueChange = {
+                                        projectName = it
+                                        if (!hasCustomGroupName) {
+                                            groupName = it
+                                        }
+                                    },
                                     label = { Text("اسم المشروع الاستثماري", fontSize = 12.sp) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("new_project_name_input")
                                 )
+
+                                OutlinedTextField(
+                                    value = groupName,
+                                    onValueChange = {
+                                        groupName = it
+                                        hasCustomGroupName = it.isNotBlank() && it != projectName
+                                    },
+                                    label = { Text(tr("proj_group.group_name_auto_label", "اسم مجموعة الدردشة (يتطابق تلقائياً مع اسم المشروع)"), fontSize = 12.sp) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("new_project_group_name_input")
+                                )
+
+                                Surface(
+                                    color = GoldPrimary.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(0.7.dp, GoldPrimary.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Forum, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(15.dp))
+                                        Text(
+                                            text = tr("proj_group.auto_chat_badge", "سيتم تلقائياً إنشاء مجموعة دردشة باسم المشروع وإضافة كافة الموظفين بصلاحياتهم"),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = GoldPrimary
+                                        )
+                                    }
+                                }
 
                                 OutlinedTextField(
                                     value = capitalStr,
@@ -369,6 +416,9 @@ fun NewProjectDialog(
                                                 selectedType = sector.accountingProfile.baseProjectType
                                                 if (projectName.isBlank()) {
                                                     projectName = templateName
+                                                    if (!hasCustomGroupName) {
+                                                        groupName = templateName
+                                                    }
                                                 }
                                             },
                                             label = { Text(templateName, fontSize = 11.sp) },
@@ -535,7 +585,7 @@ fun NewProjectDialog(
                         }
                     }
 
-                    // 4. Participants Mentions & Role Tasks
+                    // 4. Employees, Job Titles & Granular Permissions
                     item {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
@@ -547,26 +597,65 @@ fun NewProjectDialog(
                                 modifier = Modifier.padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                Text(
+                                    text = tr("proj_group.team_roles_section", "٤. الموظفون والوظائف والصلاحيات"),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = GoldPrimary
+                                )
+
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text("٤. أعضاء الفريق والمهام", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = GoldPrimary)
-                                    TextButton(
-                                        onClick = { showMemberContactPicker = true },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    OutlinedButton(
+                                        onClick = { showEmployeePicker = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.55f)),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp)
+                                            .testTag("pick_company_employee_btn")
                                     ) {
-                                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(14.dp), tint = GoldPrimary)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("اختيار جهة اتصال", fontSize = 11.sp, color = GoldPrimary)
+                                        Icon(Icons.Default.Badge, contentDescription = null, modifier = Modifier.size(15.dp), tint = GoldPrimary)
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = "${tr("proj_group.pick_from_employees", "من موظفي الشركة")} (${employees.size})",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = GoldPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { showMemberContactPicker = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp)
+                                    ) {
+                                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurface)
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = tr("proj_group.pick_from_contacts", "من جهات الاتصال"),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
 
                                 OutlinedTextField(
                                     value = memberNameInput,
                                     onValueChange = { memberNameInput = it },
-                                    label = { Text("اسم العضو المشارك", fontSize = 12.sp) },
+                                    label = { Text("اسم الموظف / العضو", fontSize = 12.sp) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.fillMaxWidth()
@@ -575,7 +664,7 @@ fun NewProjectDialog(
                                 OutlinedTextField(
                                     value = memberPhoneInput,
                                     onValueChange = { memberPhoneInput = it },
-                                    label = { Text("رقم الهاتف للدعوة", fontSize = 12.sp) },
+                                    label = { Text("رقم الهاتف", fontSize = 12.sp) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.fillMaxWidth()
@@ -584,60 +673,195 @@ fun NewProjectDialog(
                                 OutlinedTextField(
                                     value = memberRoleTaskInput,
                                     onValueChange = { memberRoleTaskInput = it },
-                                    label = { Text("الدور / الوظيفة المسندة", fontSize = 12.sp) },
+                                    label = { Text(tr("proj_group.job_title_label", "الوظيفة المسندة في المشروع"), fontSize = 12.sp) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
+                                Text(
+                                    text = tr("proj_group.project_role_label", "الدور الإداري في المشروع:"),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GoldPrimary
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    ProjectMemberRole.entries.filter { it != ProjectMemberRole.OWNER }.forEach { roleOption ->
+                                        val isSelected = selectedMemberRole == roleOption
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                selectedMemberRole = roleOption
+                                                permGroupAdmin = roleOption.defaultIsAdmin()
+                                                permPostAccounting = roleOption.defaultCanPostAccounting()
+                                                permEditRecords = roleOption.defaultCanEditRecords()
+                                                permExportReports = roleOption.defaultCanExportReports()
+                                                permDirectChat = true
+                                                if (memberRoleTaskInput.isBlank()) {
+                                                    memberRoleTaskInput = roleOption.localizedLabel(currentLanguage)
+                                                }
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = roleOption.localizedLabel(currentLanguage),
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1
+                                                )
+                                            },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = GoldPrimary,
+                                                selectedLabelColor = Color.White
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = tr("proj_group.permissions_title", "صلاحيات الموظف داخل المشروع والمجموعة:"),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    listOf(
+                                        Triple(tr("proj_group.perm_admin", "مدير مجموعة"), permGroupAdmin) { v: Boolean -> permGroupAdmin = v },
+                                        Triple(tr("proj_group.perm_accounting", "قيود مالية"), permPostAccounting) { v: Boolean -> permPostAccounting = v },
+                                        Triple(tr("proj_group.perm_edit", "تعديل السجلات"), permEditRecords) { v: Boolean -> permEditRecords = v },
+                                        Triple(tr("proj_group.perm_export", "تصدير تقارير"), permExportReports) { v: Boolean -> permExportReports = v },
+                                        Triple(tr("proj_group.perm_direct_chat", "تراسل مباشر"), permDirectChat) { v: Boolean -> permDirectChat = v }
+                                    ).forEach { (permLabel, checked, onToggle) ->
+                                        FilterChip(
+                                            selected = checked,
+                                            onClick = { onToggle(!checked) },
+                                            leadingIcon = if (checked) {
+                                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp)) }
+                                            } else null,
+                                            label = { Text(permLabel, fontSize = 10.5.sp, maxLines = 1) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = GoldPrimary.copy(alpha = 0.16f),
+                                                selectedLabelColor = GoldPrimary,
+                                                selectedLeadingIconColor = GoldPrimary
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    }
+                                }
+
                                 OutlinedButton(
                                     onClick = {
-                                        if (memberNameInput.isNotBlank() && memberPhoneInput.isNotBlank()) {
+                                        if (memberNameInput.isNotBlank()) {
                                             membersList.add(
                                                 ProjectMemberInput(
                                                     name = memberNameInput.trim(),
                                                     phone = memberPhoneInput.trim(),
-                                                    roleTask = if (memberRoleTaskInput.isBlank()) "عضو مشارك" else memberRoleTaskInput.trim()
+                                                    roleTask = memberRoleTaskInput.trim().ifBlank { selectedMemberRole.localizedLabel(currentLanguage) },
+                                                    isCoManager = permGroupAdmin || selectedMemberRole == ProjectMemberRole.EXECUTIVE_MANAGER,
+                                                    userId = memberUserIdInput,
+                                                    role = selectedMemberRole,
+                                                    isGroupAdmin = permGroupAdmin,
+                                                    canPostAccounting = permPostAccounting,
+                                                    canEditRecords = permEditRecords,
+                                                    canExportReports = permExportReports,
+                                                    canMessageDirectly = permDirectChat
                                                 )
                                             )
+                                            memberUserIdInput = null
                                             memberNameInput = ""
                                             memberPhoneInput = ""
                                             memberRoleTaskInput = ""
                                         }
                                     },
+                                    enabled = memberNameInput.isNotBlank(),
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.5f)),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("add_project_member_to_draft_btn")
                                 ) {
                                     Icon(Icons.Default.Add, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("إضافة العضو إلى القائمة", fontSize = 12.sp, color = GoldPrimary, fontWeight = FontWeight.Bold)
+                                    Text("إضافة الموظف مع الصلاحيات للقائمة", fontSize = 12.sp, color = GoldPrimary, fontWeight = FontWeight.Bold)
                                 }
 
                                 if (membersList.isNotEmpty()) {
-                                    Text("المشاركون المضافون (${membersList.size}):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("فريق العمل والموظفون (${membersList.size}):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     membersList.forEachIndexed { index, mem ->
                                         Surface(
                                             color = MaterialTheme.colorScheme.surface,
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = BorderStroke(0.8.dp, GoldPrimary.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = BorderStroke(0.8.dp, GoldPrimary.copy(alpha = 0.35f)),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(8.dp),
+                                                modifier = Modifier.padding(10.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(mem.name, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface)
-                                                    Text("${mem.phone} • ${mem.roleTask}", fontSize = 11.sp, color = GoldPrimary)
-                                                }
-                                                IconButton(
-                                                    onClick = { membersList.removeAt(index) },
-                                                    modifier = Modifier.size(28.dp)
+                                                Column(
+                                                    modifier = Modifier.weight(1f),
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp)
                                                 ) {
-                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Text(mem.name, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface)
+                                                        Surface(
+                                                            color = GoldPrimary.copy(alpha = 0.14f),
+                                                            shape = RoundedCornerShape(6.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = mem.role.localizedLabel(currentLanguage),
+                                                                fontSize = 9.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = GoldPrimary,
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    Text(
+                                                        text = listOfNotNull(
+                                                            mem.phone.takeIf { it.isNotBlank() },
+                                                            mem.roleTask
+                                                        ).joinToString(" • "),
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    val permBadges = buildList {
+                                                        if (mem.isGroupAdmin) add(tr("proj_group.perm_admin", "مدير مجموعة"))
+                                                        if (mem.canPostAccounting) add(tr("proj_group.perm_accounting", "قيود مالية"))
+                                                        if (mem.canEditRecords) add(tr("proj_group.perm_edit", "تعديل"))
+                                                        if (mem.canExportReports) add(tr("proj_group.perm_export", "تقارير"))
+                                                    }
+                                                    if (permBadges.isNotEmpty()) {
+                                                        Text(
+                                                            text = permBadges.joinToString(" • "),
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = GoldPrimary
+                                                        )
+                                                    }
                                                 }
+                                                OozoxCircleIconButton(
+                                                    onClick = { membersList.removeAt(index) },
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = "حذف",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                                                )
                                             }
                                         }
                                     }
@@ -660,7 +884,9 @@ fun NewProjectDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
                     ) {
                         Text("إلغاء", fontSize = 13.sp)
                     }
@@ -669,14 +895,16 @@ fun NewProjectDialog(
                         onClick = {
                             val cap = capitalStr.toDoubleOrNull() ?: 0.0
                             val finalLoc = if (selectedLocation == "موقع مخصص آخر...") customLocationText.ifBlank { "القاهرة، مصر" } else selectedLocation
+                            val finalGroupName = groupName.trim().ifBlank { projectName.trim() }
 
                             val membersInfoText = membersList.joinToString(" | ") { mem ->
-                                "@${mem.name} (${mem.phone}) - ${mem.roleTask}"
+                                val phonePart = mem.phone.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+                                "@${mem.name}$phonePart - ${mem.roleTask}"
                             }
 
-                            if (groupName.isNotBlank() && projectName.isNotBlank()) {
+                            if (projectName.isNotBlank()) {
                                 onCreateProject(
-                                    groupName.trim(),
+                                    finalGroupName,
                                     null,
                                     projectName.trim(),
                                     cap,
@@ -685,20 +913,110 @@ fun NewProjectDialog(
                                     coManagerPhone.ifBlank { null },
                                     coManagerName.ifBlank { null },
                                     membersInfoText,
-                                    selectedTemplateName
+                                    selectedTemplateName,
+                                    membersList.toList()
                                 )
                                 onDismiss()
                             }
                         },
-                        enabled = groupName.isNotBlank() && projectName.isNotBlank(),
+                        enabled = projectName.isNotBlank(),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = GoldPrimary,
-                            contentColor = MaterialTheme.colorScheme.background
+                            contentColor = Color.White
                         ),
-                        modifier = Modifier.weight(1.8f)
+                        modifier = Modifier
+                            .weight(1.8f)
+                            .heightIn(min = 48.dp)
+                            .testTag("submit_new_project_btn")
                     ) {
-                        Text("إنشاء المشروع", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("إنشاء المشروع والمجموعة", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    // Company Employees Picker Modal
+    if (showEmployeePicker) {
+        Dialog(
+            onDismissRequest = { showEmployeePicker = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.90f)
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 10.dp,
+                border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(tr("proj_group.select_employee_title", "اختيار موظف من الشركة"), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                        OozoxCircleIconButton(
+                            onClick = { showEmployeePicker = false },
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق"
+                        )
+                    }
+
+                    val activeEmployees = remember(employees) { employees.filter { it.isActiveEmployee } }
+                    if (activeEmployees.isEmpty()) {
+                        Text(tr("proj_group.no_employees_found", "لا يوجد موظفون مسجلون في إدارة الأعمال بعد"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        LazyColumn(modifier = Modifier.heightIn(max = 260.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(activeEmployees, key = { it.id }) { emp ->
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            memberUserIdInput = emp.id
+                                            memberNameInput = emp.displayName
+                                            memberPhoneInput = emp.phone.orEmpty()
+                                            memberRoleTaskInput = emp.roleTitle.ifBlank { emp.department }
+                                            val autoRole = when {
+                                                emp.permManageProjects || emp.permManageBusiness || emp.permManageStaff -> ProjectMemberRole.EXECUTIVE_MANAGER
+                                                emp.canViewReports -> ProjectMemberRole.FINANCIAL_PARTNER
+                                                else -> ProjectMemberRole.PROCUREMENT_OFFICER
+                                            }
+                                            selectedMemberRole = autoRole
+                                            permGroupAdmin = emp.permManageBusiness || emp.permManageStaff || emp.permManageProjects
+                                            permPostAccounting = emp.permManageAccounting || emp.canCreateInvoices
+                                            permEditRecords = emp.permManageProjects || emp.permAssignTasks
+                                            permExportReports = emp.canViewReports
+                                            permDirectChat = emp.permDirectChat
+                                            showEmployeePicker = false
+                                        },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Badge, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(20.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(emp.displayName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                            Text("${emp.roleTitle} • ${emp.department}", fontSize = 11.sp, color = GoldPrimary)
+                                            if (!emp.phone.isNullOrBlank()) {
+                                                Text(emp.phone, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -731,9 +1049,11 @@ fun NewProjectDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("اختيار الشريك الإداري", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-                        IconButton(onClick = { showCoManagerPicker = false }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق", modifier = Modifier.size(16.dp))
-                        }
+                        OozoxCircleIconButton(
+                            onClick = { showCoManagerPicker = false },
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق"
+                        )
                     }
 
                     if (contacts.isEmpty()) {
@@ -795,9 +1115,11 @@ fun NewProjectDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("اختيار عضو مشارك", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-                        IconButton(onClick = { showMemberContactPicker = false }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "إغلاق", modifier = Modifier.size(16.dp))
-                        }
+                        OozoxCircleIconButton(
+                            onClick = { showMemberContactPicker = false },
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "إغلاق"
+                        )
                     }
 
                     if (contacts.isEmpty()) {
@@ -809,6 +1131,7 @@ fun NewProjectDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
+                                            memberUserIdInput = contact.id
                                             memberNameInput = contact.name
                                             memberPhoneInput = contact.phone
                                             showMemberContactPicker = false

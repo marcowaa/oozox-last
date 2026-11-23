@@ -44,6 +44,7 @@ import com.example.data.model.ProjectEntity
 import com.example.data.model.WorkGroupEntity
 import com.example.ui.components.DeleteProjectConfirmationDialog
 import com.example.ui.components.ExecutiveProjectsEmptyState
+import com.example.ui.components.OozoxCircleIconButton
 import com.example.ui.components.ProjectAnalyticsDashboard
 import com.example.ui.components.ProjectEmptyStateType
 import com.example.ui.components.ProjectHeaderKpiSkeleton
@@ -63,6 +64,7 @@ fun ProjectsScreen(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
     onProjectClick: (String) -> Unit,
+    onOpenProjectChat: ((ProjectEntity) -> Unit)? = null,
     onCreateProjectClick: () -> Unit,
     onDeleteProject: (String) -> Unit = {}
 ) {
@@ -300,50 +302,33 @@ fun ProjectsScreen(
                         // Trailing: Compact Action Icons (Sync, New Project)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             if (isBiometricLocked) {
-                                IconButton(
+                                OozoxCircleIconButton(
                                     onClick = { triggerBiometricUnlock() },
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFEF4444).copy(alpha = 0.15f))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Fingerprint,
-                                        contentDescription = "فك القفل",
-                                        tint = Color(0xFFEF4444),
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = onRefresh,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Sync,
-                                    contentDescription = "تحديث",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = "فك القفل",
+                                    tint = Color(0xFFEF4444),
+                                    containerColor = Color(0xFFEF4444).copy(alpha = 0.15f)
                                 )
                             }
 
-                            FloatingActionButton(
+                            OozoxCircleIconButton(
+                                onClick = onRefresh,
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = "تحديث",
+                                tint = MaterialTheme.colorScheme.primary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            )
+
+                            OozoxCircleIconButton(
                                 onClick = onCreateProjectClick,
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                shape = CircleShape,
-                                modifier = Modifier.size(40.dp),
-                                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "مشروع جديد", modifier = Modifier.size(20.dp))
-                            }
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "مشروع جديد",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
 
@@ -469,6 +454,7 @@ fun ProjectsScreen(
                         project = proj,
                         workGroup = linkedGroup,
                         onClick = { onProjectClick(proj.id) },
+                        onOpenProjectChat = onOpenProjectChat?.let { { it(proj) } },
                         onDeleteClick = { projectPendingDelete = proj }
                     )
                 }
@@ -497,6 +483,7 @@ fun ProjectCard(
     project: ProjectEntity,
     workGroup: WorkGroupEntity?,
     onClick: () -> Unit,
+    onOpenProjectChat: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null
 ) {
     val isBudgetExceeded = project.estimatedCapital > 0 && project.totalExpenses > project.estimatedCapital
@@ -607,35 +594,38 @@ fun ProjectCard(
                     }
 
                     val cardContext = androidx.compose.ui.platform.LocalContext.current
-                    IconButton(
+                    if (onOpenProjectChat != null) {
+                        OozoxCircleIconButton(
+                            onClick = onOpenProjectChat,
+                            imageVector = Icons.Default.Forum,
+                            contentDescription = "مجموعة دردشة المشروع",
+                            tint = MaterialTheme.colorScheme.primary,
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            modifier = Modifier.testTag("project_card_chat_btn_${project.id}")
+                        )
+                    }
+
+                    OozoxCircleIconButton(
                         onClick = {
                             com.example.util.ReportExporter.exportProjectSummaryToPdf(
                                 context = cardContext,
                                 project = project
                             )
                         },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "PDF",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
+                        imageVector = Icons.Default.PictureAsPdf,
+                        contentDescription = "PDF",
+                        tint = MaterialTheme.colorScheme.primary,
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    )
 
                     if (onDeleteClick != null) {
-                        IconButton(
+                        OozoxCircleIconButton(
                             onClick = onDeleteClick,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "حذف",
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "حذف",
+                            tint = MaterialTheme.colorScheme.error,
+                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                        )
                     }
                 }
             }
