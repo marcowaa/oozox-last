@@ -79,7 +79,7 @@ cmd_init_env() {
   fi
   [[ -n "$public_ip" ]] || die "Could not detect SERVER_PUBLIC_IP. Export SERVER_PUBLIC_IP=<YOUR_VPS_IP> and retry."
 
-  local mongo_root_pass mongo_app_pass db_enc_key redis_pass jwt_key coturn_key backup_pass
+  local mongo_root_pass mongo_app_pass db_enc_key redis_pass jwt_key coturn_key backup_pass otp_hmac_secret telegram_webhook_secret
   mongo_root_pass="$(openssl rand -hex 24)"
   mongo_app_pass="$(openssl rand -hex 24)"
   db_enc_key="$(openssl rand -hex 32)"
@@ -87,6 +87,8 @@ cmd_init_env() {
   jwt_key="$(openssl rand -hex 48)"
   coturn_key="$(openssl rand -hex 32)"
   backup_pass="$(openssl rand -hex 32)"
+  otp_hmac_secret="$(openssl rand -hex 32)"
+  telegram_webhook_secret="$(openssl rand -hex 32)"
 
   umask 077
   cat > "$ENV_FILE" <<EOF
@@ -106,6 +108,22 @@ REDIS_PASSWORD=${redis_pass}
 
 JWT_SECRET=${jwt_key}
 JWT_EXPIRES_IN=7d
+
+OTP_HMAC_SECRET=${otp_hmac_secret}
+OTP_TTL_SECONDS=300
+OTP_RESEND_COOLDOWN_SECONDS=60
+OTP_MAX_ATTEMPTS=5
+OTP_REQUEST_RATE_LIMIT_MAX=8
+OTP_VERIFY_RATE_LIMIT_MAX=20
+
+# Configure these after creating the production provider accounts
+TWILIO_ACCOUNT_SID=
+TWILIO_API_KEY_SID=
+TWILIO_API_KEY_SECRET=
+TWILIO_VERIFY_SERVICE_SID=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
+TELEGRAM_WEBHOOK_SECRET=${telegram_webhook_secret}
 
 CLIENT_ORIGIN=https://oozox.com,https://www.oozox.com,https://admin.oozox.com
 ALLOWED_ORIGINS=https://oozox.com,https://www.oozox.com,https://admin.oozox.com
