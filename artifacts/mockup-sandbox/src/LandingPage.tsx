@@ -253,7 +253,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Check on mount for any recent active broadcast that wasn't dismissed
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     try {
       const saved = localStorage.getItem('oozox_broadcast_announcement');
@@ -266,17 +267,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         // Show if not dismissed and within the last 48 hours
         const isRecent = timestamp ? (Date.now() - Number(timestamp)) < 48 * 3600 * 1000 : true;
         if (!dismissed.includes(parsed.id) && isRecent) {
-          const timer = setTimeout(() => {
+          timer = setTimeout(() => {
             setBroadcastToast(parsed);
             setIsBroadcastVisible(true);
             setBroadcastTimeRemaining(parsed.durationSeconds ?? 12);
           }, 800);
-          return () => clearTimeout(timer);
         }
       }
     } catch (e) {
       console.error(e);
     }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   // Listen for live broadcast events dispatched from Admin or storage changes across tabs
@@ -1554,7 +1558,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <span className="text-xs font-mono text-slate-500">{ann.viewCount} مشاهدة</span>
                     <a
                       href={ann.actionUrl}
-                      onClick={(e) => scrollToSection(e, ann.actionUrl)}
+                      onClick={(e) => scrollToSection(e, ann.actionUrl || '#announcements')}
                       className="text-xs font-bold text-amber-400 hover:text-amber-300 cursor-pointer tracking-wide"
                     >
                       {ann.actionLabel || 'تفاصيل'}

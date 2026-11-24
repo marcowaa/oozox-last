@@ -23,17 +23,34 @@ const getJwtSecret = () => {
   return ephemeralFallbackSecret;
 };
 
-const generateToken = (userId, role) => {
+const generateToken = (userId, role, sessionId = null) => {
+  const payload = {
+    id: userId,
+    sub: String(userId),
+    role,
+    scope: 'ACCESS',
+  };
+  if (sessionId) {
+    payload.sid = String(sessionId);
+  }
+  return jwt.sign(payload, getJwtSecret(), {
+    algorithm: 'HS256',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  });
+};
+
+const generatePreAuthToken = (userId, extra = {}) => {
   return jwt.sign(
     {
       id: userId,
       sub: String(userId),
-      role,
+      scope: 'PRE_AUTH',
+      ...extra,
     },
     getJwtSecret(),
     {
       algorithm: 'HS256',
-      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      expiresIn: process.env.PRE_AUTH_EXPIRES_IN || '15m',
     }
   );
 };
@@ -44,6 +61,7 @@ const generateEmployeeToken = (employee) => {
       id: employee._id,
       sub: String(employee._id),
       role: 'EMPLOYEE',
+      scope: 'EMPLOYEE',
       tokenType: 'EMPLOYEE',
       businessId: String(employee.business),
       ownerId: String(employee.owner),
@@ -62,9 +80,17 @@ const verifyToken = (token) => {
   });
 };
 
+const generateRefreshToken = () => crypto.randomBytes(48).toString('hex');
+
+const hashToken = (rawToken) =>
+  crypto.createHash('sha256').update(String(rawToken || ''), 'utf8').digest('hex');
+
 module.exports = {
   generateToken,
+  generatePreAuthToken,
   generateEmployeeToken,
   verifyToken,
+  generateRefreshToken,
+  hashToken,
   getJwtSecret,
 };

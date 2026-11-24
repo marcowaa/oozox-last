@@ -48,7 +48,9 @@ import {
   Palette,
   RotateCcw,
   Sliders,
-  Paintbrush
+  Paintbrush,
+  Briefcase,
+  Pipette
 } from 'lucide-react';
 
 interface AdminDashboardProps {

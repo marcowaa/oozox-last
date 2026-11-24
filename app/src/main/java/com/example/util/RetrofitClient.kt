@@ -50,8 +50,26 @@ object RetrofitClient {
         }
     }
 
+    @Volatile
+    private var deviceIdHeader: String? = null
+
+    @Volatile
+    private var deviceNameHeader: String? = null
+
+    @Volatile
+    private var deviceFingerprintHeader: String? = null
+
+    @Volatile
+    var onUnauthorizedSession: (() -> Unit)? = null
+
     fun setAuthToken(token: String?) {
         authToken = token?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun setDeviceHeaders(deviceId: String?, deviceName: String?, fingerprint: String?) {
+        deviceIdHeader = deviceId?.trim()?.takeIf { it.isNotEmpty() }
+        deviceNameHeader = deviceName?.trim()?.takeIf { it.isNotEmpty() }
+        deviceFingerprintHeader = fingerprint?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     fun setActiveLanguage(langCode: String?) {
@@ -87,13 +105,35 @@ object RetrofitClient {
                 if (originalRequest.header("X-App-Language").isNullOrBlank()) {
                     requestBuilder.header("X-App-Language", lang)
                 }
+                deviceIdHeader?.let { devId ->
+                    if (originalRequest.header("X-Device-Id").isNullOrBlank()) {
+                        requestBuilder.header("X-Device-Id", devId)
+                    }
+                }
+                deviceNameHeader?.let { devName ->
+                    if (originalRequest.header("X-Device-Name").isNullOrBlank()) {
+                        requestBuilder.header("X-Device-Name", devName)
+                    }
+                }
+                if (originalRequest.header("X-Platform").isNullOrBlank()) {
+                    requestBuilder.header("X-Platform", "ANDROID")
+                }
+                deviceFingerprintHeader?.let { fp ->
+                    if (originalRequest.header("X-Device-Fingerprint").isNullOrBlank()) {
+                        requestBuilder.header("X-Device-Fingerprint", fp)
+                    }
+                }
 
                 val token = authToken
                 if (!token.isNullOrBlank() && originalRequest.header("Authorization").isNullOrBlank()) {
                     requestBuilder.header("Authorization", "Bearer $token")
                 }
 
-                chain.proceed(requestBuilder.build())
+                val response = chain.proceed(requestBuilder.build())
+                if (response.code == 401 && !token.isNullOrBlank() && !originalRequest.url.encodedPath.contains("/auth/")) {
+                    onUnauthorizedSession?.invoke()
+                }
+                response
             }
             .addInterceptor(buildLoggingInterceptor())
             .connectTimeout(15, TimeUnit.SECONDS)

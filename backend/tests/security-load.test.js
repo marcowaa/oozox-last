@@ -6,6 +6,7 @@ const app = require('../src/app');
 const User = require('../src/models/User');
 const Invoice = require('../src/models/Invoice');
 const Notification = require('../src/models/Notification');
+const { installMockOtpAdapters, resetOtpAdapters } = require('./helpers/otpTestHarness');
 
 jest.setTimeout(40000);
 
@@ -17,42 +18,56 @@ let userBId = '';
 let outsiderToken = '';
 let invoiceId = '';
 
+async function registerAndVerify(payload) {
+  const regRes = await request(app).post('/api/auth/register').send(payload);
+  const verRes = await request(app).post('/api/auth/otp/verify').send({
+    challengeId: regRes.body.data.otpChallenge.challengeId,
+    code: '998877',
+    deviceId: payload.deviceId,
+  });
+  return verRes.body.data;
+}
+
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create({
     binary: { version: '7.0.14' },
   });
   await mongoose.connect(mongoServer.getUri());
   await Promise.all([User.deleteMany({}), Invoice.deleteMany({}), Notification.deleteMany({})]);
+  installMockOtpAdapters({ fixedCode: '998877' });
 
-  const [resA, resB, resC] = await Promise.all([
-    request(app).post('/api/auth/register').send({
+  const [dataA, dataB, dataC] = await Promise.all([
+    registerAndVerify({
       name: 'Merchant Alpha',
       email: 'alpha@oozox.com',
       phone: '+201011111111',
       password: 'StrongPassword1!',
       role: 'MERCHANT',
+      deviceId: 'sec_dev_a',
     }),
-    request(app).post('/api/auth/register').send({
+    registerAndVerify({
       name: 'Client Beta',
       email: 'beta@oozox.com',
       phone: '+201022222222',
       password: 'StrongPassword2!',
       role: 'USER',
+      deviceId: 'sec_dev_b',
     }),
-    request(app).post('/api/auth/register').send({
+    registerAndVerify({
       name: 'Outsider Gamma',
       email: 'gamma@oozox.com',
       phone: '+201033333333',
       password: 'StrongPassword3!',
       role: 'USER',
+      deviceId: 'sec_dev_c',
     }),
   ]);
 
-  userAToken = resA.body.data.token;
-  userAId = resA.body.data.user.id;
-  userBToken = resB.body.data.token;
-  userBId = resB.body.data.user.id;
-  outsiderToken = resC.body.data.token;
+  userAToken = dataA.token;
+  userAId = dataA.user.id;
+  userBToken = dataB.token;
+  userBId = dataB.user.id;
+  outsiderToken = dataC.token;
 
   const invRes = await request(app)
     .post('/api/invoices')
@@ -69,6 +84,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  resetOtpAdapters();
   await mongoose.connection.close();
   if (mongoServer) {
     await mongoServer.stop();

@@ -1,12 +1,9 @@
 package com.example.ui.components
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -31,6 +28,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,11 +40,15 @@ import androidx.fragment.app.FragmentActivity
 import com.example.data.model.HiddenProfileEntity
 import com.example.data.model.RepeatUserSummary
 import com.example.data.model.UserType
+import com.example.data.repository.AuthOutcome
+import com.example.data.repository.OtpRequestOutcome
+import com.example.data.repository.OtpVerifyOutcome
 import com.example.ui.theme.*
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
 import com.example.util.DeviceTrustManager
 import com.example.util.LocalAppLanguage
+import com.example.util.OfflineSyncManager
 import com.example.util.SecurityValidator
 import com.example.util.Translations
 import com.example.util.tr
@@ -54,22 +57,26 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * UserAppPortal - High-Security Biometric & Multi-Factor Access Gateway for OOZOX
- * Features:
- * - 1-Tap Biometric Authentication (Fingerprint & Face Unlock) for repeat users
- * - Live hardware sensor detection and status telemetry
- * - Quick PIN fallback authentication dialog
- * - Sub-account & hidden profile quick biometric switcher
- * - Smooth transition to multi-channel mobile login (WhatsApp / Telegram / SMS)
+ * UserAppPortal - Server-Backed Authentication, 30-Day Device Trust, and Biometric Access Gateway.
+ * - Mandatory server OTP on registration, phone login, untrusted devices, and recovery.
+ * - Biometric / Device Lock / PIN quick access allowed ONLY when server-issued 30-day trust token is valid.
+ * - Offline biometric/PIN unlocks cached local Room workspace ONLY (no fake online session).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserAppPortal(
     repeatUser: RepeatUserSummary?,
     allHiddenProfiles: List<HiddenProfileEntity> = emptyList(),
-    onLoginSuccess: (name: String, phone: String, username: String, type: UserType) -> Unit,
+    onTrustedOnlineLogin: suspend (phone: String) -> AuthOutcome,
+    onOfflineCacheUnlock: suspend (phone: String) -> Boolean,
+    onLoginWithPassword: suspend (emailOrPhone: String, password: String, channel: String) -> AuthOutcome,
+    onRegisterAccount: suspend (name: String, email: String, phone: String, password: String, role: String, channel: String) -> AuthOutcome,
+    onRequestOtp: suspend (purpose: String, channel: String, phone: String?, preAuthToken: String?) -> OtpRequestOutcome,
+    onVerifyOtp: suspend (challengeId: String, code: String, phone: String?, preAuthToken: String?, trustDevice: Boolean) -> OtpVerifyOutcome,
+    onRequestRecoveryOtp: suspend (phone: String, channel: String) -> OtpRequestOutcome,
+    onConfirmRecovery: suspend (challengeId: String, code: String, newPassword: String) -> AuthOutcome,
+    onAuthenticatedComplete: () -> Unit,
     onSwitchProfile: ((HiddenProfileEntity) -> Unit)? = null,
-    onCreateSubAccountDirectly: ((name: String, pin: String, company: String, role: String, cap: Double, silent: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -77,57 +84,63 @@ fun UserAppPortal(
     val coroutineScope = rememberCoroutineScope()
     val currentLang = LocalAppLanguage.current
 
+    val isOnline by OfflineSyncManager.isNetworkOnline.collectAsState()
     val isTrustedDevice = remember(repeatUser?.phone) {
         repeatUser?.phone != null && DeviceTrustManager.isDeviceTrustedForPhone(context, repeatUser.phone)
     }
 
-    // Mode: Only allow quick biometric/PIN/device-lock login if this exact device is trusted via prior OTP
+    // Quick Biometric/PIN access allowed ONLY if server-issued 30-day Device Trust token is valid
     var isRepeatUserMode by remember(repeatUser, isTrustedDevice) {
         mutableStateOf(repeatUser != null && isTrustedDevice)
     }
 
-    // Phone input state
-    var authStep by remember { mutableStateOf(0) } // 0 = Phone Input, 1 = OTP Verification
+    // Auth Mode Tabs: 0 = Phone OTP, 1 = Email/Phone + Password, 2 = Register
+    var selectedAuthTab by remember { mutableIntStateOf(0) }
+    var authStep by remember { mutableIntStateOf(0) } // 0 = Form, 1 = Server OTP Verification
+
+    // Shared Country + Phone inputs
     var selectedCountry by remember { mutableStateOf(SecurityValidator.SUPPORTED_COUNTRIES.first()) }
     var showCountryPicker by remember { mutableStateOf(false) }
     var countrySearchQuery by remember { mutableStateOf("") }
     var rawPhone by remember { mutableStateOf("") }
-    var selectedDeliveryChannel by remember { mutableStateOf(OtpDeliveryChannel.WHATSAPP) }
+    var selectedDeliveryChannel by remember { mutableStateOf(OtpDeliveryChannel.TELEGRAM) }
 
-    // Error & status states
-    var isSendingOtpNetworkCall by remember { mutableStateOf(false) }
+    // Password Login inputs
+    var loginIdentifier by remember { mutableStateOf("") }
+    var loginPassword by remember { mutableStateOf("") }
+    var showLoginPassword by remember { mutableStateOf(false) }
+
+    // Register inputs
+    var regName by remember { mutableStateOf("") }
+    var regEmail by remember { mutableStateOf("") }
+    var regPassword by remember { mutableStateOf("") }
+    var regRole by remember { mutableStateOf("USER") } // USER or MERCHANT
+    var showRegPassword by remember { mutableStateOf(false) }
+
+    // Active OTP Challenge state (returned from backend)
+    var otpChallengeId by remember { mutableStateOf("") }
+    var otpPhoneDisplay by remember { mutableStateOf("") }
+    var otpPreAuthToken by remember { mutableStateOf<String?>(null) }
+    var otpPurpose by remember { mutableStateOf("LOGIN") }
+    var otpCooldownSeconds by remember { mutableIntStateOf(60) }
+    var otpFallbackNotice by remember { mutableStateOf<String?>(null) }
+    var trustThisDeviceChecked by remember { mutableStateOf(true) }
+
+    // UI Status & Errors
+    var isProcessingNetwork by remember { mutableStateOf(false) }
     var specificErrorMessage by remember { mutableStateOf<String?>(null) }
     var networkFailureError by remember { mutableStateOf<String?>(null) }
     var detectedCarrier by remember { mutableStateOf<String?>(null) }
     var autoCorrectionNotice by remember { mutableStateOf<String?>(null) }
-    var currentGeneratedOtp by remember { mutableStateOf(SecurityValidator.generateSecureOtp()) }
 
-    // Dialog state controllers
+    // Dialog controllers
     var showPinDialog by remember { mutableStateOf(false) }
     var showRecoveryDialog by remember { mutableStateOf(false) }
-    var showDeviceTransferDialog by remember { mutableStateOf(false) }
 
-    // Biometric & Device Lock hardware status
-    val biometricStatus = remember(context) {
-        BiometricHelper.checkBiometricStatus(context)
-    }
+    val biometricStatus = remember(context) { BiometricHelper.checkBiometricStatus(context) }
     val isBiometricAvailable = biometricStatus == BiometricStatus.AVAILABLE
-    val isDeviceCredentialAvailable = remember(context) {
-        BiometricHelper.isDeviceCredentialAvailable(context)
-    }
+    val isDeviceCredentialAvailable = remember(context) { BiometricHelper.isDeviceCredentialAvailable(context) }
 
-    val isOnline = remember(context) {
-        try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            val net = cm?.activeNetwork
-            val caps = cm?.getNetworkCapabilities(net)
-            caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ?: true
-        } catch (_: Exception) {
-            true
-        }
-    }
-
-    // Phone Validation
     val validationResult = remember(selectedCountry, rawPhone, currentLang) {
         if (rawPhone.isNotBlank()) {
             SecurityValidator.validateMobileNumber(selectedCountry, rawPhone, currentLang)
@@ -144,7 +157,66 @@ fun UserAppPortal(
         }
     }
 
-    // Biometric Trigger Function
+    val moveToOtpStep: (AuthOutcome.OtpRequired, String) -> Unit = { otpReq, fallbackPhone ->
+        otpPurpose = otpReq.purpose.ifBlank { "LOGIN" }
+        otpPreAuthToken = otpReq.preAuthToken
+        otpPhoneDisplay = otpReq.maskedPhone?.takeIf { it.isNotBlank() } ?: fallbackPhone
+        val ch = otpReq.challenge
+        if (ch != null) {
+            otpChallengeId = ch.challengeId
+            selectedDeliveryChannel = OtpDeliveryChannel.fromWire(ch.activeChannel)
+            otpCooldownSeconds = ch.cooldownSeconds
+            otpFallbackNotice = otpReq.deliveryError?.message?.takeIf { it.isNotBlank() }
+        } else {
+            otpChallengeId = ""
+            otpFallbackNotice = otpReq.deliveryError?.message
+        }
+        isRepeatUserMode = false
+        authStep = 1
+    }
+
+    val handleRepeatUnlockVerified: () -> Unit = {
+        val targetPhone = repeatUser?.phone.orEmpty()
+        if (targetPhone.isNotBlank()) {
+            coroutineScope.launch {
+                isProcessingNetwork = true
+                specificErrorMessage = null
+                networkFailureError = null
+
+                val hasInternet = isOnline && OfflineSyncManager.isNetworkAvailable(context)
+                if (hasInternet) {
+                    when (val res = onTrustedOnlineLogin(targetPhone)) {
+                        is AuthOutcome.Authenticated -> {
+                            isProcessingNetwork = false
+                            onAuthenticatedComplete()
+                        }
+                        is AuthOutcome.OtpRequired -> {
+                            isProcessingNetwork = false
+                            moveToOtpStep(res, targetPhone)
+                        }
+                        is AuthOutcome.Error -> {
+                            isProcessingNetwork = false
+                            if (res.code == "NETWORK_ERROR") {
+                                // Server unreachable even though network interface reported online -> allow explicit offline cache option
+                                networkFailureError = "تعذر الوصول للخادم: يمكنك الدخول لوضع الأوفلاين للبيانات المحفوظة محلياً فقط."
+                            } else {
+                                specificErrorMessage = res.message
+                            }
+                        }
+                    }
+                } else {
+                    val unlocked = onOfflineCacheUnlock(targetPhone)
+                    isProcessingNetwork = false
+                    if (unlocked) {
+                        onAuthenticatedComplete()
+                    } else {
+                        specificErrorMessage = "انتهت صلاحية الثقة المحلية للجهاز (30 يوماً) — يلزم الاتصال بالإنترنت وإعادة التحقق عبر OTP."
+                    }
+                }
+            }
+        }
+    }
+
     val triggerBiometricAuthentication: (onSuccessAction: () -> Unit) -> Unit = { successCallback ->
         if (activity != null && isBiometricAvailable) {
             specificErrorMessage = null
@@ -156,14 +228,13 @@ fun UserAppPortal(
                 subtitle = Translations.get("portal.bio_sub", currentLang),
                 description = Translations.format("portal.bio_desc_fmt", currentLang, "name" to welcomeName),
                 negativeButtonText = if (repeatUser?.pin != null) Translations.get("portal.use_pin_btn", currentLang) else Translations.get("common.cancel", currentLang),
-                onSuccess = {
-                    successCallback()
-                },
+                onSuccess = { successCallback() },
                 onError = { errorCode, errString ->
                     if (errorCode == androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON && repeatUser?.pin != null) {
                         showPinDialog = true
                     } else if (errorCode != androidx.biometric.BiometricPrompt.ERROR_USER_CANCELED &&
-                        errorCode != androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        errorCode != androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                    ) {
                         specificErrorMessage = errString.toString()
                     }
                 },
@@ -171,11 +242,8 @@ fun UserAppPortal(
                     specificErrorMessage = Translations.get("portal.bio_failed", currentLang)
                 }
             )
-        } else {
-            // Biometric not available - fallback to PIN dialog if PIN exists
-            if (repeatUser?.pin != null) {
-                showPinDialog = true
-            }
+        } else if (repeatUser?.pin != null) {
+            showPinDialog = true
         }
     }
 
@@ -189,12 +257,11 @@ fun UserAppPortal(
                 title = Translations.get("portal.dev_lock_title", currentLang),
                 subtitle = Translations.get("portal.dev_lock_sub", currentLang),
                 description = Translations.format("portal.dev_lock_desc_fmt", currentLang, "name" to welcomeName),
-                onSuccess = {
-                    successCallback()
-                },
+                onSuccess = { successCallback() },
                 onError = { errorCode, errString ->
                     if (errorCode != androidx.biometric.BiometricPrompt.ERROR_USER_CANCELED &&
-                        errorCode != androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        errorCode != androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                    ) {
                         specificErrorMessage = errString.toString()
                     }
                 },
@@ -207,22 +274,14 @@ fun UserAppPortal(
         }
     }
 
-    // Auto-prompt biometrics once for trusted repeat user when portal opens
+    // Auto-prompt biometrics once for server-trusted repeat user
     LaunchedEffect(repeatUser, isTrustedDevice, isBiometricAvailable) {
         if (repeatUser != null && isTrustedDevice && isBiometricAvailable && activity != null && isRepeatUserMode) {
             delay(350L)
-            triggerBiometricAuthentication {
-                val userType = try {
-                    UserType.valueOf(repeatUser.type)
-                } catch (_: Exception) {
-                    UserType.BUSINESSMAN
-                }
-                onLoginSuccess(repeatUser.name, repeatUser.phone, repeatUser.username, userType)
-            }
+            triggerBiometricAuthentication { handleRepeatUnlockVerified() }
         }
     }
 
-    // Pulsing animation for biometric button
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_portal")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.97f,
@@ -234,25 +293,103 @@ fun UserAppPortal(
         label = "pulseScalePortal"
     )
 
-    val dispatchOtpAndProceed: () -> Unit = {
+    val dispatchPhoneOtp: () -> Unit = {
         val res = SecurityValidator.validateMobileNumber(selectedCountry, rawPhone, currentLang)
         if (!res.isValid) {
             specificErrorMessage = res.specificError ?: Translations.get("portal.invalid_phone", currentLang)
             networkFailureError = null
         } else {
+            val fullPhone = res.fullFormattedPhone.ifBlank { "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}" }
             specificErrorMessage = null
             networkFailureError = null
-            isSendingOtpNetworkCall = true
+            isProcessingNetwork = true
 
             coroutineScope.launch {
-                delay(600L)
-                isSendingOtpNetworkCall = false
+                when (val otpRes = onRequestOtp("LOGIN", selectedDeliveryChannel.name, fullPhone, null)) {
+                    is OtpRequestOutcome.Sent -> {
+                        isProcessingNetwork = false
+                        otpPurpose = "LOGIN"
+                        otpPreAuthToken = null
+                        otpChallengeId = otpRes.data.challengeId
+                        otpPhoneDisplay = fullPhone
+                        selectedDeliveryChannel = OtpDeliveryChannel.fromWire(otpRes.data.activeChannel)
+                        otpCooldownSeconds = otpRes.data.cooldownSeconds
+                        otpFallbackNotice = if (otpRes.data.attemptedChannels.distinct().size > 1) {
+                            Translations.format(
+                                "otp.fallback_notice_fmt",
+                                currentLang,
+                                "channel" to selectedDeliveryChannel.localizedTitle(currentLang)
+                            )
+                        } else null
+                        authStep = 1
+                    }
+                    is OtpRequestOutcome.Error -> {
+                        isProcessingNetwork = false
+                        if (otpRes.code == "NETWORK_ERROR") {
+                            networkFailureError = otpRes.message
+                        } else {
+                            specificErrorMessage = otpRes.message
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-                if (!isOnline) {
-                    networkFailureError = Translations.get("portal.network_otp_err", currentLang)
-                } else {
-                    currentGeneratedOtp = SecurityValidator.generateSecureOtp()
-                    authStep = 1
+    val dispatchPasswordLogin: () -> Unit = {
+        val idTrim = loginIdentifier.trim()
+        if (idTrim.isBlank() || loginPassword.length < 6) {
+            specificErrorMessage = "يرجى إدخال البريد/الهاتف وكلمة السر (6 أحرف فأكثر)."
+        } else {
+            specificErrorMessage = null
+            networkFailureError = null
+            isProcessingNetwork = true
+            coroutineScope.launch {
+                when (val outcome = onLoginWithPassword(idTrim, loginPassword, selectedDeliveryChannel.name)) {
+                    is AuthOutcome.Authenticated -> {
+                        isProcessingNetwork = false
+                        onAuthenticatedComplete()
+                    }
+                    is AuthOutcome.OtpRequired -> {
+                        isProcessingNetwork = false
+                        moveToOtpStep(outcome, idTrim)
+                    }
+                    is AuthOutcome.Error -> {
+                        isProcessingNetwork = false
+                        if (outcome.code == "NETWORK_ERROR") networkFailureError = outcome.message else specificErrorMessage = outcome.message
+                    }
+                }
+            }
+        }
+    }
+
+    val dispatchRegister: () -> Unit = {
+        val res = SecurityValidator.validateMobileNumber(selectedCountry, rawPhone, currentLang)
+        when {
+            regName.trim().length < 2 -> specificErrorMessage = "يرجى إدخال الاسم الكامل."
+            !regEmail.trim().contains("@") -> specificErrorMessage = "يرجى إدخال بريد إلكتروني صحيح."
+            !res.isValid -> specificErrorMessage = res.specificError ?: Translations.get("portal.invalid_phone", currentLang)
+            regPassword.length < 8 -> specificErrorMessage = "كلمة السر يجب أن تكون 8 أحرف على الأقل."
+            else -> {
+                val fullPhone = res.fullFormattedPhone.ifBlank { "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}" }
+                specificErrorMessage = null
+                networkFailureError = null
+                isProcessingNetwork = true
+                coroutineScope.launch {
+                    when (val outcome = onRegisterAccount(regName.trim(), regEmail.trim(), fullPhone, regPassword, regRole, selectedDeliveryChannel.name)) {
+                        is AuthOutcome.Authenticated -> {
+                            isProcessingNetwork = false
+                            onAuthenticatedComplete()
+                        }
+                        is AuthOutcome.OtpRequired -> {
+                            isProcessingNetwork = false
+                            moveToOtpStep(outcome, fullPhone)
+                        }
+                        is AuthOutcome.Error -> {
+                            isProcessingNetwork = false
+                            if (outcome.code == "NETWORK_ERROR") networkFailureError = outcome.message else specificErrorMessage = outcome.message
+                        }
+                    }
                 }
             }
         }
@@ -283,7 +420,6 @@ fun UserAppPortal(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Official OOZOX Squircle Logo with Subtle Glow
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.padding(bottom = 6.dp)
@@ -326,7 +462,6 @@ fun UserAppPortal(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Main Authentication Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(24.dp),
@@ -342,46 +477,98 @@ fun UserAppPortal(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Biometric Sensor Live Telemetry Chip
                     BiometricStatusBadge(biometricStatus = biometricStatus)
 
                     Spacer(modifier = Modifier.height(14.dp))
 
                     if (isRepeatUserMode && repeatUser != null && isTrustedDevice) {
-                        // --- REPEAT USER BIOMETRIC / DEVICE LOCK / PIN QUICK ACCESS VIEW ---
+                        // --- TRUSTED REPEAT USER MODE (Server-Verified 30-Day Trust Token) ---
+                        if (!isOnline) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = StatusOrange.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, StatusOrange.copy(alpha = 0.45f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Default.WifiOff, contentDescription = null, tint = StatusOrange, modifier = Modifier.size(18.dp))
+                                    Text(
+                                        text = "وضع أوفلاين: فتح البصمة أو PIN يعرض البيانات المحلية المحفوظة فقط.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+
                         RepeatUserPortalView(
                             repeatUser = repeatUser,
                             isBiometricAvailable = isBiometricAvailable,
                             isDeviceCredentialAvailable = isDeviceCredentialAvailable,
+                            isProcessing = isProcessingNetwork,
                             pulseScale = pulseScale,
                             onBiometricClick = {
-                                triggerBiometricAuthentication {
-                                    val userType = try {
-                                        UserType.valueOf(repeatUser.type)
-                                    } catch (_: Exception) {
-                                        UserType.BUSINESSMAN
-                                    }
-                                    onLoginSuccess(repeatUser.name, repeatUser.phone, repeatUser.username, userType)
-                                }
+                                triggerBiometricAuthentication { handleRepeatUnlockVerified() }
                             },
                             onDeviceLockClick = {
-                                triggerDeviceLockAuthentication {
-                                    val userType = try {
-                                        UserType.valueOf(repeatUser.type)
-                                    } catch (_: Exception) {
-                                        UserType.BUSINESSMAN
-                                    }
-                                    onLoginSuccess(repeatUser.name, repeatUser.phone, repeatUser.username, userType)
-                                }
+                                triggerDeviceLockAuthentication { handleRepeatUnlockVerified() }
                             },
                             onPinClick = { showPinDialog = true },
                             onSwitchAccountClick = {
                                 isRepeatUserMode = false
                                 authStep = 0
+                                specificErrorMessage = null
+                                networkFailureError = null
                             }
                         )
 
-                        // Sub-Account & Hidden Profiles Quick Switcher (if any)
+                        if (!specificErrorMessage.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = specificErrorMessage!!,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
+                        if (!networkFailureError.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val ok = onOfflineCacheUnlock(repeatUser.phone)
+                                        if (ok) onAuthenticatedComplete()
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, StatusOrange),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_portal_offline_cache_login")
+                            ) {
+                                Icon(Icons.Default.OfflineBolt, contentDescription = null, tint = StatusOrange, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("الدخول للبيانات المحلية فقط (أوفلاين)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = StatusOrange)
+                            }
+                        }
+
                         if (allHiddenProfiles.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(16.dp))
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.8.dp)
@@ -443,31 +630,101 @@ fun UserAppPortal(
                         }
 
                     } else if (authStep == 1) {
-                        // --- STEP 2: MULTI-CHANNEL OTP VERIFICATION VIEW ---
-                        val fullPhone = if (rawPhone.isNotBlank()) "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}" else (repeatUser?.phone ?: "")
+                        // --- STEP 2: SERVER-SIDE OTP VERIFICATION ---
+                        val fullPhoneTarget = if (rawPhone.isNotBlank()) {
+                            "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}"
+                        } else {
+                            otpPhoneDisplay.ifBlank { repeatUser?.phone.orEmpty() }
+                        }
+
                         WhatsAppTelegramOtpView(
-                            phoneNumber = fullPhone,
-                            expectedOtp = currentGeneratedOtp,
+                            phoneNumber = otpPhoneDisplay.ifBlank { fullPhoneTarget },
                             initialChannel = selectedDeliveryChannel,
-                            onOtpVerified = {
-                                DeviceTrustManager.markDeviceTrusted(context, fullPhone)
-                                val finalName = repeatUser?.name ?: Translations.get("portal.default_user_name", currentLang)
-                                val finalUser = repeatUser?.username ?: "user_${fullPhone.takeLast(4)}"
-                                val finalType = try {
-                                    repeatUser?.type?.let { UserType.valueOf(it) } ?: UserType.BUSINESSMAN
-                                } catch (_: Exception) {
-                                    UserType.BUSINESSMAN
+                            initialCooldownSeconds = otpCooldownSeconds,
+                            fallbackNotice = otpFallbackNotice,
+                            onVerifyOtpCode = { code ->
+                                when (val verifyRes = onVerifyOtp(
+                                    otpChallengeId,
+                                    code,
+                                    if (otpPreAuthToken == null) fullPhoneTarget else null,
+                                    otpPreAuthToken,
+                                    trustThisDeviceChecked
+                                )) {
+                                    is OtpVerifyOutcome.Verified -> {
+                                        onAuthenticatedComplete()
+                                        OtpVerifyUiResult.Success
+                                    }
+                                    is OtpVerifyOutcome.Error -> {
+                                        OtpVerifyUiResult.Error(
+                                            message = verifyRes.message,
+                                            remainingAttempts = verifyRes.remainingAttempts,
+                                            lockRemainingSeconds = verifyRes.retryAfterSeconds
+                                        )
+                                    }
                                 }
-                                onLoginSuccess(finalName, fullPhone, finalUser, finalType)
                             },
-                            onBackClick = { authStep = 0 },
+                            onBackClick = {
+                                authStep = 0
+                                specificErrorMessage = null
+                                networkFailureError = null
+                            },
                             onResendRequested = { channel ->
                                 selectedDeliveryChannel = channel
-                                currentGeneratedOtp = SecurityValidator.generateSecureOtp()
-                                currentGeneratedOtp
+                                when (val resendRes = onRequestOtp(
+                                    otpPurpose,
+                                    channel.name,
+                                    if (otpPreAuthToken == null) fullPhoneTarget else null,
+                                    otpPreAuthToken
+                                )) {
+                                    is OtpRequestOutcome.Sent -> {
+                                        otpChallengeId = resendRes.data.challengeId
+                                        val activeCh = OtpDeliveryChannel.fromWire(resendRes.data.activeChannel)
+                                        selectedDeliveryChannel = activeCh
+                                        val notice = if (resendRes.data.attemptedChannels.distinct().size > 1) {
+                                            Translations.format(
+                                                "otp.fallback_notice_fmt",
+                                                currentLang,
+                                                "channel" to activeCh.localizedTitle(currentLang)
+                                            )
+                                        } else null
+                                        OtpResendUiResult.Sent(
+                                            activeChannel = activeCh,
+                                            cooldownSeconds = resendRes.data.cooldownSeconds,
+                                            notice = notice
+                                        )
+                                    }
+                                    is OtpRequestOutcome.Error -> {
+                                        OtpResendUiResult.Error(
+                                            message = resendRes.message,
+                                            retryAfterSeconds = resendRes.retryAfterSeconds
+                                        )
+                                    }
+                                }
                             }
                         )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { trustThisDeviceChecked = !trustThisDeviceChecked }
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = trustThisDeviceChecked,
+                                onCheckedChange = { trustThisDeviceChecked = it },
+                                colors = CheckboxDefaults.colors(checkedColor = adaptiveGoldPrimary)
+                            )
+                            Text(
+                                text = "تفعيل الثقة بهذا الجهاز لمدة 30 يوماً (للدخول بالبصمة وPIN)",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                     } else {
+                        // --- STEP 1: PHONE OTP / PASSWORD LOGIN / REGISTER ---
                         if (repeatUser != null && !isTrustedDevice) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -497,7 +754,7 @@ fun UserAppPortal(
                                 }
                             }
                         }
-                        // --- STEP 1: AUTHENTIC PHONE NUMBER & MULTI-CHANNEL ACCESS ---
+
                         Text(
                             text = tr("portal.login_title"),
                             fontSize = 18.sp,
@@ -506,160 +763,299 @@ fun UserAppPortal(
                             textAlign = TextAlign.Center
                         )
 
-                        Text(
-                            text = tr("portal.enter_phone_sub"),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        // Auth Mode Selector: Phone OTP | Password | New Account
+                        TabRow(
+                            selectedTabIndex = selectedAuthTab,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            contentColor = adaptiveGoldPrimary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                        ) {
+                            Tab(
+                                selected = selectedAuthTab == 0,
+                                onClick = { selectedAuthTab = 0; specificErrorMessage = null; networkFailureError = null },
+                                text = { Text("الهاتف (OTP)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
+                                modifier = Modifier.testTag("tab_auth_phone_otp")
+                            )
+                            Tab(
+                                selected = selectedAuthTab == 1,
+                                onClick = { selectedAuthTab = 1; specificErrorMessage = null; networkFailureError = null },
+                                text = { Text("كلمة المرور", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
+                                modifier = Modifier.testTag("tab_auth_password")
+                            )
+                            Tab(
+                                selected = selectedAuthTab == 2,
+                                onClick = { selectedAuthTab = 2; specificErrorMessage = null; networkFailureError = null },
+                                text = { Text("حساب جديد", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
+                                modifier = Modifier.testTag("tab_auth_register")
+                            )
+                        }
 
-                        // PHONE NUMBER INPUT FIELD WITH COUNTRY SELECTOR
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = tr("portal.mobile_label"),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 6.dp)
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        if (selectedAuthTab == 1) {
+                            // --- TAB 1: EMAIL / PHONE + PASSWORD LOGIN ---
+                            OutlinedTextField(
+                                value = loginIdentifier,
+                                onValueChange = { loginIdentifier = it; specificErrorMessage = null; networkFailureError = null },
+                                label = { Text("البريد الإلكتروني أو رقم الهاتف") },
+                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = adaptiveGoldPrimary) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_login_identifier")
                             )
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Country code trigger button
-                                Surface(
-                                    onClick = { showCountryPicker = true },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .height(54.dp)
-                                        .testTag("btn_country_picker")
-                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(text = selectedCountry.flag, fontSize = 20.sp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = selectedCountry.code,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = adaptiveGoldPrimary,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            OutlinedTextField(
+                                value = loginPassword,
+                                onValueChange = { loginPassword = it; specificErrorMessage = null; networkFailureError = null },
+                                label = { Text("كلمة المرور") },
+                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = adaptiveGoldPrimary) },
+                                trailingIcon = {
+                                    IconButton(onClick = { showLoginPassword = !showLoginPassword }, modifier = Modifier.size(48.dp)) {
                                         Icon(
-                                            Icons.Default.ArrowDropDown,
-                                            contentDescription = null,
-                                            tint = adaptiveGoldPrimary,
-                                            modifier = Modifier.size(18.dp)
+                                            imageVector = if (showLoginPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "إظهار/إخفاء"
                                         )
                                     }
-                                }
-
-                                // Mobile number text field
+                                },
+                                visualTransformation = if (showLoginPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { dispatchPasswordLogin() }),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_login_password")
+                            )
+                        } else {
+                            // --- TAB 0 (PHONE OTP) or TAB 2 (REGISTER) ---
+                            if (selectedAuthTab == 2) {
                                 OutlinedTextField(
-                                    value = rawPhone,
-                                    onValueChange = { input ->
-                                        rawPhone = input.filter { it.isDigit() || it == ' ' || it == '-' }
-                                        specificErrorMessage = null
-                                        networkFailureError = null
-                                    },
-                                    placeholder = {
-                                        Text(
-                                            text = tr("portal.mobile_hint"),
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                        )
-                                    },
+                                    value = regName,
+                                    onValueChange = { regName = it; specificErrorMessage = null },
+                                    label = { Text("الاسم الكامل") },
+                                    leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = adaptiveGoldPrimary) },
                                     singleLine = true,
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.PhoneAndroid,
-                                            contentDescription = null,
-                                            tint = adaptiveGoldPrimary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (rawPhone.isNotEmpty()) {
-                                            IconButton(
-                                                onClick = { rawPhone = "" },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = tr("portal.clear_cd"),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Phone,
-                                        imeAction = ImeAction.Done
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onDone = { dispatchOtpAndProceed() }
-                                    ),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = adaptiveGoldPrimary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(54.dp)
-                                        .testTag("input_phone_number")
-                                )
-                            }
-
-                            // Carrier Detection / Live Telemetry feedback
-                            if (detectedCarrier != null) {
-                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 6.dp, start = 4.dp),
+                                        .testTag("input_reg_name")
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = regEmail,
+                                    onValueChange = { regEmail = it; specificErrorMessage = null },
+                                    label = { Text("البريد الإلكتروني") },
+                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = adaptiveGoldPrimary) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("input_reg_email")
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            } else {
+                                Text(
+                                    text = tr("portal.enter_phone_sub"),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = tr("portal.mobile_label"),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = StatusGreen.copy(alpha = 0.15f),
-                                        border = BorderStroke(0.5.dp, StatusGreen.copy(alpha = 0.4f))
+                                        onClick = { showCountryPicker = true },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.5f)),
+                                        modifier = Modifier
+                                            .height(54.dp)
+                                            .testTag("btn_country_picker")
                                     ) {
-                                        Text(
-                                            text = trFmt("portal.carrier_fmt", "carrier" to detectedCarrier!!),
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = StatusGreen,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(text = selectedCountry.flag, fontSize = 20.sp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = selectedCountry.code,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = adaptiveGoldPrimary,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                tint = adaptiveGoldPrimary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
+
+                                    OutlinedTextField(
+                                        value = rawPhone,
+                                        onValueChange = { input ->
+                                            rawPhone = input.filter { it.isDigit() || it == ' ' || it == '-' }
+                                            specificErrorMessage = null
+                                            networkFailureError = null
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                text = tr("portal.mobile_hint"),
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                            )
+                                        },
+                                        singleLine = true,
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.PhoneAndroid,
+                                                contentDescription = null,
+                                                tint = adaptiveGoldPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            if (rawPhone.isNotEmpty()) {
+                                                IconButton(
+                                                    onClick = { rawPhone = "" },
+                                                    modifier = Modifier.size(48.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = tr("portal.clear_cd"),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Phone,
+                                            imeAction = if (selectedAuthTab == 0) ImeAction.Done else ImeAction.Next
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onDone = { if (selectedAuthTab == 0) dispatchPhoneOtp() }
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = adaptiveGoldPrimary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(54.dp)
+                                            .testTag("input_phone_number")
+                                    )
+                                }
+
+                                if (detectedCarrier != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 6.dp, start = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = StatusGreen.copy(alpha = 0.15f),
+                                            border = BorderStroke(0.5.dp, StatusGreen.copy(alpha = 0.4f))
+                                        ) {
+                                            Text(
+                                                text = trFmt("portal.carrier_fmt", "carrier" to detectedCarrier!!),
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = StatusGreen,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (autoCorrectionNotice != null) {
+                                    Text(
+                                        text = autoCorrectionNotice!!,
+                                        fontSize = 10.5.sp,
+                                        color = GoldAccent,
+                                        modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                                    )
                                 }
                             }
 
-                            if (autoCorrectionNotice != null) {
-                                Text(
-                                    text = autoCorrectionNotice!!,
-                                    fontSize = 10.5.sp,
-                                    color = GoldAccent,
-                                    modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                            if (selectedAuthTab == 2) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = regPassword,
+                                    onValueChange = { regPassword = it; specificErrorMessage = null },
+                                    label = { Text("كلمة المرور (8 أحرف فأكثر)") },
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = adaptiveGoldPrimary) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { showRegPassword = !showRegPassword }, modifier = Modifier.size(48.dp)) {
+                                            Icon(
+                                                imageVector = if (showRegPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = "إظهار/إخفاء"
+                                            )
+                                        }
+                                    },
+                                    visualTransformation = if (showRegPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("input_reg_password")
                                 )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = regRole == "USER",
+                                        onClick = { regRole = "USER" },
+                                        label = { Text("رجل أعمال / مستثمر", fontSize = 11.sp) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FilterChip(
+                                        selected = regRole == "MERCHANT",
+                                        onClick = { regRole = "MERCHANT" },
+                                        label = { Text("تاجر معتمد", fontSize = 11.sp) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
                             text = tr("portal.choose_channel"),
@@ -671,7 +1067,7 @@ fun UserAppPortal(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Horizontal Authentic Brand Icons Row
+                        // Channels ordered strictly: TELEGRAM -> WHATSAPP -> SMS
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -755,7 +1151,13 @@ fun UserAppPortal(
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                                         TextButton(
-                                            onClick = { dispatchOtpAndProceed() },
+                                            onClick = {
+                                                when (selectedAuthTab) {
+                                                    1 -> dispatchPasswordLogin()
+                                                    2 -> dispatchRegister()
+                                                    else -> dispatchPhoneOtp()
+                                                }
+                                            },
                                             modifier = Modifier.heightIn(min = 48.dp)
                                         ) {
                                             Icon(Icons.Default.Refresh, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
@@ -769,10 +1171,15 @@ fun UserAppPortal(
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // Primary Action Button - Dispatches OTP and proceeds
                         Button(
-                            onClick = { dispatchOtpAndProceed() },
-                            enabled = !isSendingOtpNetworkCall,
+                            onClick = {
+                                when (selectedAuthTab) {
+                                    1 -> dispatchPasswordLogin()
+                                    2 -> dispatchRegister()
+                                    else -> dispatchPhoneOtp()
+                                }
+                            },
+                            enabled = !isProcessingNetwork,
                             colors = ButtonDefaults.buttonColors(containerColor = adaptiveGoldPrimary, contentColor = adaptiveOnPrimary),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
@@ -780,7 +1187,7 @@ fun UserAppPortal(
                                 .height(48.dp)
                                 .testTag("btn_proceed_otp")
                         ) {
-                            if (isSendingOtpNetworkCall) {
+                            if (isProcessingNetwork) {
                                 ExecutiveButtonLoadingIndicator(
                                     loadingText = tr("portal.sending_otp"),
                                     spinnerSize = 18.dp,
@@ -790,50 +1197,25 @@ fun UserAppPortal(
                                 )
                             } else {
                                 Text(
-                                    text = trFmt("portal.send_otp_via_fmt", "channel" to selectedDeliveryChannel.localizedTitle(currentLang)),
+                                    text = when (selectedAuthTab) {
+                                        1 -> "تسجيل الدخول بكلمة المرور"
+                                        2 -> "إنشاء الحساب وإرسال رمز التحقق"
+                                        else -> trFmt("portal.send_otp_via_fmt", "channel" to selectedDeliveryChannel.localizedTitle(currentLang))
+                                    },
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                         }
 
-                        // Quick Biometric Option in channel view
-                        if (isBiometricAvailable) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    triggerBiometricAuthentication {
-                                        val finalPhone = if (rawPhone.isNotBlank()) "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}" else (repeatUser?.phone ?: "")
-                                        if (finalPhone.isNotBlank()) {
-                                            val finalName = repeatUser?.name ?: Translations.get("portal.default_user_name", currentLang)
-                                            val finalUser = repeatUser?.username ?: "user_${finalPhone.takeLast(4)}"
-                                            val finalType = try {
-                                                repeatUser?.type?.let { UserType.valueOf(it) } ?: UserType.BUSINESSMAN
-                                            } catch (_: Exception) {
-                                                UserType.BUSINESSMAN
-                                            }
-                                            onLoginSuccess(finalName, finalPhone, finalUser, finalType)
-                                        }
-                                    }
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.6f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .testTag("btn_quick_biometric_login")
-                            ) {
-                                Icon(Icons.Default.Fingerprint, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(tr("portal.bio_fallback_btn"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary)
-                            }
-                        }
-
-                        // Return to repeat user mode if available
-                        if (repeatUser != null) {
+                        if (repeatUser != null && isTrustedDevice) {
                             Spacer(modifier = Modifier.height(8.dp))
                             TextButton(
-                                onClick = { isRepeatUserMode = true },
+                                onClick = {
+                                    isRepeatUserMode = true
+                                    specificErrorMessage = null
+                                    networkFailureError = null
+                                },
                                 modifier = Modifier
                                     .heightIn(min = 48.dp)
                                     .testTag("btn_back_to_repeat_user")
@@ -844,32 +1226,18 @@ fun UserAppPortal(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        // Account Recovery & Migration Links
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        TextButton(
+                            onClick = { showRecoveryDialog = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_portal_open_recovery")
                         ) {
-                            TextButton(
-                                onClick = { showRecoveryDialog = true },
-                                contentPadding = PaddingValues(4.dp),
-                                modifier = Modifier.heightIn(min = 48.dp)
-                            ) {
-                                Icon(Icons.Default.LockReset, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(tr("portal.recover_seed"), fontSize = 11.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.Medium)
-                            }
-
-                            TextButton(
-                                onClick = { showDeviceTransferDialog = true },
-                                contentPadding = PaddingValues(4.dp),
-                                modifier = Modifier.heightIn(min = 48.dp)
-                            ) {
-                                Icon(Icons.Default.PhonelinkSetup, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(tr("portal.transfer_phone"), fontSize = 11.sp, color = OozoxTeal, fontWeight = FontWeight.Medium)
-                            }
+                            Icon(Icons.Default.LockReset, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text("نسيت كلمة المرور / استرجاع الحساب عبر OTP", fontSize = 11.5.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -877,7 +1245,6 @@ fun UserAppPortal(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Trust & Encryption Footer
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -893,7 +1260,6 @@ fun UserAppPortal(
         }
     }
 
-    // Modal: Quick PIN Entry Dialog for Repeat Users
     if (showPinDialog && repeatUser != null && !repeatUser.pin.isNullOrBlank()) {
         UserPortalPinDialog(
             correctPin = repeatUser.pin,
@@ -901,17 +1267,11 @@ fun UserAppPortal(
             onDismiss = { showPinDialog = false },
             onPinVerified = {
                 showPinDialog = false
-                val userType = try {
-                    UserType.valueOf(repeatUser.type)
-                } catch (_: Exception) {
-                    UserType.BUSINESSMAN
-                }
-                onLoginSuccess(repeatUser.name, repeatUser.phone, repeatUser.username, userType)
+                handleRepeatUnlockVerified()
             }
         )
     }
 
-    // Modal: Country Code Picker
     if (showCountryPicker) {
         val filteredCountries = remember(countrySearchQuery, currentLang) {
             if (countrySearchQuery.isBlank()) {
@@ -919,8 +1279,8 @@ fun UserAppPortal(
             } else {
                 SecurityValidator.SUPPORTED_COUNTRIES.filter {
                     it.localizedName(currentLang).contains(countrySearchQuery, ignoreCase = true) ||
-                            it.countryNameAr.contains(countrySearchQuery, ignoreCase = true) ||
-                            it.code.contains(countrySearchQuery)
+                        it.countryNameAr.contains(countrySearchQuery, ignoreCase = true) ||
+                        it.code.contains(countrySearchQuery)
                 }
             }
         }
@@ -1011,38 +1371,31 @@ fun UserAppPortal(
         )
     }
 
-    // Modal: 12-Word BIP39 Account Recovery Wizard
     if (showRecoveryDialog) {
+        val defaultRecoveryPhone = if (rawPhone.isNotBlank()) {
+            "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}"
+        } else {
+            repeatUser?.phone.orEmpty()
+        }
         AccountRecoveryDialog(
+            initialPhone = defaultRecoveryPhone,
+            onRequestRecoveryOtp = onRequestRecoveryOtp,
+            onConfirmRecovery = onConfirmRecovery,
             onDismiss = { showRecoveryDialog = false },
-            onAccountRecovered = { rName, rPhone, rUser, rType ->
+            onAccountRecovered = {
                 showRecoveryDialog = false
-                onLoginSuccess(rName, rPhone, rUser, rType)
-            }
-        )
-    }
-
-    // Modal: Cross-Device Phone Migration & Transfer Dialog
-    if (showDeviceTransferDialog) {
-        DeviceTransferDialog(
-            currentUser = null,
-            onDismiss = { showDeviceTransferDialog = false },
-            onMigrateCompleteOnNewPhone = { mName, mPhone, mUser, mType ->
-                showDeviceTransferDialog = false
-                onLoginSuccess(mName, mPhone, mUser, mType)
+                onAuthenticatedComplete()
             }
         )
     }
 }
 
-/**
- * Repeat User Profile Quick Access Card in UserAppPortal
- */
 @Composable
 private fun RepeatUserPortalView(
     repeatUser: RepeatUserSummary,
     isBiometricAvailable: Boolean,
     isDeviceCredentialAvailable: Boolean,
+    isProcessing: Boolean,
     pulseScale: Float,
     onBiometricClick: () -> Unit,
     onDeviceLockClick: () -> Unit,
@@ -1062,7 +1415,6 @@ private fun RepeatUserPortalView(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Profile Identity Card
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -1135,9 +1487,9 @@ private fun RepeatUserPortalView(
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // PRIMARY ACTION: Biometric Unlock (Fingerprint / Face)
         Button(
             onClick = onBiometricClick,
+            enabled = !isProcessing,
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = adaptiveGoldPrimary,
@@ -1146,33 +1498,37 @@ private fun RepeatUserPortalView(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
-                .scale(if (isBiometricAvailable) pulseScale else 1f)
+                .scale(if (isBiometricAvailable && !isProcessing) pulseScale else 1f)
                 .testTag("btn_portal_biometric_login")
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Default.Fingerprint,
-                    contentDescription = tr("portal.fingerprint_cd"),
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = tr("portal.biometric_signin_btn"),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
+            if (isProcessing) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = adaptiveOnPrimary)
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.Fingerprint,
+                        contentDescription = tr("portal.fingerprint_cd"),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = tr("portal.biometric_signin_btn"),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
         }
 
         if (isDeviceCredentialAvailable) {
             Spacer(modifier = Modifier.height(10.dp))
 
-            // DEVICE LOCK ACTION: Native Pattern / PIN / Password
             OutlinedButton(
                 onClick = onDeviceLockClick,
+                enabled = !isProcessing,
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                 modifier = Modifier
@@ -1186,28 +1542,30 @@ private fun RepeatUserPortalView(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        if (!repeatUser.pin.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
 
-        // SECONDARY ACTION: App PIN Fallback
-        OutlinedButton(
-            onClick = onPinClick,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .testTag("btn_portal_pin_login")
-        ) {
-            Icon(Icons.Default.Password, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(tr("portal.pin_signin_btn"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            OutlinedButton(
+                onClick = onPinClick,
+                enabled = !isProcessing,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("btn_portal_pin_login")
+            ) {
+                Icon(Icons.Default.Password, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(tr("portal.pin_signin_btn"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // SWITCH ACCOUNT ACTION
         TextButton(
             onClick = onSwitchAccountClick,
+            enabled = !isProcessing,
             modifier = Modifier
                 .heightIn(min = 48.dp)
                 .testTag("btn_portal_switch_account")
@@ -1219,9 +1577,6 @@ private fun RepeatUserPortalView(
     }
 }
 
-/**
- * Live Biometric Hardware Status Badge
- */
 @Composable
 private fun BiometricStatusBadge(biometricStatus: BiometricStatus) {
     val (statusText, statusColor, icon) = when (biometricStatus) {
@@ -1274,9 +1629,6 @@ private fun BiometricStatusBadge(biometricStatus: BiometricStatus) {
     }
 }
 
-/**
- * Sleek Quick PIN Verification Modal for Portal
- */
 @Composable
 private fun UserPortalPinDialog(
     correctPin: String,
@@ -1350,136 +1702,134 @@ private fun UserPortalPinDialog(
             LocalLayoutDirection provides currentLang.direction,
             LocalAppLanguage provides currentLang
         ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 12.dp,
-            border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.4f))
-        ) {
-            Column(
+            Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth(0.92f)
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 12.dp,
+                border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.4f))
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .clickable { onDismiss() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(tr("common.cancel"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(tr("portal.pin_dialog_title"), fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.size(24.dp))
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = trFmt("portal.pin_dialog_sub_fmt", "name" to userName),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // PIN Visual Dots
-                val targetLength = correctPin.length.coerceIn(4, 6)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    for (i in 0 until targetLength) {
-                        val isFilled = i < enteredPin.length
-                        Surface(
-                            modifier = Modifier.size(16.dp),
-                            shape = CircleShape,
-                            color = if (isFilled) adaptiveGoldPrimary else Color.Transparent,
-                            border = BorderStroke(2.dp, if (isFilled) adaptiveGoldPrimary else MaterialTheme.colorScheme.outlineVariant)
-                        ) {}
-                    }
-                }
-
-                if (errorMessage != null) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Numeric Keypad
-                val keys = listOf(
-                    listOf("1", "2", "3"),
-                    listOf("4", "5", "6"),
-                    listOf("7", "8", "9"),
-                    listOf("", "0", "DEL")
-                )
-
-                keys.forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        row.forEach { key ->
-                            when (key) {
-                                "DEL" -> {
-                                    Surface(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(CircleShape)
-                                            .clickable { handleDelete() },
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = CircleShape
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Backspace, contentDescription = tr("portal.backspace_cd"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        Box(
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .clickable { onDismiss() }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(tr("common.cancel"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(tr("portal.pin_dialog_title"), fontWeight = FontWeight.Bold, color = adaptiveGoldPrimary, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.size(24.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = trFmt("portal.pin_dialog_sub_fmt", "name" to userName),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val targetLength = correctPin.length.coerceIn(4, 6)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        for (i in 0 until targetLength) {
+                            val isFilled = i < enteredPin.length
+                            Surface(
+                                modifier = Modifier.size(16.dp),
+                                shape = CircleShape,
+                                color = if (isFilled) adaptiveGoldPrimary else Color.Transparent,
+                                border = BorderStroke(2.dp, if (isFilled) adaptiveGoldPrimary else MaterialTheme.colorScheme.outlineVariant)
+                            ) {}
+                        }
+                    }
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val keys = listOf(
+                        listOf("1", "2", "3"),
+                        listOf("4", "5", "6"),
+                        listOf("7", "8", "9"),
+                        listOf("", "0", "DEL")
+                    )
+
+                    keys.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            row.forEach { key ->
+                                when (key) {
+                                    "DEL" -> {
+                                        Surface(
+                                            modifier = Modifier
+                                                .size(56.dp)
+                                                .clip(CircleShape)
+                                                .clickable { handleDelete() },
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            shape = CircleShape
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Default.Backspace, contentDescription = tr("portal.backspace_cd"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                            }
                                         }
                                     }
-                                }
-                                "" -> {
-                                    Spacer(modifier = Modifier.size(56.dp))
-                                }
-                                else -> {
-                                    Surface(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(CircleShape)
-                                            .clickable { handleKeyPress(key) },
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = CircleShape,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(text = key, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    "" -> {
+                                        Spacer(modifier = Modifier.size(56.dp))
+                                    }
+                                    else -> {
+                                        Surface(
+                                            modifier = Modifier
+                                                .size(56.dp)
+                                                .clip(CircleShape)
+                                                .clickable { handleKeyPress(key) },
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            shape = CircleShape,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(text = key, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
-        }
         }
     }
 }

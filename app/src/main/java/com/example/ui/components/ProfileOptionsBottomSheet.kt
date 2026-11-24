@@ -46,6 +46,7 @@ fun ProfileOptionsBottomSheet(
     onOpenVerification: () -> Unit = {},
     isVerified: Boolean = false,
     onOpenSecuritySettings: () -> Unit,
+    onOpenTrustedDevicesAndPassword: () -> Unit = {},
     onOpenCallPrivacy: () -> Unit = {},
     onImportContacts: () -> Unit = {},
     onOpenNotificationTones: () -> Unit = {},
@@ -255,6 +256,18 @@ fun ProfileOptionsBottomSheet(
                 )
                 WhatsAppDivider()
                 WhatsAppSettingsRow(
+                    icon = Icons.Default.DevicesOther,
+                    iconBg = GoldPrimary.copy(alpha = 0.14f),
+                    iconTint = GoldPrimary,
+                    title = "الأجهزة الموثوقة وكلمة المرور",
+                    subtitle = "إدارة ثقة 30 يوماً وتغيير كلمة السر",
+                    onClick = {
+                        onDismiss()
+                        onOpenTrustedDevicesAndPassword()
+                    }
+                )
+                WhatsAppDivider()
+                WhatsAppSettingsRow(
                     icon = Icons.Default.PhoneCallback,
                     iconBg = colors.primary.copy(alpha = 0.14f),
                     iconTint = colors.primary,
@@ -294,11 +307,11 @@ fun ProfileOptionsBottomSheet(
             // --- SECTION 4: الأدوات والنسخ الاحتياطي ---
             SettingsCategoryCard(title = "الأدوات والنسخ الاحتياطي") {
                 WhatsAppSettingsRow(
-                    icon = Icons.Default.CloudQueue,
+                    icon = Icons.Default.EnhancedEncryption,
                     iconBg = colors.primary.copy(alpha = 0.14f),
                     iconTint = colors.primary,
-                    title = "النسخ السحابي السريع",
-                    subtitle = "مزامنة سحابية مشفرة",
+                    title = "التصدير والمشاركة المشفرة",
+                    subtitle = "حفظ محلي AES-256 ومشاركة .oozox",
                     onClick = {
                         onDismiss()
                         onOpenGoogleBackup()
@@ -306,11 +319,11 @@ fun ProfileOptionsBottomSheet(
                 )
                 WhatsAppDivider()
                 WhatsAppSettingsRow(
-                    icon = Icons.Default.CloudSync,
+                    icon = Icons.Default.FolderZip,
                     iconBg = colors.secondary.copy(alpha = 0.14f),
                     iconTint = colors.secondary,
                     title = "خزانة النسخ المشفرة",
-                    subtitle = "استعراض وإدارة النسخ السحابية",
+                    subtitle = "استعراض وإدارة اللقطات المحلية",
                     onClick = {
                         onDismiss()
                         onOpenCloudBackups()

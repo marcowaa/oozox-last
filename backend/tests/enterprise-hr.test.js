@@ -6,6 +6,7 @@ const User = require('../src/models/User');
 const BusinessProfile = require('../src/models/BusinessProfile');
 const Employee = require('../src/models/Employee');
 const Notification = require('../src/models/Notification');
+const { installMockOtpAdapters, resetOtpAdapters } = require('./helpers/otpTestHarness');
 
 jest.setTimeout(30000);
 
@@ -26,9 +27,11 @@ beforeAll(async () => {
     Employee.deleteMany({}),
     Notification.deleteMany({}),
   ]);
+  installMockOtpAdapters({ fixedCode: '334455' });
 });
 
 afterAll(async () => {
+  resetOtpAdapters();
   await mongoose.connection.close();
   if (mongoServer) {
     await mongoServer.stop();
@@ -43,10 +46,17 @@ describe('Enterprise Business, HR, Geofence & Task Flows', () => {
       phone: '+201099988877',
       password: 'ownerPassword123',
       role: 'MERCHANT',
+      deviceId: 'hr_owner_dev',
     });
     expect(regRes.statusCode).toBe(201);
-    ownerToken = regRes.body.data.token;
-    ownerId = regRes.body.data.user.id;
+    const verifyRes = await request(app).post('/api/auth/otp/verify').send({
+      challengeId: regRes.body.data.otpChallenge.challengeId,
+      code: '334455',
+      deviceId: 'hr_owner_dev',
+    });
+    expect(verifyRes.statusCode).toBe(200);
+    ownerToken = verifyRes.body.data.token;
+    ownerId = verifyRes.body.data.user.id;
 
     const bizRes = await request(app)
       .put('/api/business/profile')

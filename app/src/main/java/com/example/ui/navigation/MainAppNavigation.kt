@@ -104,6 +104,9 @@ fun MainAppNavigation(viewModel: MainViewModel) {
     val allPromoAnnouncements by viewModel.allPromoAnnouncements.collectAsStateWithLifecycle()
     val allHiddenProfiles by viewModel.allHiddenProfiles.collectAsStateWithLifecycle()
     val repeatUser by viewModel.repeatUser.collectAsStateWithLifecycle()
+    val isOfflineCacheMode by viewModel.isOfflineCacheMode.collectAsStateWithLifecycle()
+    val trustedDevices by viewModel.trustedDevices.collectAsStateWithLifecycle()
+    val isLoadingTrustedDevices by viewModel.isLoadingTrustedDevices.collectAsStateWithLifecycle()
     val allInvoices by viewModel.allInvoices.collectAsStateWithLifecycle()
     val allMerchantProducts by viewModel.allMerchantProducts.collectAsStateWithLifecycle()
     val allProjectTasks by viewModel.allProjectTasks.collectAsStateWithLifecycle()
@@ -259,17 +262,24 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                     OnboardingScreen(
                         repeatUser = repeatUser,
                         allHiddenProfiles = allHiddenProfiles,
-                        onLoginSuccess = { name, phone, username, type ->
-                            viewModel.loginOrRegister(name, phone, username, type)
+                        onTrustedOnlineLogin = { phone -> viewModel.trustedBiometricOnlineLogin(phone) },
+                        onOfflineCacheUnlock = { phone -> viewModel.unlockOfflineCacheOnly(phone) },
+                        onLoginWithPassword = { identifier, pass, channel -> viewModel.loginWithPassword(identifier, pass, channel) },
+                        onRegisterAccount = { name, email, phone, pass, role, channel -> viewModel.registerAccount(name, email, phone, pass, role, channel) },
+                        onRequestOtp = { purpose, channel, phone, preAuth -> viewModel.requestServerOtp(purpose, channel, phone, null, preAuth) },
+                        onVerifyOtp = { challengeId, code, phone, preAuth, trust -> viewModel.verifyServerOtp(challengeId, code, phone, preAuth, trust) },
+                        onRequestRecoveryOtp = { phone, channel -> viewModel.requestRecoveryOtp(phone, channel) },
+                        onConfirmRecovery = { challengeId, code, newPassword -> viewModel.confirmRecoveryWithOtp(challengeId, code, newPassword) },
+                        onAuthenticatedComplete = {
                             navController.navigate(Screen.MainTabs) {
                                 popUpTo(Screen.Onboarding) { inclusive = true }
                             }
                         },
-                        onCreateSubAccountDirectly = { sName, sPin, sComp, sRole, sCap, sSilent ->
-                            viewModel.createHiddenProfile(sName, sPin, sComp, sRole, sCap, sSilent)
-                        },
                         onSwitchProfile = { prof ->
                             viewModel.switchActiveProfile(prof)
+                            navController.navigate(Screen.MainTabs) {
+                                popUpTo(Screen.Onboarding) { inclusive = true }
+                            }
                         }
                     )
                 }
@@ -773,6 +783,41 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                     .weight(1f)
                                     .fillMaxHeight()
                             ) {
+                                AnimatedVisibility(visible = isOfflineCacheMode) {
+                                    Surface(
+                                        color = StatusOrange.copy(alpha = 0.16f),
+                                        border = BorderStroke(0.8.dp, StatusOrange.copy(alpha = 0.45f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .windowInsetsPadding(WindowInsets.statusBars)
+                                            .testTag("offline_cache_mode_banner")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                Icon(Icons.Default.WifiOff, contentDescription = null, tint = StatusOrange, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "وضع أوفلاين — عرض البيانات المحلية المحفوظة فقط",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            TextButton(
+                                                onClick = onLogoutAction,
+                                                modifier = Modifier.heightIn(min = 36.dp)
+                                            ) {
+                                                Text("توثيق أونلاين", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusOrange)
+                                            }
+                                        }
+                                    }
+                                }
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
@@ -1034,6 +1079,20 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             onDeleteDailyRecord = onDeleteDailyRecordAction,
                                             onSwitchProfile = onSwitchProfileAction,
                                             onLogout = onLogoutAction,
+                                            trustedDevices = trustedDevices,
+                                            isLoadingTrustedDevices = isLoadingTrustedDevices,
+                                            onLoadTrustedDevices = { viewModel.loadTrustedDevices() },
+                                            onRevokeTrustedDevice = { devId, onDone -> viewModel.revokeTrustedDevice(devId, onDone) },
+                                            onChangePassword = { curPass, newPass, stepChallenge, stepCode ->
+                                                viewModel.changeAccountPassword(curPass, newPass, stepChallenge, stepCode)
+                                            },
+                                            onRequestStepUpOtp = { ch ->
+                                                viewModel.requestServerOtp(
+                                                    purpose = "SENSITIVE_ACTION",
+                                                    channel = ch,
+                                                    phone = currentUser?.phone
+                                                )
+                                            },
                                             onUpdateProfileInfo = onUpdateProfileInfoAction,
                                             onSendBroadcast = onSendBroadcastAction
                                         )

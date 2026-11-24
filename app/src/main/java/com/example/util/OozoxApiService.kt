@@ -31,13 +31,171 @@ data class ApiRegisterRequest(
     val email: String,
     val phone: String,
     val password: String,
-    val role: String = "USER"
+    val role: String = "USER",
+    val preferredLanguage: String = "ar",
+    val preferredChannel: String = "AUTO",
+    val autoSendOtp: Boolean = true,
+    val deviceId: String? = null
 )
 
 @Serializable
 data class ApiLoginRequest(
     val emailOrPhone: String,
-    val password: String
+    val password: String,
+    val deviceId: String? = null,
+    val deviceTrustToken: String? = null,
+    val hardwareFingerprint: String? = null,
+    val preferredChannel: String = "AUTO",
+    val autoSendOtp: Boolean = false
+)
+
+@Serializable
+data class ApiOtpChallengeDto(
+    val challengeId: String = "",
+    val activeChannel: String = "TELEGRAM",
+    val expiresAt: String = "",
+    val cooldownSeconds: Int = 60,
+    val maxAttempts: Int = 5,
+    val maskedPhone: String = "",
+    val phoneE164: String = ""
+)
+
+@Serializable
+data class ApiOtpDeliveryErrorDto(
+    val code: String = "",
+    val message: String = "",
+    val retryAfterSeconds: Int? = null,
+    val attemptedChannels: List<String> = emptyList()
+)
+
+@Serializable
+data class ApiDeviceTrustDto(
+    val deviceId: String = "",
+    val deviceTrustToken: String = "",
+    val trustedUntil: String = "",
+    val trustDays: Int = 30
+)
+
+@Serializable
+data class ApiOtpRequestBody(
+    val purpose: String = "LOGIN",
+    val channel: String = "AUTO",
+    val allowFallback: Boolean = true,
+    val phone: String? = null,
+    val newPhone: String? = null,
+    val preAuthToken: String? = null,
+    val deviceId: String? = null,
+    val deviceName: String? = null,
+    val platform: String = "ANDROID",
+    val hardwareFingerprint: String? = null
+)
+
+@Serializable
+data class ApiOtpRequestData(
+    val challengeId: String = "",
+    val activeChannel: String = "TELEGRAM",
+    val attemptedChannels: List<String> = emptyList(),
+    val expiresAt: String = "",
+    val cooldownSeconds: Int = 60,
+    val maxAttempts: Int = 5,
+    val maskedPhone: String = "",
+    val preAuthToken: String? = null
+)
+
+@Serializable
+data class ApiOtpVerifyBody(
+    val challengeId: String,
+    val code: String,
+    val phone: String? = null,
+    val preAuthToken: String? = null,
+    val trustDevice: Boolean = true,
+    val deviceId: String? = null,
+    val deviceName: String = "Android",
+    val platform: String = "ANDROID",
+    val hardwareFingerprint: String? = null,
+    val fcmToken: String? = null
+)
+
+@Serializable
+data class ApiTrustedLoginBody(
+    val emailOrPhone: String? = null,
+    val userId: String? = null,
+    val deviceId: String,
+    val deviceTrustToken: String,
+    val hardwareFingerprint: String? = null
+)
+
+@Serializable
+data class ApiRefreshSessionBody(
+    val refreshToken: String,
+    val deviceId: String? = null
+)
+
+@Serializable
+data class ApiRecoverAccountBody(
+    val phone: String? = null,
+    val channel: String = "AUTO",
+    val challengeId: String? = null,
+    val code: String? = null,
+    val newPassword: String? = null,
+    val deviceId: String? = null,
+    val deviceName: String? = null,
+    val platform: String = "ANDROID",
+    val hardwareFingerprint: String? = null
+)
+
+@Serializable
+data class ApiChangePasswordBody(
+    val currentPassword: String,
+    val newPassword: String,
+    val stepUpChallengeId: String? = null,
+    val stepUpCode: String? = null,
+    val deviceId: String? = null
+)
+
+@Serializable
+data class ApiChangePhoneBody(
+    val newPhone: String,
+    val channel: String = "AUTO",
+    val stepUpChallengeId: String? = null,
+    val stepUpCode: String? = null
+)
+
+@Serializable
+data class ApiTrustedDeviceDto(
+    val deviceId: String = "",
+    val deviceName: String = "",
+    val platform: String = "ANDROID",
+    val trustedAt: String = "",
+    val trustedUntil: String = "",
+    val lastActiveAt: String = "",
+    val lastIp: String = "",
+    val revokedAt: String? = null,
+    val revokeReason: String? = null,
+    val isActive: Boolean = false,
+    val isCurrent: Boolean = false
+)
+
+@Serializable
+data class ApiDevicesListData(
+    val devices: List<ApiTrustedDeviceDto> = emptyList()
+)
+
+@Serializable
+data class ApiAuthSessionDto(
+    val sessionId: String = "",
+    val deviceId: String = "",
+    val authMethod: String = "",
+    val issuedAt: String = "",
+    val expiresAt: String = "",
+    val lastStepUpAt: String? = null,
+    val ipAddress: String = "",
+    val isCurrent: Boolean = false
+)
+
+@Serializable
+data class ApiSessionsListData(
+    val sessions: List<ApiAuthSessionDto> = emptyList()
 )
 
 @Serializable
@@ -47,15 +205,39 @@ data class ApiUserDto(
     val name: String = "",
     val email: String = "",
     val phone: String = "",
+    val phoneE164: String = "",
     val role: String = "USER",
     val avatar: String = "",
-    val preferredLanguage: String = "ar"
+    val preferredLanguage: String = "ar",
+    val isVerified: Boolean = false
 )
 
 @Serializable
 data class ApiAuthData(
     val user: ApiUserDto? = null,
-    val token: String = ""
+    val token: String = "",
+    val refreshToken: String = "",
+    val sessionId: String = "",
+    val expiresAt: String = "",
+    val trustedUntil: String? = null,
+    val requiresOtp: Boolean = false,
+    val requiresStepUpOtp: Boolean = false,
+    val code: String? = null,
+    val reason: String? = null,
+    val purpose: String? = null,
+    val preAuthToken: String? = null,
+    val maskedPhone: String? = null,
+    val availableChannels: List<String> = emptyList(),
+    val attemptedChannels: List<String> = emptyList(),
+    val challengeId: String? = null,
+    val activeChannel: String? = null,
+    val cooldownSeconds: Int? = null,
+    val maxAttempts: Int? = null,
+    val otpChallenge: ApiOtpChallengeDto? = null,
+    val otpDeliveryError: ApiOtpDeliveryErrorDto? = null,
+    val trustedDevice: ApiDeviceTrustDto? = null,
+    val deviceTrust: ApiDeviceTrustDto? = null,
+    val allDevicesRevoked: Boolean = false
 )
 
 @Serializable
@@ -293,6 +475,39 @@ interface OozoxApiService {
 
     @POST("auth/login")
     suspend fun login(@Body request: ApiLoginRequest): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("auth/trusted-login")
+    suspend fun postTrustedLogin(@Body request: ApiTrustedLoginBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("auth/otp/request")
+    suspend fun postOtpRequest(@Body request: ApiOtpRequestBody): Response<ApiEnvelope<ApiOtpRequestData>>
+
+    @POST("auth/otp/verify")
+    suspend fun postOtpVerify(@Body request: ApiOtpVerifyBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("auth/session/refresh")
+    suspend fun postRefreshSession(@Body request: ApiRefreshSessionBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("auth/recover")
+    suspend fun postRecoverAccount(@Body request: ApiRecoverAccountBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @GET("auth/devices")
+    suspend fun getTrustedDevices(): Response<ApiEnvelope<ApiDevicesListData>>
+
+    @DELETE("auth/devices/{deviceId}")
+    suspend fun revokeTrustedDevice(@Path("deviceId") deviceId: String): Response<ApiEnvelope<Map<String, String>>>
+
+    @GET("auth/sessions")
+    suspend fun getAuthSessions(): Response<ApiEnvelope<ApiSessionsListData>>
+
+    @DELETE("auth/sessions/{sessionId}")
+    suspend fun revokeAuthSession(@Path("sessionId") sessionId: String): Response<ApiEnvelope<Map<String, String>>>
+
+    @POST("auth/change-password")
+    suspend fun postChangePassword(@Body request: ApiChangePasswordBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("auth/change-phone")
+    suspend fun postChangePhone(@Body request: ApiChangePhoneBody): Response<ApiEnvelope<ApiOtpRequestData>>
 
     @GET("auth/me")
     suspend fun getMe(): Response<ApiEnvelope<ApiAuthData>>

@@ -40,8 +40,8 @@ sealed class BackupResult {
 }
 
 enum class CloudStorageProvider(val title: String, val icon: String) {
-    GOOGLE_DRIVE("Google Drive (جوجل درايف السحابي)", "google_drive"),
-    OOZOX_CLOUD("سحابة أوزوكس المشفرة (Oozox Vault Cloud)", "cloud_vault"),
+    GOOGLE_DRIVE("حزمة تصدير مشفرة (.oozox Share)", "share_vault"),
+    OOZOX_CLOUD("خزينة الجهاز المشفرة (.oozox)", "local_vault"),
     LOCAL_DEVICE("ملف محلي مشفر (.oozox)", "local_file")
 }
 
@@ -319,12 +319,11 @@ object SecureBackupVaultEngine {
 
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", backupFile)
 
-            // If Cloud Storage / Google Drive is selected, register in Cloud Registry
+            // Register encrypted snapshot metadata in local device vault index (no remote URL claimed)
             var cloudBackupId: String? = null
-            var cloudUrl: String? = null
+            val cloudUrl: String? = null
             if (cloudProvider == CloudStorageProvider.GOOGLE_DRIVE || cloudProvider == CloudStorageProvider.OOZOX_CLOUD) {
-                cloudBackupId = "cloud_vault_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
-                cloudUrl = "https://drive.google.com/file/d/$cloudBackupId/view"
+                cloudBackupId = "local_vault_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
 
                 val cloudRecord = CloudBackupRecord(
                     id = cloudBackupId,
@@ -588,7 +587,7 @@ object SecureBackupVaultEngine {
 
             BackupResult.Success(
                 message = if (isGoogleDriveCloudExport) {
-                    "تم رفع ومزامنة النسخة الاحتياطية المشفرة بنجاح إلى Google Drive ☁️"
+                    "تم إنشاء وحفظ النسخة المشفرة محلياً (.oozox) بتشفير AES-256 — يمكنك الآن مشاركتها أو تصديرها بأمان."
                 } else {
                     "تم إنشاء وتشفير النسخة الاحتياطية بنجاح بحماية AES-256 ورقم الهاتف!"
                 },

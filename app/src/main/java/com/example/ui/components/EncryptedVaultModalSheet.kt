@@ -477,7 +477,7 @@ fun EncryptedVaultModalSheet(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "سحابة أوزوكس ️",
+                                text = "خزينة الجهاز (.oozox)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selectedProvider == CloudStorageProvider.OOZOX_CLOUD) GoldLight else MaterialTheme.colorScheme.onSurface,
@@ -494,7 +494,7 @@ fun EncryptedVaultModalSheet(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "جوجل درايف",
+                                text = "تصدير Share Sheet",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selectedProvider == CloudStorageProvider.GOOGLE_DRIVE) GoldLight else MaterialTheme.colorScheme.onSurface,

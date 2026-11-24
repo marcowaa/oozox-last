@@ -127,3 +127,17 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+tasks.matching { it.name in listOf("assembleRelease", "bundleRelease", "packageRelease") }.configureEach {
+    doFirst {
+        val keystorePath = System.getenv("ANDROID_KEYSTORE_FILE") ?: "${rootDir}/release.keystore"
+        val keystoreFile = file(keystorePath)
+        if (!keystoreFile.exists()) {
+            throw org.gradle.api.GradleException(
+                "Release build blocked: release keystore not found at '$keystorePath'. " +
+                    "Configure ANDROID_KEYSTORE_FILE or provide release.keystore (never sign release with debug.keystore)."
+            )
+        }
+    }
+}
+

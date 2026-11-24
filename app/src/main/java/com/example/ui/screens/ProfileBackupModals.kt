@@ -92,7 +92,7 @@ internal fun ProfileCreateBackupDialog(
                         colors = CheckboxDefaults.colors(checkedColor = OozoxTeal)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Google Drive تجهيز النسخة لـ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text("تجهيز نسخة قابلة للمشاركة (.oozox)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                 }
 
                 if (backupValidationError != null) {
@@ -169,13 +169,13 @@ internal fun ProfileSubAccountsMigrationDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "تتيح لك هذه الأداة تصدير وترحيل الحسابات الفرعية والخزائن السرية واليوميات المحاسبية المرتبطة بها حصراً ونقلها إلى هاتفك الجديد عبر السحابة أو ملف مشفر.",
+                    "تتيح لك هذه الأداة تصدير وترحيل الحسابات الفرعية والخزائن السرية واليوميات المحاسبية المرتبطة بها في ملف .oozox مشفر ومشاركته يدوياً مع هاتفك الجديد.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 17.sp
                 )
 
-                Text("وجهة الترحيل السحابي / المحلي:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text("وجهة الحفظ المحلي / التصدير:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -196,8 +196,8 @@ internal fun ProfileSubAccountsMigrationDialog(
                             ) {
                                 Icon(
                                     imageVector = when (provider) {
-                                        CloudStorageProvider.GOOGLE_DRIVE -> Icons.Default.CloudUpload
-                                        CloudStorageProvider.OOZOX_CLOUD -> Icons.Default.CloudQueue
+                                        CloudStorageProvider.GOOGLE_DRIVE -> Icons.Default.Share
+                                        CloudStorageProvider.OOZOX_CLOUD -> Icons.Default.EnhancedEncryption
                                         CloudStorageProvider.LOCAL_DEVICE -> Icons.Default.FolderSpecial
                                     },
                                     contentDescription = null,
@@ -207,8 +207,8 @@ internal fun ProfileSubAccountsMigrationDialog(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = when (provider) {
-                                        CloudStorageProvider.GOOGLE_DRIVE -> "Google Drive"
-                                        CloudStorageProvider.OOZOX_CLOUD -> "أوزوكس كلاود"
+                                        CloudStorageProvider.GOOGLE_DRIVE -> "تصدير Share"
+                                        CloudStorageProvider.OOZOX_CLOUD -> "خزينة الجهاز"
                                         CloudStorageProvider.LOCAL_DEVICE -> "ملف .oozox"
                                     },
                                     fontSize = 10.sp,
@@ -368,9 +368,9 @@ internal fun ProfileCloudBackupsVaultDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CloudSync, contentDescription = null, tint = OozoxTeal)
+                Icon(Icons.Default.FolderZip, contentDescription = null, tint = OozoxTeal)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("خزينة النسخ السحابية ☁️", color = OozoxTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("خزينة النسخ المشفرة المحلية", color = OozoxTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         },
         text = {
@@ -379,7 +379,7 @@ internal fun ProfileCloudBackupsVaultDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "النسخ الاحتياطية المشفرة المربوطة برقم هاتفك ($userPhone). يمكنك استعادتها مباشرة على هاتفك الجديد.",
+                    "النسخ الاحتياطية المشفرة المحفوظة محلياً والمربوطة برقم هاتفك ($userPhone). يمكنك استعادتها أو تصديرها.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 17.sp
@@ -393,9 +393,9 @@ internal fun ProfileCloudBackupsVaultDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
+                            Icon(Icons.Default.FolderOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("لا توجد نسخ احتياطية سحابية محفوظة حتى الآن.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("لا توجد لقطات مشفرة محفوظة على الجهاز حتى الآن.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 } else {
@@ -414,7 +414,7 @@ internal fun ProfileCloudBackupsVaultDialog(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            imageVector = if (backup.provider == CloudStorageProvider.GOOGLE_DRIVE) Icons.Default.CloudUpload else Icons.Default.CloudQueue,
+                                            imageVector = Icons.Default.EnhancedEncryption,
                                             contentDescription = null,
                                             tint = OozoxTeal,
                                             modifier = Modifier.size(18.dp)

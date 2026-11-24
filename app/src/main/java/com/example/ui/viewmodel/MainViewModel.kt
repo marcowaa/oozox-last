@@ -1267,8 +1267,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _repeatUser = MutableStateFlow<RepeatUserSummary?>(loadRepeatUserFromPrefs())
     val repeatUser: StateFlow<RepeatUserSummary?> = _repeatUser.asStateFlow()
 
+    private val _isOfflineCacheMode = MutableStateFlow(false)
+    val isOfflineCacheMode: StateFlow<Boolean> = _isOfflineCacheMode.asStateFlow()
+
+    private val _trustedDevices = MutableStateFlow<List<com.example.util.ApiTrustedDeviceDto>>(emptyList())
+    val trustedDevices: StateFlow<List<com.example.util.ApiTrustedDeviceDto>> = _trustedDevices.asStateFlow()
+
+    private val _isLoadingTrustedDevices = MutableStateFlow(false)
+    val isLoadingTrustedDevices: StateFlow<Boolean> = _isLoadingTrustedDevices.asStateFlow()
+
     private fun saveRepeatUser(user: UserEntity) {
-        com.example.util.DeviceTrustManager.markDeviceTrusted(getApplication(), user.phone)
         val summary = RepeatUserSummary(
             name = user.name,
             phone = user.phone,
@@ -1357,7 +1365,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        com.example.util.Translations.init(getApplication())
+        val appContext = getApplication<android.app.Application>()
+        com.example.util.Translations.init(appContext)
+        com.example.data.repository.AuthRepository.restoreSessionOnStartup(appContext)
+        com.example.util.RetrofitClient.onUnauthorizedSession = {
+            com.example.util.SecureCredentialVault.clearSessionOnly(appContext)
+            com.example.util.RetrofitClient.setAuthToken(null)
+        }
         viewModelScope.launch(Dispatchers.IO) {
             repository.seedInitialDataIfEmpty()
             repository.seedSubscriptionPlansIfEmpty()
@@ -1548,8 +1562,240 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    suspend fun completeServerAuthenticatedUser(
+        apiUser: com.example.util.ApiUserDto,
+        fallbackPhone: String = "",
+        fallbackType: UserType? = null
+    ) {
+        val resolvedPhone = apiUser.phoneE164.ifBlank { apiUser.phone }.ifBlank { fallbackPhone }
+        val existingUser = repository.getUserByPhone(resolvedPhone)
+        val resolvedRole = when (apiUser.role.uppercase()) {
+            "ADMIN" -> UserType.ADMIN
+            "MERCHANT", "GOLD_TRADER" -> UserType.GOLD_TRADER
+            else -> fallbackType ?: existingUser?.let {
+                try { UserType.valueOf(it.type) } catch (_: Exception) { UserType.BUSINESSMAN }
+            } ?: UserType.BUSINESSMAN
+        }
+        val serverId = apiUser.id.ifBlank { apiUser.mongoId }.ifBlank { existingUser?.id ?: java.util.UUID.randomUUID().toString() }
+        val cleanDigits = resolvedPhone.filter { it.isDigit() }.takeLast(4)
+        val updatedUser = (existingUser ?: UserEntity(
+            id = serverId,
+            name = apiUser.name.ifBlank { "مستخدم OOZOX" },
+            phone = resolvedPhone,
+            username = "user_${if (cleanDigits.isNotBlank()) cleanDigits else serverId.takeLast(4)}",
+            type = resolvedRole.name,
+            isVerified = apiUser.isVerified
+        )).copy(
+            id = serverId,
+            name = apiUser.name.ifBlank { existingUser?.name ?: "مستخدم OOZOX" },
+            phone = resolvedPhone,
+            type = resolvedRole.name,
+            isVerified = apiUser.isVerified
+        )
+        repository.saveUser(updatedUser)
+        saveRepeatUser(updatedUser)
+        _isOfflineCacheMode.value = false
+    }
+
+    suspend fun loginWithPassword(
+        emailOrPhone: String,
+        password: String,
+        channel: String = "AUTO"
+    ): com.example.data.repository.AuthOutcome {
+        val outcome = com.example.data.repository.AuthRepository.loginWithPassword(
+            context = getApplication(),
+            emailOrPhone = emailOrPhone,
+            password = password,
+            preferredChannel = channel,
+            autoSendOtp = true
+        )
+        if (outcome is com.example.data.repository.AuthOutcome.Authenticated) {
+            completeServerAuthenticatedUser(outcome.user)
+        }
+        return outcome
+    }
+
+    suspend fun registerAccount(
+        name: String,
+        email: String,
+        phone: String,
+        password: String,
+        role: String = "USER",
+        channel: String = "AUTO"
+    ): com.example.data.repository.AuthOutcome {
+        return com.example.data.repository.AuthRepository.registerAccount(
+            context = getApplication(),
+            name = name,
+            email = email,
+            phone = phone,
+            password = password,
+            role = role,
+            preferredLanguage = _currentLanguage.value.code,
+            preferredChannel = channel
+        )
+    }
+
+    suspend fun requestServerOtp(
+        purpose: String,
+        channel: String = "AUTO",
+        phone: String? = null,
+        newPhone: String? = null,
+        preAuthToken: String? = null
+    ): com.example.data.repository.OtpRequestOutcome {
+        return com.example.data.repository.AuthRepository.requestOtp(
+            context = getApplication(),
+            purpose = purpose,
+            channel = channel,
+            phone = phone,
+            newPhone = newPhone,
+            preAuthToken = preAuthToken,
+            allowFallback = true
+        )
+    }
+
+    suspend fun verifyServerOtp(
+        challengeId: String,
+        code: String,
+        phone: String? = null,
+        preAuthToken: String? = null,
+        trustDevice: Boolean = true
+    ): com.example.data.repository.OtpVerifyOutcome {
+        val outcome = com.example.data.repository.AuthRepository.verifyOtp(
+            context = getApplication(),
+            challengeId = challengeId,
+            code = code,
+            phone = phone,
+            preAuthToken = preAuthToken,
+            trustDevice = trustDevice
+        )
+        if (outcome is com.example.data.repository.OtpVerifyOutcome.Verified) {
+            outcome.data.user?.let { userDto ->
+                completeServerAuthenticatedUser(userDto, fallbackPhone = phone.orEmpty())
+            }
+        }
+        return outcome
+    }
+
+    suspend fun trustedBiometricOnlineLogin(phone: String): com.example.data.repository.AuthOutcome {
+        val outcome = com.example.data.repository.AuthRepository.trustedDeviceLogin(
+            context = getApplication(),
+            emailOrPhone = phone
+        )
+        if (outcome is com.example.data.repository.AuthOutcome.Authenticated) {
+            completeServerAuthenticatedUser(outcome.user, fallbackPhone = phone)
+        }
+        return outcome
+    }
+
+    suspend fun unlockOfflineCacheOnly(phone: String): Boolean {
+        val app = getApplication<android.app.Application>()
+        if (!com.example.util.DeviceTrustManager.isOfflineCacheAccessAllowed(app, phone)) {
+            return false
+        }
+        val cachedUser = repository.getUserByPhone(phone)
+        val summary = _repeatUser.value
+        val restored = cachedUser ?: if (summary != null && summary.phone == phone) {
+            UserEntity(
+                id = com.example.util.SecureCredentialVault.getTrustedUserId(app) ?: "offline_${phone.takeLast(6)}",
+                name = summary.name,
+                phone = summary.phone,
+                username = summary.username,
+                type = summary.type,
+                jobTitle = summary.jobTitle,
+                appLockPin = summary.pin,
+                biometricAuthEnabled = summary.biometricEnabled,
+                isVerified = true
+            )
+        } else {
+            null
+        }
+        if (restored != null) {
+            repository.saveUser(restored)
+            _isOfflineCacheMode.value = true
+            return true
+        }
+        return false
+    }
+
+    suspend fun requestRecoveryOtp(phone: String, channel: String = "AUTO"): com.example.data.repository.OtpRequestOutcome {
+        return com.example.data.repository.AuthRepository.requestRecoveryOtp(
+            context = getApplication(),
+            phone = phone,
+            channel = channel
+        )
+    }
+
+    suspend fun confirmRecoveryWithOtp(
+        challengeId: String,
+        code: String,
+        newPassword: String
+    ): com.example.data.repository.AuthOutcome {
+        val outcome = com.example.data.repository.AuthRepository.confirmRecoveryWithOtp(
+            context = getApplication(),
+            challengeId = challengeId,
+            code = code,
+            newPassword = newPassword
+        )
+        if (outcome is com.example.data.repository.AuthOutcome.Authenticated) {
+            completeServerAuthenticatedUser(outcome.user)
+        }
+        return outcome
+    }
+
+    fun loadTrustedDevices() {
+        viewModelScope.launch {
+            _isLoadingTrustedDevices.value = true
+            val result = com.example.data.repository.AuthRepository.listTrustedDevices(getApplication())
+            result.onSuccess { list ->
+                _trustedDevices.value = list
+            }.onFailure { err ->
+                com.example.ui.components.ToastNotificationBus.showToast(
+                    message = err.message ?: "تعذر تحميل قائمة الأجهزة الموثوقة",
+                    type = com.example.ui.components.AppToastType.ERROR
+                )
+            }
+            _isLoadingTrustedDevices.value = false
+        }
+    }
+
+    fun revokeTrustedDevice(deviceId: String, onDone: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val app = getApplication<android.app.Application>()
+            val currentDeviceId = com.example.util.SecureCredentialVault.getOrCreateDeviceId(app)
+            val result = com.example.data.repository.AuthRepository.revokeTrustedDevice(app, deviceId)
+            result.onSuccess { msg ->
+                _trustedDevices.update { it.filterNot { dev -> dev.deviceId == deviceId } }
+                if (deviceId == currentDeviceId) {
+                    repository.clearUserSession()
+                    _isOfflineCacheMode.value = false
+                }
+                onDone(true, msg)
+            }.onFailure { err ->
+                onDone(false, err.message ?: "تعذر إلغاء وثوق الجهاز")
+            }
+        }
+    }
+
+    suspend fun changeAccountPassword(
+        currentPassword: String,
+        newPassword: String,
+        stepUpChallengeId: String? = null,
+        stepUpCode: String? = null
+    ): com.example.data.repository.PasswordChangeOutcome {
+        return com.example.data.repository.AuthRepository.changePassword(
+            context = getApplication(),
+            currentPassword = currentPassword,
+            newPassword = newPassword,
+            stepUpChallengeId = stepUpChallengeId,
+            stepUpCode = stepUpCode
+        )
+    }
+
     fun logout() {
         viewModelScope.launch {
+            com.example.data.repository.AuthRepository.logout(getApplication(), clearDeviceTrust = false)
+            _isOfflineCacheMode.value = false
+            _trustedDevices.value = emptyList()
             repository.clearUserSession()
         }
     }

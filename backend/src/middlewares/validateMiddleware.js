@@ -42,7 +42,7 @@ const schemas = {
   register: z.object({
     name: z.string().trim().min(2, 'api.val_name_min').max(100),
     email: z.string().trim().toLowerCase().email('api.val_invalid_email').max(150),
-    phone: z.string().trim().min(8, 'api.val_phone_min').max(20),
+    phone: z.string().trim().min(8, 'api.val_phone_min').max(25),
     password: z
       .string()
       .min(6, 'api.val_password_min')
@@ -55,11 +55,91 @@ const schemas = {
     preferredLanguage: z
       .enum(SUPPORTED_LANGUAGE_CODES)
       .optional(),
+    preferredChannel: z.enum(['AUTO', 'TELEGRAM', 'WHATSAPP', 'SMS']).optional().default('AUTO'),
+    autoSendOtp: z.boolean().optional().default(true),
+    deviceId: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(120).optional(),
+    platform: z.enum(['ANDROID', 'WEB', 'IOS', 'OTHER']).optional(),
+    hardwareFingerprint: z.string().trim().max(256).optional(),
+    fcmToken: z.string().trim().max(512).optional(),
   }),
 
   login: z.object({
     emailOrPhone: z.string().trim().min(1, 'api.val_email_or_phone_required').max(150),
     password: z.string().min(1, 'api.val_password_required').max(128),
+    deviceId: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(120).optional(),
+    platform: z.enum(['ANDROID', 'WEB', 'IOS', 'OTHER']).optional(),
+    deviceTrustToken: z.string().trim().max(256).optional(),
+    hardwareFingerprint: z.string().trim().max(256).optional(),
+    preferredChannel: z.enum(['AUTO', 'TELEGRAM', 'WHATSAPP', 'SMS']).optional().default('AUTO'),
+    autoSendOtp: z.boolean().optional().default(false),
+  }),
+
+  otpRequest: z.object({
+    purpose: z.enum(['REGISTER', 'LOGIN', 'DEVICE_TRUST', 'CHANGE_PHONE', 'RECOVER', 'SENSITIVE_ACTION']),
+    channel: z.enum(['AUTO', 'TELEGRAM', 'WHATSAPP', 'SMS']).optional().default('AUTO'),
+    allowFallback: z.boolean().optional().default(true),
+    phone: z.string().trim().min(6).max(25).optional(),
+    newPhone: z.string().trim().min(6).max(25).optional(),
+    preAuthToken: z.string().trim().max(2048).optional(),
+    deviceId: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(120).optional(),
+    platform: z.enum(['ANDROID', 'WEB', 'IOS', 'OTHER']).optional(),
+    hardwareFingerprint: z.string().trim().max(256).optional(),
+  }),
+
+  otpVerify: z.object({
+    challengeId: z.string().trim().min(4).max(128),
+    code: z.string().trim().min(4).max(12),
+    phone: z.string().trim().max(25).optional(),
+    preAuthToken: z.string().trim().max(2048).optional(),
+    trustDevice: z.boolean().optional().default(true),
+    deviceId: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(120).optional(),
+    platform: z.enum(['ANDROID', 'WEB', 'IOS', 'OTHER']).optional(),
+    hardwareFingerprint: z.string().trim().max(256).optional(),
+    fcmToken: z.string().trim().max(512).optional(),
+  }),
+
+  trustedLogin: z.object({
+    emailOrPhone: z.string().trim().max(150).optional(),
+    userId: z.string().regex(OBJECT_ID_REGEX, 'api.val_invalid_object_id').optional(),
+    deviceId: z.string().trim().min(2).max(128),
+    deviceTrustToken: z.string().trim().min(16).max(256),
+    hardwareFingerprint: z.string().trim().max(256).optional(),
+  }),
+
+  refreshSession: z.object({
+    refreshToken: z.string().trim().min(16).max(256),
+    deviceId: z.string().trim().max(128).optional(),
+  }),
+
+  recoverAccount: z.object({
+    phone: z.string().trim().max(25).optional(),
+    channel: z.enum(['AUTO', 'TELEGRAM', 'WHATSAPP', 'SMS']).optional().default('AUTO'),
+    challengeId: z.string().trim().max(128).optional(),
+    code: z.string().trim().max(12).optional(),
+    newPassword: z.string().min(6, 'api.val_password_min').max(128).optional(),
+    deviceId: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(120).optional(),
+    platform: z.enum(['ANDROID', 'WEB', 'IOS', 'OTHER']).optional(),
+    hardwareFingerprint: z.string().trim().max(256).optional(),
+  }),
+
+  changePassword: z.object({
+    currentPassword: z.string().min(1, 'api.val_password_required').max(128),
+    newPassword: z.string().min(6, 'api.val_password_min').max(128),
+    stepUpChallengeId: z.string().trim().max(128).optional(),
+    stepUpCode: z.string().trim().max(12).optional(),
+    deviceId: z.string().trim().max(128).optional(),
+  }),
+
+  changePhone: z.object({
+    newPhone: z.string().trim().min(8, 'api.val_phone_min').max(25),
+    channel: z.enum(['AUTO', 'TELEGRAM', 'WHATSAPP', 'SMS']).optional().default('AUTO'),
+    stepUpChallengeId: z.string().trim().max(128).optional(),
+    stepUpCode: z.string().trim().max(12).optional(),
   }),
 
   updateLanguage: z.object({

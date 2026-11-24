@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
-import { Lock, Shield, User, Key, ArrowRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Shield, User, Key, AlertTriangle } from 'lucide-react';
 import { AdminUser } from './types';
+import {
+  WebOtpChannel,
+  apiLoginPassword,
+  apiTrustedDeviceLogin,
+  getStoredWebTrust,
+  saveWebAuthSession,
+} from './lib/webAuthClient';
+import { WebOtpVerificationCard } from './components/WebAuthPortal';
 
 interface AdminLoginProps {
   onLoginSuccess: (admin: AdminUser) => void;
@@ -12,6 +20,28 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNaviga
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [otpChallenge, setOtpChallenge] = useState<{
+    challengeId: string;
+    activeChannel: WebOtpChannel;
+    phoneDisplay: string;
+    preAuthToken?: string;
+    cooldownSeconds?: number;
+    notice?: string | null;
+  } | null>(null);
+
+  const storedTrust = getStoredWebTrust();
+
+  const finalizeAdmin = (user?: { name?: string; phone?: string; email?: string; role?: string }) => {
+    if (!user || user.role !== 'ADMIN') {
+      setError('هذا الحساب لا يملك صلاحية الإدارة المركزية (ADMIN).');
+      return;
+    }
+    onLoginSuccess({
+      username: user.name || user.phone || user.email || username.trim(),
+      role: 'SUPER_ADMIN',
+      lastLogin: new Date().toLocaleString('ar-EG'),
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,33 +49,51 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNaviga
     setIsLoading(true);
 
     try {
-      const apiBase = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL || '';
-      const response = await fetch(`${apiBase}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          emailOrPhone: username.trim(),
-          password: password.trim()
-        })
-      });
-      const payload = await response.json();
-      const authData = payload?.data || payload;
-      if (!response.ok || !authData?.token || authData?.user?.role !== 'ADMIN') {
-        setIsLoading(false);
-        setError(payload?.message || 'بيانات الاعتماد غير صحيحة أو الحساب لا يملك صلاحية الإدارة.');
+      const res = await apiLoginPassword(username.trim(), password.trim(), 'TELEGRAM');
+      setIsLoading(false);
+      if (!res.ok || !res.data) {
+        setError(res.message || 'بيانات الاعتماد غير صحيحة أو الحساب لا يملك صلاحية الإدارة.');
         return;
       }
-
-      sessionStorage.setItem('oozox_admin_token', authData.token);
-      setIsLoading(false);
-      onLoginSuccess({
-        username: authData.user.name || authData.user.phone || username.trim(),
-        role: 'SUPER_ADMIN',
-        lastLogin: new Date().toLocaleString('ar-EG')
-      });
+      if (res.data.requiresOtp) {
+        const ch = res.data.otpChallenge;
+        setOtpChallenge({
+          challengeId: ch?.challengeId || '',
+          activeChannel: (String(ch?.activeChannel || 'TELEGRAM').toUpperCase() as WebOtpChannel) || 'TELEGRAM',
+          phoneDisplay: res.data.maskedPhone || username.trim(),
+          preAuthToken: res.data.preAuthToken,
+          cooldownSeconds: ch?.cooldownSeconds ?? 60,
+          notice: res.data.otpDeliveryError?.message || null,
+        });
+        return;
+      }
+      if (!res.data.token || res.data.user?.role !== 'ADMIN') {
+        setError(res.message || 'بيانات الاعتماد غير صحيحة أو الحساب لا يملك صلاحية الإدارة.');
+        return;
+      }
+      saveWebAuthSession(res.data, 'admin');
+      finalizeAdmin(res.data.user);
     } catch {
       setIsLoading(false);
       setError('تعذر الاتصال بخادم المصادقة. تأكد من تشغيل الـ Backend API.');
+    }
+  };
+
+  const handleTrustedAdminLogin = async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await apiTrustedDeviceLogin();
+      setIsLoading(false);
+      if (res.ok && res.data?.token && res.data.user?.role === 'ADMIN') {
+        saveWebAuthSession(res.data, 'admin');
+        finalizeAdmin(res.data.user);
+        return;
+      }
+      setError(res.message || 'يلزم التحقق بكلمة المرور ورمز OTP على هذا المتصفح.');
+    } catch {
+      setIsLoading(false);
+      setError('تعذر الاتصال بخادم المصادقة.');
     }
   };
 
@@ -100,61 +148,91 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNaviga
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 tracking-wide">
-                البريد الإلكتروني أو رقم الهاتف (Admin Login)
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                  <User className="w-4 h-4" />
+          {otpChallenge ? (
+            <WebOtpVerificationCard
+              phoneDisplay={otpChallenge.phoneDisplay}
+              challengeId={otpChallenge.challengeId}
+              initialChannel={otpChallenge.activeChannel}
+              preAuthToken={otpChallenge.preAuthToken}
+              purpose="LOGIN"
+              fallbackNotice={otpChallenge.notice}
+              cooldownSeconds={otpChallenge.cooldownSeconds}
+              onBack={() => setOtpChallenge(null)}
+              onVerified={(data) => finalizeAdmin(data.user)}
+            />
+          ) : (
+            <>
+              {storedTrust && (
+                <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                  <span className="text-xs text-emerald-300 font-bold">متصفح إداري موثوق (30 يوماً)</span>
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={handleTrustedAdminLogin}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs"
+                  >
+                    دخول سريع
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="أدخل البريد الإلكتروني أو رقم الهاتف لحساب الإدارة"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-xs sm:text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
-                />
-              </div>
-            </div>
+              )}
 
-            <div>
-              <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 tracking-wide">
-                كلمة المرور المشفرة (Admin Password)
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Key className="w-4 h-4" />
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 tracking-wide">
+                    البريد الإلكتروني أو رقم الهاتف (Admin Login)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="أدخل البريد الإلكتروني أو رقم الهاتف لحساب الإدارة"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-xs sm:text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="أدخل كلمة مرور الإدارة"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-xs sm:text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
-                />
-              </div>
-            </div>
 
-            {/* Note: In strict compliance with user request: NO forgot password button or recovery link */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black py-3.5 px-6 rounded-xl text-sm sm:text-base shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.01] text-center tracking-wide disabled:opacity-50"
-              >
-                {isLoading ? 'جاري التحقق والدخول...' : 'دخول لوحة التحكم'}
-              </button>
-            </div>
-          </form>
+                <div>
+                  <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 tracking-wide">
+                    كلمة المرور المشفرة (Admin Password)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
+                      <Key className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="أدخل كلمة مرور الإدارة"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-xs sm:text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Note: In strict compliance with user request: NO forgot password button or recovery link */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black py-3.5 px-6 rounded-xl text-sm sm:text-base shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.01] text-center tracking-wide disabled:opacity-50"
+                  >
+                    {isLoading ? 'جاري التحقق والدخول...' : 'دخول لوحة التحكم'}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
 
           {/* Security Notice */}
           <div className="mt-8 pt-4 border-t border-slate-800/80 text-center">
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
-              اتصال مشفر بنظام SSL ومحمي ضد هجمات التخمين Brute-Force
+              اتصال مشفر بنظام SSL/TLS ومحمي بالتحقق متعدد القنوات والأجهزة الموثوقة
             </p>
           </div>
 

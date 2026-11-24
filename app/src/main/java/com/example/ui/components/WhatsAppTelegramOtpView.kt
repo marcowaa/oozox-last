@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,28 +33,29 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 import com.example.util.AppLanguage
 import com.example.util.LocalAppLanguage
-import com.example.util.SecurityValidator
 import com.example.util.Translations
 import com.example.util.tr
 import com.example.util.trFmt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Supported OTP delivery channels
+ * Supported OTP delivery channels in server fallback order:
+ * TELEGRAM (Gateway) -> WHATSAPP (Twilio Verify) -> SMS (Twilio Verify)
  */
 enum class OtpDeliveryChannel(
     val titleAr: String,
     val descriptionAr: String,
     val brandColor: Color
 ) {
-    WHATSAPP("واتساب", "تسليم فوري مشفر E2EE", WhatsAppGreen),
-    TELEGRAM("تليجرام", "بوت التحقق الآمن الفوري", TelegramBlue),
+    TELEGRAM("تليجرام", "Telegram Gateway — تحقق رسمي فوري", TelegramBlue),
+    WHATSAPP("واتساب", "تسليم فوري عبر واتساب", WhatsAppGreen),
     SMS("رسالة SMS", "كود مباشر عبر شبكة الجوال", SmsGold);
 
     fun localizedTitle(language: AppLanguage): String = Translations.get(
         when (this) {
-            WHATSAPP -> "otp.ch_whatsapp"
             TELEGRAM -> "otp.ch_telegram"
+            WHATSAPP -> "otp.ch_whatsapp"
             SMS -> "otp.ch_sms"
         },
         language
@@ -63,12 +63,42 @@ enum class OtpDeliveryChannel(
 
     fun localizedDescription(language: AppLanguage): String = Translations.get(
         when (this) {
-            WHATSAPP -> "otp.ch_whatsapp_desc"
             TELEGRAM -> "otp.ch_telegram_desc"
+            WHATSAPP -> "otp.ch_whatsapp_desc"
             SMS -> "otp.ch_sms_desc"
         },
         language
     )
+
+    companion object {
+        fun fromWire(value: String?): OtpDeliveryChannel = when (value?.trim()?.uppercase()) {
+            "WHATSAPP" -> WHATSAPP
+            "SMS" -> SMS
+            else -> TELEGRAM
+        }
+    }
+}
+
+sealed class OtpVerifyUiResult {
+    data object Success : OtpVerifyUiResult()
+    data class Error(
+        val message: String,
+        val remainingAttempts: Int? = null,
+        val lockRemainingSeconds: Int? = null
+    ) : OtpVerifyUiResult()
+}
+
+sealed class OtpResendUiResult {
+    data class Sent(
+        val activeChannel: OtpDeliveryChannel,
+        val cooldownSeconds: Int = 60,
+        val notice: String? = null
+    ) : OtpResendUiResult()
+
+    data class Error(
+        val message: String,
+        val retryAfterSeconds: Int? = null
+    ) : OtpResendUiResult()
 }
 
 /**
@@ -81,48 +111,46 @@ fun ChannelBrandIcon(
     size: androidx.compose.ui.unit.Dp = 24.dp
 ) {
     when (channel) {
-        OtpDeliveryChannel.WHATSAPP -> WhatsAppIcon(modifier = modifier, size = size)
         OtpDeliveryChannel.TELEGRAM -> TelegramIcon(modifier = modifier, size = size)
+        OtpDeliveryChannel.WHATSAPP -> WhatsAppIcon(modifier = modifier, size = size)
         OtpDeliveryChannel.SMS -> SmsIcon(modifier = modifier, size = size)
     }
 }
 
 /**
- * Ultra-Clean, Intelligent OTP Verification View
- * Features:
- * - 6 glowing digit boxes with paste support and auto-advance
- * - WhatsApp, Telegram, and SMS multi-channel delivery and resend switcher
- * - 60s animated resend countdown timer
- * - Anti-brute-force rate limiter (lockout timer and attempt counter)
- * - Robust error handling with specific user-friendly error banners & network retry state
+ * Server-Backed Multi-Channel OTP Verification View
+ * - Verification & rate limiting are enforced strictly server-side (Twilio Verify + Telegram Gateway)
+ * - Supports fallback routing notice when backend steps down TELEGRAM -> WHATSAPP -> SMS
  */
 @Composable
 fun WhatsAppTelegramOtpView(
     phoneNumber: String,
-    expectedOtp: String,
-    initialChannel: OtpDeliveryChannel = OtpDeliveryChannel.WHATSAPP,
-    onOtpVerified: () -> Unit,
+    initialChannel: OtpDeliveryChannel = OtpDeliveryChannel.TELEGRAM,
+    initialCooldownSeconds: Int = 60,
+    fallbackNotice: String? = null,
+    onVerifyOtpCode: suspend (code: String) -> OtpVerifyUiResult,
     onBackClick: () -> Unit,
-    onResendRequested: (channel: OtpDeliveryChannel) -> String
+    onResendRequested: suspend (channel: OtpDeliveryChannel) -> OtpResendUiResult
 ) {
     val currentLang = LocalAppLanguage.current
+    val coroutineScope = rememberCoroutineScope()
     var currentOtpInput by remember { mutableStateOf("") }
-    var currentExpectedOtp by remember { mutableStateOf(expectedOtp) }
-    var currentChannel by remember { mutableStateOf(initialChannel) }
+    var currentChannel by remember(initialChannel) { mutableStateOf(initialChannel) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isVerifying by remember { mutableStateOf(false) }
     var isSuccessVerified by remember { mutableStateOf(false) }
     var isResendingNetworkCall by remember { mutableStateOf(false) }
-    var resendSuccessNotice by remember { mutableStateOf<String?>(null) }
+    var resendSuccessNotice by remember(fallbackNotice) { mutableStateOf(fallbackNotice) }
 
-    // Rate Limiter
-    val rateLimiter = remember { SecurityValidator.RateLimiter(maxAttempts = 3, lockDurationMillis = 180_000L) }
-    var isLocked by remember { mutableStateOf(false) }
-    var lockRemainingSeconds by remember { mutableStateOf(0) }
+    // Server-provided lockout state
+    var lockRemainingSeconds by remember { mutableIntStateOf(0) }
+    val isLocked = lockRemainingSeconds > 0
 
-    // Resend Timer (60s countdown)
-    var resendCountdown by remember { mutableStateOf(60) }
-    var canResend by remember { mutableStateOf(false) }
+    // Resend cooldown ticker
+    var resendCountdown by remember(initialCooldownSeconds) {
+        mutableIntStateOf(initialCooldownSeconds.coerceIn(0, 300))
+    }
+    val canResend = resendCountdown <= 0 && !isResendingNetworkCall && !isVerifying
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -132,20 +160,15 @@ fun WhatsAppTelegramOtpView(
         if (resendCountdown > 0) {
             delay(1000L)
             resendCountdown--
-            canResend = false
-        } else {
-            canResend = true
         }
     }
 
-    // Lock Timer Ticker
-    LaunchedEffect(isLocked) {
-        while (rateLimiter.isLocked()) {
-            isLocked = true
-            lockRemainingSeconds = rateLimiter.getRemainingLockSeconds()
+    // Server Lock Timer Ticker
+    LaunchedEffect(lockRemainingSeconds) {
+        if (lockRemainingSeconds > 0) {
             delay(1000L)
+            lockRemainingSeconds--
         }
-        isLocked = false
     }
 
     // Auto Focus Keyboard
@@ -158,48 +181,62 @@ fun WhatsAppTelegramOtpView(
         val cleanCode = code.trim().filter { it.isDigit() }
         if (isLocked) {
             errorMessage = Translations.format("otp.locked_err_fmt", currentLang, "sec" to lockRemainingSeconds)
-        } else if (cleanCode.length == 6) {
+        } else if (cleanCode.length == 6 && !isVerifying && !isSuccessVerified) {
             isVerifying = true
             errorMessage = null
 
-            if (currentExpectedOtp.isNotBlank() && cleanCode == currentExpectedOtp) {
-                rateLimiter.recordSuccess()
-                isSuccessVerified = true
-                isVerifying = false
-                keyboardController?.hide()
-                onOtpVerified()
-            } else {
-                rateLimiter.recordFailure()
-                isVerifying = false
-                if (rateLimiter.isLocked()) {
-                    isLocked = true
-                    lockRemainingSeconds = rateLimiter.getRemainingLockSeconds()
-                    errorMessage = Translations.get("otp.max_attempts_err", currentLang)
-                } else {
-                    errorMessage = Translations.format("otp.wrong_code_fmt", currentLang, "rem" to rateLimiter.getRemainingAttempts())
+            coroutineScope.launch {
+                when (val result = onVerifyOtpCode(cleanCode)) {
+                    is OtpVerifyUiResult.Success -> {
+                        isSuccessVerified = true
+                        isVerifying = false
+                        keyboardController?.hide()
+                    }
+                    is OtpVerifyUiResult.Error -> {
+                        isVerifying = false
+                        if ((result.lockRemainingSeconds ?: 0) > 0) {
+                            lockRemainingSeconds = result.lockRemainingSeconds ?: 0
+                        }
+                        errorMessage = result.message
+                    }
                 }
             }
         }
     }
 
-    // Resend Helper
     val executeResend: (OtpDeliveryChannel) -> Unit = { targetChannel ->
-        if (canResend && !isLocked) {
-            currentChannel = targetChannel
+        if (!isLocked && !isResendingNetworkCall && (resendCountdown <= 0 || targetChannel != currentChannel)) {
             isResendingNetworkCall = true
             errorMessage = null
             resendSuccessNotice = null
 
-            val newCode = onResendRequested(targetChannel)
-            currentExpectedOtp = newCode
-            currentOtpInput = ""
-            resendCountdown = 60
-            isResendingNetworkCall = false
-            resendSuccessNotice = Translations.format(
-                "otp.resent_fmt",
-                currentLang,
-                "channel" to targetChannel.localizedTitle(currentLang)
-            )
+            coroutineScope.launch {
+                when (val result = onResendRequested(targetChannel)) {
+                    is OtpResendUiResult.Sent -> {
+                        currentChannel = result.activeChannel
+                        currentOtpInput = ""
+                        resendCountdown = result.cooldownSeconds.coerceIn(10, 300)
+                        isResendingNetworkCall = false
+                        resendSuccessNotice = result.notice ?: Translations.format(
+                            "otp.resent_fmt",
+                            currentLang,
+                            "channel" to result.activeChannel.localizedTitle(currentLang)
+                        )
+                    }
+                    is OtpResendUiResult.Error -> {
+                        isResendingNetworkCall = false
+                        if ((result.retryAfterSeconds ?: 0) > 0) {
+                            val sec = result.retryAfterSeconds ?: 0
+                            if (sec > 60) {
+                                lockRemainingSeconds = sec
+                            } else {
+                                resendCountdown = sec
+                            }
+                        }
+                        errorMessage = result.message
+                    }
+                }
+            }
         }
     }
 
@@ -209,7 +246,7 @@ fun WhatsAppTelegramOtpView(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top Back Button & Selected Delivery Channel Badge
+        // Top Back Button & Active Delivery Channel Badge
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -221,6 +258,7 @@ fun WhatsAppTelegramOtpView(
                 modifier = Modifier
                     .defaultMinSize(minHeight = 48.dp)
                     .clickable { onBackClick() }
+                    .testTag("btn_otp_back")
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -245,7 +283,8 @@ fun WhatsAppTelegramOtpView(
             Surface(
                 color = currentChannel.brandColor.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, currentChannel.brandColor.copy(alpha = 0.4f))
+                border = BorderStroke(1.dp, currentChannel.brandColor.copy(alpha = 0.4f)),
+                modifier = Modifier.testTag("otp_active_channel_badge")
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -265,7 +304,6 @@ fun WhatsAppTelegramOtpView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Clean Icon Badge
         Box(
             modifier = Modifier
                 .size(60.dp)
@@ -304,35 +342,34 @@ fun WhatsAppTelegramOtpView(
             modifier = Modifier.padding(top = 2.dp)
         )
 
-        // Notice or Demo Quick Fill
-        if (resendSuccessNotice != null) {
+        if (!resendSuccessNotice.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
                 color = StatusGreen.copy(alpha = 0.12f),
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, StatusGreen.copy(alpha = 0.3f))
+                border = BorderStroke(1.dp, StatusGreen.copy(alpha = 0.3f)),
+                modifier = Modifier.testTag("otp_delivery_notice")
             ) {
                 Text(
                     text = resendSuccessNotice!!,
                     fontSize = 11.sp,
                     color = StatusGreen,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Hidden input textfield to manage soft keyboard and input state
         BasicTextField(
             value = currentOtpInput,
             onValueChange = { input ->
                 val clean = input.filter { it.isDigit() }.take(6)
-                if (!isLocked) {
+                if (!isLocked && !isVerifying) {
                     currentOtpInput = clean
                     errorMessage = null
-                    resendSuccessNotice = null
                     if (clean.length == 6) {
                         verifyCode(clean)
                     }
@@ -353,7 +390,6 @@ fun WhatsAppTelegramOtpView(
                 .testTag("otp_hidden_input")
         )
 
-        // 6-Digit Visual Boxes Row
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
@@ -416,14 +452,15 @@ fun WhatsAppTelegramOtpView(
             }
         }
 
-        // Lockout or Error Banner
         if (isLocked) {
             Spacer(modifier = Modifier.height(12.dp))
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("otp_lockout_banner")
             ) {
                 Row(
                     modifier = Modifier.padding(10.dp),
@@ -452,7 +489,9 @@ fun WhatsAppTelegramOtpView(
                 color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("otp_error_banner")
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -472,7 +511,6 @@ fun WhatsAppTelegramOtpView(
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Delivery Channels for Resending Code
         Text(
             text = tr("otp.resend_other"),
             fontSize = 11.sp,
@@ -490,17 +528,18 @@ fun WhatsAppTelegramOtpView(
                 val isSelected = currentChannel == channel
                 Surface(
                     onClick = {
-                        if (canResend && !isLocked) {
+                        if (!isLocked && !isResendingNetworkCall && (canResend || !isSelected)) {
                             executeResend(channel)
-                        } else if (!isSelected) {
-                            currentChannel = channel
                         }
                     },
-                    enabled = !isLocked,
+                    enabled = !isLocked && !isResendingNetworkCall,
                     color = if (isSelected) channel.brandColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                     shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, if (isSelected) channel.brandColor else Color.Transparent),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .defaultMinSize(minHeight = 48.dp)
+                        .testTag("otp_resend_channel_${channel.name.lowercase()}")
                 ) {
                     Column(
                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
@@ -521,17 +560,20 @@ fun WhatsAppTelegramOtpView(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Resend Timer Status
-        if (!canResend && !isLocked) {
+        if (!canResend && !isLocked && !isResendingNetworkCall) {
             Text(
                 text = trFmt("otp.resend_countdown_fmt", "sec" to resendCountdown),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
             )
-        } else if (canResend && !isLocked) {
+        } else if (!isLocked) {
             TextButton(
-                onClick = { executeResend(currentChannel) }
+                onClick = { executeResend(currentChannel) },
+                enabled = !isResendingNetworkCall,
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("btn_otp_resend_now")
             ) {
                 if (isResendingNetworkCall) {
                     ExecutiveLoadingSpinner(
@@ -551,7 +593,6 @@ fun WhatsAppTelegramOtpView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Manual Verify & Submit Button
         Button(
             onClick = { verifyCode(currentOtpInput) },
             enabled = currentOtpInput.length == 6 && !isLocked && !isVerifying,

@@ -46,8 +46,17 @@ import {
   MapPin,
   Clock,
   MessageCircle,
-  MessageSquare
+  MessageSquare,
+  Laptop,
+  LogOut
 } from 'lucide-react';
+import { WebAuthModal, WebTrustedDevicesModal } from './components/WebAuthPortal';
+import {
+  WebUserDto,
+  apiFetchMe,
+  clearWebAuthSession,
+  getWebAccessToken,
+} from './lib/webAuthClient';
 
 interface ToastMessage {
   id: string;
@@ -112,6 +121,27 @@ export const UserAppPortal: React.FC<{
   onNavigateToAdmin: () => void;
 }> = ({ onNavigateHome, onNavigateToAdmin }) => {
   const [activeView, setActiveView] = useState<'dashboard' | 'chats' | 'invoices' | 'hashtag_engine' | 'gold_calc' | 'stealth_vault' | 'developer_api' | 'career_cv' | 'work_tracking'>('dashboard');
+
+  // Server Authenticated User Session & Trusted Devices State
+  const [authToken, setAuthToken] = useState<string | null>(() => getWebAccessToken('user'));
+  const [authUser, setAuthUser] = useState<WebUserDto | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showTrustedDevicesModal, setShowTrustedDevicesModal] = useState(false);
+
+  useEffect(() => {
+    const token = getWebAccessToken('user');
+    if (!token) return;
+    void apiFetchMe(token).then((res) => {
+      if (res.ok && res.data?.user) {
+        setAuthToken(token);
+        setAuthUser(res.data.user);
+      } else {
+        clearWebAuthSession('user', false);
+        setAuthToken(null);
+        setAuthUser(null);
+      }
+    });
+  }, []);
 
   // Floating Chat Bubble State
   const [showChatBubble, setShowChatBubble] = useState(false);
@@ -619,11 +649,44 @@ export const UserAppPortal: React.FC<{
           </div>
 
           <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-            {/* Live System Encrypted Status Badge */}
+            {/* Transport & Server Field Encryption Status Badge */}
             <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold shrink-0">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span>نظام مشفر E2E</span>
+              <span>تشفير TLS / AES-GCM</span>
             </div>
+
+            {authUser && authToken ? (
+              <>
+                <button
+                  onClick={() => setShowTrustedDevicesModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-300 text-xs font-bold hover:bg-amber-500/25 transition-all shrink-0"
+                  title="إدارة الأجهزة الموثوقة وتغيير كلمة المرور"
+                >
+                  <Laptop className="w-4 h-4" />
+                  <span className="hidden sm:inline">{authUser.name || authUser.phone}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    clearWebAuthSession('user', false);
+                    setAuthToken(null);
+                    setAuthUser(null);
+                    addToast('تم تسجيل الخروج', 'تم إنهاء الجلسة الحالية مع الإبقاء على ثقة الجهاز وفق السياسة.', 'info');
+                  }}
+                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-all"
+                  title="تسجيل الخروج"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all shadow-sm shrink-0"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>دخول / تحقق OTP</span>
+              </button>
+            )}
 
             {/* Floating Bubble Summoner */}
             <button
@@ -2223,6 +2286,28 @@ export const UserAppPortal: React.FC<{
           );
         })}
       </div>
+
+      <WebAuthModal
+        open={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onAuthenticated={(user) => {
+          setAuthUser(user);
+          setAuthToken(getWebAccessToken('user'));
+          addToast('تم تسجيل الدخول وتوثيق الجلسة', `مرحباً ${user.name || user.phone}`, 'success');
+        }}
+      />
+
+      {authToken && (
+        <WebTrustedDevicesModal
+          open={showTrustedDevicesModal}
+          token={authToken}
+          onClose={() => setShowTrustedDevicesModal(false)}
+          onSessionInvalidated={() => {
+            setAuthToken(null);
+            setAuthUser(null);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -45,6 +45,7 @@ import com.example.util.CallPrivacy
 import com.example.util.LocalAppLanguage
 import com.example.util.Translations
 import com.example.util.tr
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun ProfileVerificationDialog(
@@ -1237,4 +1238,377 @@ internal fun ProfileDatabaseSecurityAuditDialog(
         },
         containerColor = MaterialTheme.colorScheme.surface
     )
+}
+
+@Composable
+internal fun ProfileTrustedDevicesAndPasswordDialog(
+    trustedDevices: List<com.example.util.ApiTrustedDeviceDto>,
+    isLoadingDevices: Boolean,
+    onRefreshDevices: () -> Unit,
+    onRevokeDevice: (deviceId: String, onDone: (Boolean, String) -> Unit) -> Unit,
+    onChangePassword: suspend (currentPassword: String, newPassword: String, stepUpChallengeId: String?, stepUpCode: String?) -> com.example.data.repository.PasswordChangeOutcome,
+    onRequestStepUpOtp: suspend (channel: String) -> com.example.data.repository.OtpRequestOutcome,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    val appToast = LocalAppToast.current
+    val scope = rememberCoroutineScope()
+    val currentDeviceId = remember { com.example.util.SecureCredentialVault.getOrCreateDeviceId(context) }
+
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Trusted Devices, 1 = Change Password
+
+    // Change Password state
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var needsStepUpOtp by remember { mutableStateOf(false) }
+    var stepUpChallengeId by remember { mutableStateOf<String?>(null) }
+    var stepUpOtpCode by remember { mutableStateOf("") }
+    var selectedChannel by remember { mutableStateOf(com.example.ui.components.OtpDeliveryChannel.TELEGRAM) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var formError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        onRefreshDevices()
+    }
+
+    fun runWithSensitiveBiometric(onVerified: () -> Unit) {
+        if (activity != null && BiometricHelper.checkBiometricStatus(context) == BiometricStatus.AVAILABLE) {
+            BiometricHelper.authenticate(
+                activity = activity,
+                title = "تأكيد العملية الحساسة",
+                subtitle = "إدارة الأجهزة الموثوقة وكلمة المرور",
+                description = "يلزم تأكيد البصمة لإتمام هذا الإجراء الأمني",
+                negativeButtonText = "إلغاء",
+                onSuccess = { onVerified() },
+                onError = { _, err -> formError = err.toString() },
+                onFailed = { formError = "تعذر التحقق من البصمة" }
+            )
+        } else {
+            onVerified()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .widthIn(max = 520.dp)
+                .testTag("trusted_devices_password_dialog"),
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.35f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.DevicesOther, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("الأجهزة الموثوقة وكلمة المرور", fontSize = 15.5.sp, fontWeight = FontWeight.Bold)
+                            Text("ثقة السيرفر (30 يوماً) والتحكم بالجلسات", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "إغلاق")
+                    }
+                }
+
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = GoldPrimary,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0; formError = null },
+                        text = { Text("الأجهزة (${trustedDevices.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1; formError = null },
+                        text = { Text("تغيير كلمة المرور", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    )
+                }
+
+                if (selectedTab == 0) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "تنتهي ثقة كل جهاز بعد 30 يوماً أو عند تغيير كلمة المرور.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = onRefreshDevices, modifier = Modifier.heightIn(min = 48.dp)) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("تحديث", fontSize = 11.5.sp)
+                            }
+                        }
+
+                        if (isLoadingDevices) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = GoldPrimary)
+                            }
+                        } else if (trustedDevices.isEmpty()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(Icons.Default.PhonelinkErase, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(30.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("لا توجد أجهزة موثوقة مسجلة على السيرفر حالياً.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        } else {
+                            trustedDevices.forEach { device ->
+                                val isThisDevice = device.deviceId == currentDeviceId
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = BorderStroke(1.dp, if (isThisDevice) GoldPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = device.deviceName.ifBlank { device.deviceId },
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                if (isThisDevice) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(color = GoldPrimary.copy(alpha = 0.18f), shape = RoundedCornerShape(6.dp)) {
+                                                        Text("هذا الجهاز", fontSize = 10.sp, color = GoldPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                                    }
+                                                }
+                                            }
+                                            Text("المنصة: ${device.platform} • صالح حتى: ${device.trustedUntil.take(10)}", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                runWithSensitiveBiometric {
+                                                    onRevokeDevice(device.deviceId) { ok, msg ->
+                                                        appToast.showToast(msg, if (ok) AppToastType.SUCCESS else AppToastType.ERROR)
+                                                        if (ok && isThisDevice) onDismiss()
+                                                    }
+                                                }
+                                            },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.heightIn(min = 48.dp)
+                                        ) {
+                                            Text("إلغاء الثقة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            color = StatusOrange.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, StatusOrange.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "تنبيه: تغيير كلمة المرور يُلغي تلقائياً جميع الأجهزة الموثوقة (30 يوماً) ويتطلب التحقق بالبصمة، أو رمز OTP إذا كانت الجلسة قديمة.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = currentPassword,
+                            onValueChange = { currentPassword = it; formError = null },
+                            label = { Text("كلمة المرور الحالية") },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("input_current_password")
+                        )
+
+                        OutlinedTextField(
+                            value = newPassword,
+                            onValueChange = { newPassword = it; formError = null },
+                            label = { Text("كلمة المرور الجديدة (8 أحرف فأكثر)") },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("input_new_password")
+                        )
+
+                        OutlinedTextField(
+                            value = confirmPassword,
+                            onValueChange = { confirmPassword = it; formError = null },
+                            label = { Text("تأكيد كلمة المرور الجديدة") },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("input_confirm_new_password")
+                        )
+
+                        if (needsStepUpOtp) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                com.example.ui.components.OtpDeliveryChannel.entries.forEach { ch ->
+                                    FilterChip(
+                                        selected = selectedChannel == ch,
+                                        onClick = { selectedChannel = ch },
+                                        label = { Text(ch.titleAr, fontSize = 10.5.sp) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = stepUpOtpCode,
+                                    onValueChange = { stepUpOtpCode = it.filter { c -> c.isDigit() }.take(6); formError = null },
+                                    label = { Text("رمز OTP") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f).testTag("input_step_up_otp")
+                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        scope.launch {
+                                            isSubmitting = true
+                                            when (val otpRes = onRequestStepUpOtp(selectedChannel.name)) {
+                                                is com.example.data.repository.OtpRequestOutcome.Sent -> {
+                                                    stepUpChallengeId = otpRes.data.challengeId
+                                                    appToast.showToast(otpRes.message, AppToastType.INFO)
+                                                }
+                                                is com.example.data.repository.OtpRequestOutcome.Error -> {
+                                                    formError = otpRes.message
+                                                }
+                                            }
+                                            isSubmitting = false
+                                        }
+                                    },
+                                    enabled = !isSubmitting,
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                ) {
+                                    Text(if (stepUpChallengeId == null) "إرسال OTP" else "إعادة إرسال", fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        if (!formError.isNullOrBlank()) {
+                            Text(formError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                if (currentPassword.isBlank() || newPassword.length < 8) {
+                                    formError = "أدخل كلمة المرور الحالية وكلمة مرور جديدة لا تقل عن 8 أحرف."
+                                    return@Button
+                                }
+                                if (newPassword != confirmPassword) {
+                                    formError = "كلمتا المرور غير متطابقتين."
+                                    return@Button
+                                }
+                                if (needsStepUpOtp && (stepUpChallengeId.isNullOrBlank() || stepUpOtpCode.length != 6)) {
+                                    formError = "أرسل وأدخل رمز التحقق OTP المكوّن من 6 أرقام."
+                                    return@Button
+                                }
+                                runWithSensitiveBiometric {
+                                    scope.launch {
+                                        isSubmitting = true
+                                        formError = null
+                                        when (val out = onChangePassword(currentPassword, newPassword, stepUpChallengeId, stepUpOtpCode.takeIf { it.length == 6 })) {
+                                            is com.example.data.repository.PasswordChangeOutcome.Changed -> {
+                                                isSubmitting = false
+                                                appToast.showToast(out.message, AppToastType.SUCCESS)
+                                                onRefreshDevices()
+                                                onDismiss()
+                                            }
+                                            is com.example.data.repository.PasswordChangeOutcome.StepUpRequired -> {
+                                                isSubmitting = false
+                                                needsStepUpOtp = true
+                                                formError = out.message
+                                                // Auto-request step-up OTP right away for smoother UX
+                                                when (val otpRes = onRequestStepUpOtp(selectedChannel.name)) {
+                                                    is com.example.data.repository.OtpRequestOutcome.Sent -> {
+                                                        stepUpChallengeId = otpRes.data.challengeId
+                                                        appToast.showToast(otpRes.message, AppToastType.INFO)
+                                                    }
+                                                    is com.example.data.repository.OtpRequestOutcome.Error -> {
+                                                        formError = otpRes.message
+                                                    }
+                                                }
+                                            }
+                                            is com.example.data.repository.PasswordChangeOutcome.Error -> {
+                                                isSubmitting = false
+                                                formError = out.message
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isSubmitting,
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = MaterialTheme.colorScheme.background),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("btn_submit_change_password")
+                        ) {
+                            if (isSubmitting) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.background)
+                            } else {
+                                Text("تحديث كلمة المرور", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

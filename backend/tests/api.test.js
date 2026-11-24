@@ -5,12 +5,14 @@ const app = require('../src/app');
 const User = require('../src/models/User');
 const Invoice = require('../src/models/Invoice');
 const Notification = require('../src/models/Notification');
+const { installMockOtpAdapters, resetOtpAdapters } = require('./helpers/otpTestHarness');
 
 jest.setTimeout(30000);
 
 let mongoServer;
 let senderToken = '';
 let senderId = '';
+let senderDeviceTrustToken = '';
 let receiverToken = '';
 let receiverId = '';
 let createdInvoiceId = '';
@@ -23,9 +25,11 @@ beforeAll(async () => {
   await User.deleteMany({});
   await Invoice.deleteMany({});
   await Notification.deleteMany({});
+  installMockOtpAdapters({ fixedCode: '112233' });
 });
 
 afterAll(async () => {
+  resetOtpAdapters();
   await mongoose.connection.close();
   if (mongoServer) {
     await mongoServer.stop();
@@ -42,7 +46,7 @@ describe('1. Health Check Endpoint', () => {
 });
 
 describe('2. Authentication Flow (/api/auth)', () => {
-  it('POST /api/auth/register - should register Sender user successfully', async () => {
+  it('POST /api/auth/register + OTP verify - should register and activate Sender user', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({
@@ -51,17 +55,27 @@ describe('2. Authentication Flow (/api/auth)', () => {
         phone: '+201000000001',
         password: 'password123',
         role: 'MERCHANT',
+        deviceId: 'api_test_sender_dev',
       });
 
     expect(res.statusCode).toEqual(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.token).toBeDefined();
+    expect(res.body.data.requiresOtp).toBe(true);
     expect(res.body.data.user.email).toBe('sender@oozox.com');
-    senderToken = res.body.data.token;
-    senderId = res.body.data.user.id;
+
+    const verifyRes = await request(app).post('/api/auth/otp/verify').send({
+      challengeId: res.body.data.otpChallenge.challengeId,
+      code: '112233',
+      deviceId: 'api_test_sender_dev',
+    });
+    expect(verifyRes.statusCode).toEqual(200);
+    expect(verifyRes.body.data.token).toBeDefined();
+    senderToken = verifyRes.body.data.token;
+    senderId = verifyRes.body.data.user.id;
+    senderDeviceTrustToken = verifyRes.body.data.trustedDevice.deviceTrustToken;
   });
 
-  it('POST /api/auth/register - should register Receiver user successfully', async () => {
+  it('POST /api/auth/register + OTP verify - should register Receiver user successfully', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({
@@ -70,20 +84,29 @@ describe('2. Authentication Flow (/api/auth)', () => {
         phone: '+201000000002',
         password: 'password123',
         role: 'USER',
+        deviceId: 'api_test_recv_dev',
       });
 
     expect(res.statusCode).toEqual(201);
     expect(res.body.success).toBe(true);
-    receiverToken = res.body.data.token;
-    receiverId = res.body.data.user.id;
+    const verifyRes = await request(app).post('/api/auth/otp/verify').send({
+      challengeId: res.body.data.otpChallenge.challengeId,
+      code: '112233',
+      deviceId: 'api_test_recv_dev',
+    });
+    expect(verifyRes.statusCode).toEqual(200);
+    receiverToken = verifyRes.body.data.token;
+    receiverId = verifyRes.body.data.user.id;
   });
 
-  it('POST /api/auth/login - should authenticate user with correct credentials', async () => {
+  it('POST /api/auth/login - should authenticate user on trusted device with email+password', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({
         emailOrPhone: 'sender@oozox.com',
         password: 'password123',
+        deviceId: 'api_test_sender_dev',
+        deviceTrustToken: senderDeviceTrustToken,
       });
 
     expect(res.statusCode).toEqual(200);

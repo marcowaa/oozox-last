@@ -151,7 +151,8 @@ object OfflineSyncManager {
     }
 
     /**
-     * Executes verified synchronization & backup check against the production backend server.
+     * Checks server readiness; real encrypted server backup upload (/api/backups) is queued for Phase 3.
+     * Until /api/backups is active, never falsely records KEY_LAST_SERVER_BACKUP or claims data was uploaded.
      */
     fun performServerBackup(
         context: Context,
@@ -170,43 +171,30 @@ object OfflineSyncManager {
                 if (!RetrofitClient.hasActiveSession()) {
                     _isBackingUp.value = false
                     withContext(Dispatchers.Main) {
-                        onComplete(false, "يرجى تسجيل الدخول بحساب السيرفر المعتمد أولاً لتأمين النسخة الاحتياطية.")
+                        onComplete(false, "يرجى تسجيل الدخول بحساب السيرفر المعتمد أولاً.")
                     }
                     return@launch
                 }
 
                 val healthResponse = RetrofitClient.apiService().getHealth()
+                _isBackingUp.value = false
                 if (!healthResponse.isSuccessful) {
-                    _isBackingUp.value = false
                     withContext(Dispatchers.Main) {
-                        onComplete(false, "تعذر الاتصال بسيرفر النسخ الاحتياطي (رمز ${healthResponse.code()}).")
+                        onComplete(false, "تعذر التحقق من الخادم (رمز ${healthResponse.code()}).")
                     }
                     return@launch
                 }
 
-                val db = com.example.data.local.AppDatabase.getInstance(context)
-                val projects = db.projectDao().getAllProjects().first()
-                val chats = db.chatDao().getAllChats().first()
-
-                val now = System.currentTimeMillis()
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putLong(KEY_LAST_SERVER_BACKUP, now)
-                    .putLong(KEY_OFFLINE_SINCE, 0L)
-                    .putLong(KEY_BACKUP_POSTPONE_UNTIL, 0L)
-                    .apply()
-
-                _lastServerBackupTime.value = now
-                _show24hBackupPrompt.value = false
-                _isBackingUp.value = false
-
                 withContext(Dispatchers.Main) {
-                    onComplete(true, "تمت مزامنة والتحقق من ${projects.size} مشروع و ${chats.size} محادثة مع السيرفر بنجاح.")
+                    onComplete(
+                        false,
+                        "النسخ السحابي التلقائي عبر الخادم (/api/backups) قيد التجهيز؛ استخدم خزينة النسخ المحلية المشفرة (.oozox) وتصدير Share Sheet لحفظ بياناتك بأمان حالياً."
+                    )
                 }
             } catch (e: Exception) {
                 _isBackingUp.value = false
                 withContext(Dispatchers.Main) {
-                    onComplete(false, "تعذر رفع النسخة الاحتياطية للسيرفر: ${e.message}")
+                    onComplete(false, "تعذر التحقق من خدمة النسخ الاحتياطي: ${e.message}")
                 }
             }
         }

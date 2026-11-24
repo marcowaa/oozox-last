@@ -45,7 +45,17 @@ app.use(
       return callback(new Error('CORS origin not allowed'));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept-Language', 'X-App-Language', 'If-None-Match'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept-Language',
+      'X-App-Language',
+      'If-None-Match',
+      'X-Device-Id',
+      'X-Device-Name',
+      'X-Platform',
+      'X-Device-Fingerprint',
+    ],
     exposedHeaders: ['ETag', 'Content-Language', 'X-I18n-Version'],
     credentials: true,
   })
@@ -67,8 +77,15 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Request parsing with safe payload limit + NoSQL operator sanitization
-app.use(express.json({ limit: '1mb' }));
+// Request parsing with safe payload limit + rawBody preservation for signed webhooks + NoSQL sanitization
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(sanitizeNoSql);
 
