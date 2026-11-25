@@ -23,6 +23,8 @@ work = "2.9.1"
 camerax = "1.4.1"
 media3 = "1.5.0"
 exifinterface = "1.3.7"
+webrtc = "1.3.10"
+zxing = "3.5.3"
 
 [libraries]
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
@@ -66,6 +68,8 @@ androidx-camera-view = { group = "androidx.camera", name = "camera-view", versio
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+stream-webrtc-android = { group = "io.getstream", name = "stream-webrtc-android", version.ref = "webrtc" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

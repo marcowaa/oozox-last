@@ -73,12 +73,13 @@ var upgrader = getUpgrader()
 
 // Server holds shared application dependencies.
 type Server struct {
-	hub         *signaling.Hub
-	matcher     *matchmaking.Matcher
-	bridge      *signaling.Bridge
-	rdb         *redis.Client
-	jwtSecret   []byte
-	loadShedder *loadshedding.LoadShedder
+	hub          *signaling.Hub
+	matcher      *matchmaking.Matcher
+	bridge       *signaling.Bridge
+	rdb          *redis.Client
+	jwtSecret    []byte
+	loadShedder  *loadshedding.LoadShedder
+	callReporter *signaling.CallEventReporter
 }
 
 // MatchRequest represents the JSON request payload for /match.
@@ -350,7 +351,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := signaling.NewClient(userID, conn)
+	deviceID := strings.TrimSpace(r.URL.Query().Get("deviceId"))
+	if deviceID == "" {
+		deviceID = strings.TrimSpace(r.Header.Get("X-Device-Id"))
+	}
+
+	client := signaling.NewClientWithDevice(userID, deviceID, conn)
 	s.hub.Register(client)
 	defer s.hub.Unregister(client)
 
@@ -376,7 +382,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	// Read pump loop for signaling messages (relay offer/answer/candidate)
+	// Read pump loop for signaling messages (relay offer/answer/candidate & log call lifecycle)
 	for {
 		_, rawMsg, err := conn.ReadMessage()
 		if err != nil {
@@ -384,6 +390,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.hub.RefreshUserHeartbeat(context.Background(), client)
+
+		if !signaling.InspectAndReportCallSignal(context.Background(), s.callReporter, s.hub, userID, rawMsg) {
+			continue
+		}
 
 		var envelope struct {
 			Target string `json:"target"`
@@ -498,12 +508,13 @@ func main() {
 	loadShedder.Start()
 
 	server := &Server{
-		hub:         hub,
-		matcher:     matcher,
-		bridge:      bridge,
-		rdb:         rdb,
-		jwtSecret:   []byte(secret),
-		loadShedder: loadShedder,
+		hub:          hub,
+		matcher:      matcher,
+		bridge:       bridge,
+		rdb:          rdb,
+		jwtSecret:    []byte(secret),
+		loadShedder:  loadShedder,
+		callReporter: signaling.NewCallEventReporterFromEnv(),
 	}
 
 	mux := http.NewServeMux()

@@ -345,6 +345,7 @@
   "api.notifications_fetched": "Notifications loaded",
   "api.phone_already_registered": "Phone number is already registered",
   "api.profile_fetched": "Profile loaded successfully",
+  "api.profile_updated": "Profile updated successfully",
   "api.rate_limit": "Too many requests, please try again later.",
   "api.receiver_not_found": "Recipient not found",
   "api.register_rate_limited": "Too many registration requests, please try again later.",

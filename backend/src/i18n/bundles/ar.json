@@ -345,6 +345,7 @@
   "api.notifications_fetched": "تم جلب الإشعارات بنجاح",
   "api.phone_already_registered": "رقم الهاتف مسجل مسبقاً",
   "api.profile_fetched": "تم جلب بيانات الملف الشخصي",
+  "api.profile_updated": "تم تحديث الملف الشخصي بنجاح",
   "api.rate_limit": "طلبات كثيرة جداً، يرجى المحاولة لاحقاً.",
   "api.receiver_not_found": "المستلم غير موجود",
   "api.register_rate_limited": "طلبات تسجيل كثيرة جداً، يرجى المحاولة لاحقاً.",

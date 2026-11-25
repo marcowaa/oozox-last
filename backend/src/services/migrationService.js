@@ -2,12 +2,47 @@ const User = require('../models/User');
 const { normalizePhoneE164 } = require('../utils/phoneUtils');
 
 /**
+ * Safely upgrades an existing strict `email_1` unique index to a partial unique index
+ * that ignores missing/null/empty email values while preserving every historical email address.
+ */
+async function ensureSafeUserEmailPartialIndex() {
+  try {
+    const collection = User.collection;
+    const indexes = await collection.indexes();
+    const existingEmailIdx = indexes.find((idx) => idx.name === 'email_1');
+
+    if (existingEmailIdx && !existingEmailIdx.partialFilterExpression) {
+      await collection.dropIndex('email_1');
+    }
+
+    if (!existingEmailIdx || !existingEmailIdx.partialFilterExpression) {
+      await collection.createIndex(
+        { email: 1 },
+        {
+          name: 'email_1',
+          unique: true,
+          partialFilterExpression: { email: { $type: 'string', $gt: '' } },
+        }
+      );
+    }
+    return { ok: true };
+  } catch (err) {
+    // NamespaceNotFound (code 26) is benign before first insert on empty DBs
+    if (err && err.code === 26) {
+      return { ok: true, skipped: true };
+    }
+    throw err;
+  }
+}
+
+/**
  * Idempotent migration for pre-OTP legacy users:
- * - Marks existing unmigrated accounts created before server-side OTP rollout as verified
- *   if they do not already have explicit legacyMigratedAt, OR normalizes phoneE164 safely
- *   so existing active accounts are NOT locked out when User.isVerified default flips to false.
+ * - Ensures partial unique index for User.email so phone-only accounts never hit E11000.
+ * - Normalizes phoneE164 safely and preserves existing verified accounts & emails.
  */
 async function migrateLegacyUsers({ markExistingAsVerified = true } = {}) {
+  await ensureSafeUserEmailPartialIndex();
+
   const candidates = await User.find({
     legacyMigratedAt: null,
   });
@@ -46,5 +81,6 @@ async function migrateLegacyUsers({ markExistingAsVerified = true } = {}) {
 }
 
 module.exports = {
+  ensureSafeUserEmailPartialIndex,
   migrateLegacyUsers,
 };

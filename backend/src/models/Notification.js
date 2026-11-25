@@ -43,6 +43,8 @@ const notificationSchema = new mongoose.Schema(
         'SECURITY_ALERT',
         'INCOMING_CALL',
         'CHAT_MESSAGE',
+        'ACCOUNT_TRANSFER_REQUEST',
+        'PROJECT_UPDATE',
       ],
       default: 'INVOICE_CREATED',
     },

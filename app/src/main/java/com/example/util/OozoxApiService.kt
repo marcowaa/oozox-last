@@ -26,30 +26,6 @@ data class ApiHealthData(
 )
 
 @Serializable
-data class ApiRegisterRequest(
-    val name: String,
-    val email: String,
-    val phone: String,
-    val password: String,
-    val role: String = "USER",
-    val preferredLanguage: String = "ar",
-    val preferredChannel: String = "AUTO",
-    val autoSendOtp: Boolean = true,
-    val deviceId: String? = null
-)
-
-@Serializable
-data class ApiLoginRequest(
-    val emailOrPhone: String,
-    val password: String,
-    val deviceId: String? = null,
-    val deviceTrustToken: String? = null,
-    val hardwareFingerprint: String? = null,
-    val preferredChannel: String = "AUTO",
-    val autoSendOtp: Boolean = false
-)
-
-@Serializable
 data class ApiOtpChallengeDto(
     val challengeId: String = "",
     val activeChannel: String = "TELEGRAM",
@@ -84,6 +60,7 @@ data class ApiOtpRequestBody(
     val phone: String? = null,
     val newPhone: String? = null,
     val preAuthToken: String? = null,
+    val portalScope: String? = null,
     val deviceId: String? = null,
     val deviceName: String? = null,
     val platform: String = "ANDROID",
@@ -99,7 +76,8 @@ data class ApiOtpRequestData(
     val cooldownSeconds: Int = 60,
     val maxAttempts: Int = 5,
     val maskedPhone: String = "",
-    val preAuthToken: String? = null
+    val preAuthToken: String? = null,
+    val isExistingUser: Boolean = false
 )
 
 @Serializable
@@ -108,6 +86,7 @@ data class ApiOtpVerifyBody(
     val code: String,
     val phone: String? = null,
     val preAuthToken: String? = null,
+    val portalScope: String? = null,
     val trustDevice: Boolean = true,
     val deviceId: String? = null,
     val deviceName: String = "Android",
@@ -118,6 +97,7 @@ data class ApiOtpVerifyBody(
 
 @Serializable
 data class ApiTrustedLoginBody(
+    val phone: String? = null,
     val emailOrPhone: String? = null,
     val userId: String? = null,
     val deviceId: String,
@@ -132,33 +112,51 @@ data class ApiRefreshSessionBody(
 )
 
 @Serializable
-data class ApiRecoverAccountBody(
-    val phone: String? = null,
-    val channel: String = "AUTO",
-    val challengeId: String? = null,
-    val code: String? = null,
-    val newPassword: String? = null,
-    val deviceId: String? = null,
-    val deviceName: String? = null,
-    val platform: String = "ANDROID",
-    val hardwareFingerprint: String? = null
-)
-
-@Serializable
-data class ApiChangePasswordBody(
-    val currentPassword: String,
-    val newPassword: String,
-    val stepUpChallengeId: String? = null,
-    val stepUpCode: String? = null,
-    val deviceId: String? = null
-)
-
-@Serializable
 data class ApiChangePhoneBody(
     val newPhone: String,
     val channel: String = "AUTO",
     val stepUpChallengeId: String? = null,
     val stepUpCode: String? = null
+)
+
+@Serializable
+data class ApiUpdateProfileBody(
+    val name: String? = null,
+    val email: String? = null,
+    val avatar: String? = null,
+    val preferredLanguage: String? = null
+)
+
+@Serializable
+data class ApiLogoutBody(
+    val revokeDeviceTrust: Boolean = false
+)
+
+@Serializable
+data class ApiFcmTokenBody(
+    val fcmToken: String,
+    val deviceId: String? = null,
+    val platform: String = "ANDROID"
+)
+
+@Serializable
+data class ApiOtherActiveDeviceDto(
+    val sessionId: String = "",
+    val deviceId: String = "",
+    val deviceName: String = "",
+    val platform: String = "ANDROID",
+    val lastActiveAt: String? = null,
+    val expiresAt: String? = null
+)
+
+@Serializable
+data class ApiBackupSummaryDto(
+    val count: Int = 0,
+    val latestBackupId: String? = null,
+    val latestCreatedAt: String? = null,
+    val latestFileName: String? = null,
+    val latestTotalRecords: Int = 0,
+    val latestSizeBytes: Long = 0L
 )
 
 @Serializable
@@ -237,7 +235,237 @@ data class ApiAuthData(
     val otpDeliveryError: ApiOtpDeliveryErrorDto? = null,
     val trustedDevice: ApiDeviceTrustDto? = null,
     val deviceTrust: ApiDeviceTrustDto? = null,
-    val allDevicesRevoked: Boolean = false
+    val allDevicesRevoked: Boolean = false,
+    val isExistingUser: Boolean = false,
+    val hasOtherActiveDevice: Boolean = false,
+    val otherActiveDevices: List<ApiOtherActiveDeviceDto> = emptyList(),
+    val backupSummary: ApiBackupSummaryDto? = null
+)
+
+// --- Cloud Backups DTOs ---
+@Serializable
+data class ApiBackupStatsDto(
+    val usersCount: Int = 0,
+    val chatsCount: Int = 0,
+    val messagesCount: Int = 0,
+    val recordsCount: Int = 0,
+    val subProfilesCount: Int = 0,
+    val workGroupsCount: Int = 0,
+    val projectsCount: Int = 0,
+    val mediaFilesCount: Int = 0,
+    val totalRecords: Int = 0
+)
+
+@Serializable
+data class ApiUploadBackupRequest(
+    val fileName: String,
+    val backupType: String = "CLOUD_VAULT_V3",
+    val formatVersion: Int = 3,
+    val phoneHash: String,
+    val vaultContent: String,
+    val deviceName: String = "Android",
+    val stats: ApiBackupStatsDto = ApiBackupStatsDto()
+)
+
+@Serializable
+data class ApiCloudBackupItemDto(
+    val backupId: String = "",
+    val backupType: String = "CLOUD_VAULT_V3",
+    val formatVersion: Int = 3,
+    val fileName: String = "",
+    val sizeBytes: Long = 0L,
+    val payloadSha256: String = "",
+    val deviceName: String = "",
+    val stats: ApiBackupStatsDto = ApiBackupStatsDto(),
+    val createdAt: String = "",
+    val vaultContent: String? = null
+)
+
+@Serializable
+data class ApiCloudBackupsListData(
+    val backups: List<ApiCloudBackupItemDto> = emptyList()
+)
+
+@Serializable
+data class ApiUploadBackupResponse(
+    val backup: ApiCloudBackupItemDto? = null
+)
+
+// --- Encrypted Cross-Device Transfer DTOs ---
+@Serializable
+data class ApiTransferInitiateRequest(
+    val targetEcdhPubKey: String
+)
+
+@Serializable
+data class ApiTransferInitiateData(
+    val transferId: String = "",
+    val status: String = "AWAITING_OLD_DEVICE",
+    val expiresAt: String = "",
+    val qrPayload: String = "",
+    val targetEcdhPubKey: String = ""
+)
+
+@Serializable
+data class ApiTransferPendingItemDto(
+    val transferId: String = "",
+    val status: String = "",
+    val targetDeviceId: String = "",
+    val targetDeviceName: String = "",
+    val targetEcdhPubKey: String = "",
+    val qrNonce: String = "",
+    val expiresAt: String = "",
+    val createdAt: String = ""
+)
+
+@Serializable
+data class ApiTransferPendingData(
+    val pending: List<ApiTransferPendingItemDto> = emptyList()
+)
+
+@Serializable
+data class ApiTransferApproveRequest(
+    val sourceEcdhPubKey: String,
+    val approvalMethod: String = "DEVICE_PUSH_APPROVAL",
+    val qrNonce: String? = null
+)
+
+@Serializable
+data class ApiTransferUploadChunkRequest(
+    val chunkIndex: Int,
+    val totalChunks: Int,
+    val cipherChunkBase64: String,
+    val ivBase64: String,
+    val chunkSha256: String
+)
+
+@Serializable
+data class ApiTransferSummaryDto(
+    val totalRecords: Int = 0,
+    val mediaFilesCount: Int = 0,
+    val totalBytes: Long = 0L
+)
+
+@Serializable
+data class ApiTransferFinalizeUploadRequest(
+    val totalChunks: Int,
+    val encryptedManifestBase64: String,
+    val manifestIvBase64: String,
+    val manifestSha256: String,
+    val summary: ApiTransferSummaryDto = ApiTransferSummaryDto()
+)
+
+@Serializable
+data class ApiTransferStatusData(
+    val transferId: String = "",
+    val status: String = "",
+    val approvalMethod: String? = null,
+    val targetDeviceId: String = "",
+    val targetDeviceName: String = "",
+    val sourceDeviceId: String? = null,
+    val sourceDeviceName: String? = null,
+    val targetEcdhPubKey: String = "",
+    val sourceEcdhPubKey: String? = null,
+    val totalChunks: Int = 0,
+    val receivedChunksCount: Int = 0,
+    val uploadedChunkIndexes: List<Int> = emptyList(),
+    val encryptedManifestBase64: String? = null,
+    val manifestIvBase64: String? = null,
+    val manifestSha256: String? = null,
+    val summary: ApiTransferSummaryDto? = null,
+    val expiresAt: String = ""
+)
+
+@Serializable
+data class ApiTransferDownloadChunkData(
+    val transferId: String = "",
+    val chunkIndex: Int = 0,
+    val totalChunks: Int = 0,
+    val cipherChunkBase64: String = "",
+    val ivBase64: String = "",
+    val chunkSha256: String = ""
+)
+
+@Serializable
+data class ApiTransferCancelRequest(
+    val revokeOtherDevices: Boolean = false
+)
+
+// --- Calls, Budget & Signaling TURN DTOs ---
+@Serializable
+data class ApiCallAuthorizeRequest(
+    val calleeId: String,
+    val callType: String = "AUDIO",
+    val callId: String? = null
+)
+
+@Serializable
+data class ApiCallAuthorizeData(
+    val allowed: Boolean = true,
+    val callId: String = "",
+    val callType: String = "AUDIO",
+    val exp: Long = 0L,
+    val callAuthSignature: String = "",
+    val usagePct: Double = 0.0
+)
+
+@Serializable
+data class ApiCallBudgetData(
+    val monthKey: String = "",
+    val totalSpentUsd: Double = 0.0,
+    val monthlyBudgetUsd: Double = 0.0,
+    val usagePct: Double = 0.0,
+    val blockNewCalls: Boolean = false
+)
+
+@Serializable
+data class ApiTurnCredentialsRequest(
+    val ttl: Int = 3600
+)
+
+@Serializable
+data class ApiTurnCredentialsResponse(
+    val urls: List<String> = emptyList(),
+    val username: String = "",
+    val credential: String = "",
+    val ttl: Int = 3600
+)
+
+// --- Workspace Cloud Sync DTOs ---
+@Serializable
+data class ApiWorkspaceCreateGroupRequest(
+    val name: String,
+    val description: String = "",
+    val isPrivate: Boolean = true,
+    val companyName: String = "",
+    val clientId: String? = null
+)
+
+@Serializable
+data class ApiWorkspaceCreateProjectRequest(
+    val name: String,
+    val type: String = "GOLD_TRADING",
+    val workGroupId: String? = null,
+    val estimatedCapital: Double = 0.0,
+    val location: String = "",
+    val clientId: String? = null
+)
+
+@Serializable
+data class ApiWorkspaceCreateChatRequest(
+    val type: String = "DIRECT",
+    val targetUserId: String? = null,
+    val title: String = "",
+    val workGroupId: String? = null,
+    val clientId: String? = null
+)
+
+@Serializable
+data class ApiWorkspaceSendMessageRequest(
+    val content: String,
+    val type: String = "TEXT",
+    val mediaUrl: String? = null,
+    val clientId: String? = null
 )
 
 @Serializable
@@ -470,12 +698,6 @@ interface OozoxApiService {
         @Body request: ApiUpdateLanguageRequest
     ): Response<ApiEnvelope<ApiAuthData>>
 
-    @POST("auth/register")
-    suspend fun register(@Body request: ApiRegisterRequest): Response<ApiEnvelope<ApiAuthData>>
-
-    @POST("auth/login")
-    suspend fun login(@Body request: ApiLoginRequest): Response<ApiEnvelope<ApiAuthData>>
-
     @POST("auth/trusted-login")
     suspend fun postTrustedLogin(@Body request: ApiTrustedLoginBody): Response<ApiEnvelope<ApiAuthData>>
 
@@ -488,8 +710,8 @@ interface OozoxApiService {
     @POST("auth/session/refresh")
     suspend fun postRefreshSession(@Body request: ApiRefreshSessionBody): Response<ApiEnvelope<ApiAuthData>>
 
-    @POST("auth/recover")
-    suspend fun postRecoverAccount(@Body request: ApiRecoverAccountBody): Response<ApiEnvelope<ApiAuthData>>
+    @POST("auth/logout")
+    suspend fun postLogout(@Body request: ApiLogoutBody = ApiLogoutBody()): Response<ApiEnvelope<Map<String, String>>>
 
     @GET("auth/devices")
     suspend fun getTrustedDevices(): Response<ApiEnvelope<ApiDevicesListData>>
@@ -503,14 +725,138 @@ interface OozoxApiService {
     @DELETE("auth/sessions/{sessionId}")
     suspend fun revokeAuthSession(@Path("sessionId") sessionId: String): Response<ApiEnvelope<Map<String, String>>>
 
-    @POST("auth/change-password")
-    suspend fun postChangePassword(@Body request: ApiChangePasswordBody): Response<ApiEnvelope<ApiAuthData>>
-
     @POST("auth/change-phone")
     suspend fun postChangePhone(@Body request: ApiChangePhoneBody): Response<ApiEnvelope<ApiOtpRequestData>>
 
     @GET("auth/me")
     suspend fun getMe(): Response<ApiEnvelope<ApiAuthData>>
+
+    @PATCH("auth/me")
+    suspend fun updateMe(@Body request: ApiUpdateProfileBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("devices/fcm-token")
+    suspend fun registerFcmToken(@Body request: ApiFcmTokenBody): Response<ApiEnvelope<Map<String, String>>>
+
+    // --- Cloud Backups ---
+    @GET("backups")
+    suspend fun listCloudBackups(): Response<ApiEnvelope<ApiCloudBackupsListData>>
+
+    @POST("backups")
+    suspend fun uploadCloudBackup(@Body request: ApiUploadBackupRequest): Response<ApiEnvelope<ApiUploadBackupResponse>>
+
+    @GET("backups/{backupId}/download")
+    suspend fun downloadCloudBackup(@Path("backupId") backupId: String): Response<ApiEnvelope<ApiCloudBackupItemDto>>
+
+    @DELETE("backups/{backupId}")
+    suspend fun deleteCloudBackup(@Path("backupId") backupId: String): Response<ApiEnvelope<Unit>>
+
+    // --- Cross-Device Encrypted Transfer ---
+    @POST("transfer/initiate")
+    suspend fun initiateDeviceTransfer(@Body request: ApiTransferInitiateRequest): Response<ApiEnvelope<ApiTransferInitiateData>>
+
+    @GET("transfer/pending")
+    suspend fun getPendingDeviceTransfers(): Response<ApiEnvelope<ApiTransferPendingData>>
+
+    @POST("transfer/{transferId}/approve")
+    suspend fun approveDeviceTransfer(
+        @Path("transferId") transferId: String,
+        @Body request: ApiTransferApproveRequest
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("transfer/{transferId}/chunks")
+    suspend fun uploadTransferChunk(
+        @Path("transferId") transferId: String,
+        @Body request: ApiTransferUploadChunkRequest
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("transfer/{transferId}/finalize-upload")
+    suspend fun finalizeTransferUpload(
+        @Path("transferId") transferId: String,
+        @Body request: ApiTransferFinalizeUploadRequest
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("transfer/{transferId}/status")
+    suspend fun getDeviceTransferStatus(@Path("transferId") transferId: String): Response<ApiEnvelope<ApiTransferStatusData>>
+
+    @GET("transfer/{transferId}/chunks/{chunkIndex}")
+    suspend fun downloadTransferChunk(
+        @Path("transferId") transferId: String,
+        @Path("chunkIndex") chunkIndex: Int
+    ): Response<ApiEnvelope<ApiTransferDownloadChunkData>>
+
+    @POST("transfer/{transferId}/complete")
+    suspend fun completeDeviceTransfer(@Path("transferId") transferId: String): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("transfer/{transferId}/cancel")
+    suspend fun cancelDeviceTransfer(
+        @Path("transferId") transferId: String,
+        @Body request: ApiTransferCancelRequest = ApiTransferCancelRequest()
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("transfer/revoke-other-devices")
+    suspend fun revokeOtherDevices(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    // --- Calls, Budget & Signaling TURN ---
+    @POST("calls/authorize")
+    suspend fun authorizeCall(@Body request: ApiCallAuthorizeRequest): Response<ApiEnvelope<ApiCallAuthorizeData>>
+
+    @GET("calls/status")
+    suspend fun getCallBudgetStatus(): Response<ApiEnvelope<ApiCallBudgetData>>
+
+    @GET("calls/budget")
+    suspend fun getAdminCallBudget(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("calls/history")
+    suspend fun getCallHistory(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST
+    suspend fun fetchTurnCredentials(
+        @retrofit2.http.Url url: String = "https://signaling.oozox.com/turn-credentials",
+        @Body request: ApiTurnCredentialsRequest = ApiTurnCredentialsRequest()
+    ): Response<ApiTurnCredentialsResponse>
+
+    // --- Workspace Cloud Sync ---
+    @GET("groups")
+    suspend fun getGroups(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("groups")
+    suspend fun createGroup(@Body request: ApiWorkspaceCreateGroupRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("projects")
+    suspend fun getProjects(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("projects")
+    suspend fun createProject(@Body request: ApiWorkspaceCreateProjectRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @PATCH("projects/{projectId}")
+    suspend fun updateProject(
+        @Path("projectId") projectId: String,
+        @Body body: Map<String, kotlinx.serialization.json.JsonElement>
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("chats")
+    suspend fun getChats(): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("chats")
+    suspend fun createChat(@Body request: ApiWorkspaceCreateChatRequest): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @GET("chats/{conversationId}/messages")
+    suspend fun getChatMessages(
+        @Path("conversationId") conversationId: String,
+        @Query("limit") limit: Int = 50
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("chats/{conversationId}/messages")
+    suspend fun sendChatMessage(
+        @Path("conversationId") conversationId: String,
+        @Body request: ApiWorkspaceSendMessageRequest
+    ): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("chats/{conversationId}/read")
+    suspend fun markChatReadRemote(@Path("conversationId") conversationId: String): Response<ApiEnvelope<Unit>>
 
     @POST("invoices")
     suspend fun createInvoice(@Body request: ApiCreateInvoiceRequest): Response<ApiEnvelope<ApiInvoiceData>>

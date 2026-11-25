@@ -39,24 +39,24 @@ afterAll(async () => {
 });
 
 describe('Enterprise Business, HR, Geofence & Task Flows', () => {
-  it('1. Registers business owner and sets up general enterprise business profile + HQ geofence', async () => {
-    const regRes = await request(app).post('/api/auth/register').send({
-      name: 'Khaled Enterprise Owner',
-      email: 'owner@enterprise.com',
+  it('1. Registers business owner via Phone OTP and sets up enterprise business profile + HQ geofence', async () => {
+    const reqRes = await request(app).post('/api/auth/otp/request').send({
       phone: '+201099988877',
-      password: 'ownerPassword123',
-      role: 'MERCHANT',
       deviceId: 'hr_owner_dev',
     });
-    expect(regRes.statusCode).toBe(201);
+    expect(reqRes.statusCode).toBe(200);
     const verifyRes = await request(app).post('/api/auth/otp/verify').send({
-      challengeId: regRes.body.data.otpChallenge.challengeId,
+      challengeId: reqRes.body.data.challengeId,
       code: '334455',
       deviceId: 'hr_owner_dev',
     });
     expect(verifyRes.statusCode).toBe(200);
     ownerToken = verifyRes.body.data.token;
     ownerId = verifyRes.body.data.user.id;
+    await request(app)
+      .patch('/api/auth/me')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Khaled Enterprise Owner', email: 'owner@enterprise.com' });
 
     const bizRes = await request(app)
       .put('/api/business/profile')

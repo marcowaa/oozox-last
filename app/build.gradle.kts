@@ -113,6 +113,8 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.exifinterface)
+    implementation(libs.stream.webrtc.android)
+    implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
     testImplementation("org.robolectric:robolectric:4.11.1")

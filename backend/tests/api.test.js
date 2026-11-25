@@ -5,6 +5,7 @@ const app = require('../src/app');
 const User = require('../src/models/User');
 const Invoice = require('../src/models/Invoice');
 const Notification = require('../src/models/Notification');
+const { ensureSafeUserEmailPartialIndex } = require('../src/services/migrationService');
 const { installMockOtpAdapters, resetOtpAdapters } = require('./helpers/otpTestHarness');
 
 jest.setTimeout(30000);
@@ -22,6 +23,7 @@ beforeAll(async () => {
     binary: { version: '7.0.14' },
   });
   await mongoose.connect(mongoServer.getUri());
+  await ensureSafeUserEmailPartialIndex();
   await User.deleteMany({});
   await Invoice.deleteMany({});
   await Notification.deleteMany({});
@@ -45,26 +47,20 @@ describe('1. Health Check Endpoint', () => {
   });
 });
 
-describe('2. Authentication Flow (/api/auth)', () => {
-  it('POST /api/auth/register + OTP verify - should register and activate Sender user', async () => {
-    const res = await request(app)
-      .post('/api/auth/register')
+describe('2. Phone-Only OTP Authentication Flow (/api/auth)', () => {
+  it('POST /api/auth/otp/request + verify - onboard Sender & save preserved optional contact email', async () => {
+    const reqRes = await request(app)
+      .post('/api/auth/otp/request')
       .send({
-        name: 'Sender Trader',
-        email: 'sender@oozox.com',
         phone: '+201000000001',
-        password: 'password123',
-        role: 'MERCHANT',
         deviceId: 'api_test_sender_dev',
       });
 
-    expect(res.statusCode).toEqual(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.requiresOtp).toBe(true);
-    expect(res.body.data.user.email).toBe('sender@oozox.com');
+    expect(reqRes.statusCode).toEqual(200);
+    expect(reqRes.body.success).toBe(true);
 
     const verifyRes = await request(app).post('/api/auth/otp/verify').send({
-      challengeId: res.body.data.otpChallenge.challengeId,
+      challengeId: reqRes.body.data.challengeId,
       code: '112233',
       deviceId: 'api_test_sender_dev',
     });
@@ -73,24 +69,26 @@ describe('2. Authentication Flow (/api/auth)', () => {
     senderToken = verifyRes.body.data.token;
     senderId = verifyRes.body.data.user.id;
     senderDeviceTrustToken = verifyRes.body.data.trustedDevice.deviceTrustToken;
+
+    const profileRes = await request(app)
+      .patch('/api/auth/me')
+      .set('Authorization', `Bearer ${senderToken}`)
+      .send({ name: 'Sender Trader', email: 'sender@oozox.com' });
+    expect(profileRes.statusCode).toEqual(200);
+    expect(profileRes.body.data.user.email).toBe('sender@oozox.com');
   });
 
-  it('POST /api/auth/register + OTP verify - should register Receiver user successfully', async () => {
-    const res = await request(app)
-      .post('/api/auth/register')
+  it('POST /api/auth/otp/request + verify - onboard Receiver user successfully without email', async () => {
+    const reqRes = await request(app)
+      .post('/api/auth/otp/request')
       .send({
-        name: 'Receiver Client',
-        email: 'receiver@oozox.com',
         phone: '+201000000002',
-        password: 'password123',
-        role: 'USER',
         deviceId: 'api_test_recv_dev',
       });
 
-    expect(res.statusCode).toEqual(201);
-    expect(res.body.success).toBe(true);
+    expect(reqRes.statusCode).toEqual(200);
     const verifyRes = await request(app).post('/api/auth/otp/verify').send({
-      challengeId: res.body.data.otpChallenge.challengeId,
+      challengeId: reqRes.body.data.challengeId,
       code: '112233',
       deviceId: 'api_test_recv_dev',
     });
@@ -99,12 +97,11 @@ describe('2. Authentication Flow (/api/auth)', () => {
     receiverId = verifyRes.body.data.user.id;
   });
 
-  it('POST /api/auth/login - should authenticate user on trusted device with email+password', async () => {
+  it('POST /api/auth/trusted-login - should authenticate user on trusted device with phone', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/auth/trusted-login')
       .send({
-        emailOrPhone: 'sender@oozox.com',
-        password: 'password123',
+        phone: '+201000000001',
         deviceId: 'api_test_sender_dev',
         deviceTrustToken: senderDeviceTrustToken,
       });
@@ -114,19 +111,20 @@ describe('2. Authentication Flow (/api/auth)', () => {
     expect(res.body.data.token).toBeDefined();
   });
 
-  it('POST /api/auth/login - should reject invalid credentials with 401', async () => {
+  it('POST /api/auth/trusted-login - should reject invalid deviceTrustToken with 401', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/auth/trusted-login')
       .send({
-        emailOrPhone: 'sender@oozox.com',
-        password: 'wrongpassword',
+        phone: '+201000000001',
+        deviceId: 'api_test_sender_dev',
+        deviceTrustToken: 'invalid_token',
       });
 
     expect(res.statusCode).toEqual(401);
     expect(res.body.success).toBe(false);
   });
 
-  it('GET /api/auth/me - should fetch user profile with valid Bearer token', async () => {
+  it('GET /api/auth/me - should fetch user profile including preserved contact email', async () => {
     const res = await request(app)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${senderToken}`);

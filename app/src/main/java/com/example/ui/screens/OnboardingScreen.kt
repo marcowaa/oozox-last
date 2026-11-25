@@ -8,10 +8,11 @@ import com.example.data.repository.AuthOutcome
 import com.example.data.repository.OtpRequestOutcome
 import com.example.data.repository.OtpVerifyOutcome
 import com.example.ui.components.UserAppPortal
+import com.example.ui.navigation.PostOtpGatewayDecision
 
 /**
- * OnboardingScreen - Serves as the server-backed authentication gateway housing UserAppPortal.
- * Enforces mandatory server OTP for registration, phone login, untrusted devices, and recovery,
+ * OnboardingScreen - Classic Phone-Only OTP Gateway housing UserAppPortal.
+ * Enforces mandatory server OTP for new/returning phones and untrusted devices,
  * while permitting 30-day trusted-device biometric/PIN unlock and offline local-cache unlock.
  */
 @Composable
@@ -20,13 +21,9 @@ fun OnboardingScreen(
     allHiddenProfiles: List<HiddenProfileEntity> = emptyList(),
     onTrustedOnlineLogin: suspend (phone: String) -> AuthOutcome,
     onOfflineCacheUnlock: suspend (phone: String) -> Boolean,
-    onLoginWithPassword: suspend (emailOrPhone: String, password: String, channel: String) -> AuthOutcome,
-    onRegisterAccount: suspend (name: String, email: String, phone: String, password: String, role: String, channel: String) -> AuthOutcome,
     onRequestOtp: suspend (purpose: String, channel: String, phone: String?, preAuthToken: String?) -> OtpRequestOutcome,
     onVerifyOtp: suspend (challengeId: String, code: String, phone: String?, preAuthToken: String?, trustDevice: Boolean) -> OtpVerifyOutcome,
-    onRequestRecoveryOtp: suspend (phone: String, channel: String) -> OtpRequestOutcome,
-    onConfirmRecovery: suspend (challengeId: String, code: String, newPassword: String) -> AuthOutcome,
-    onAuthenticatedComplete: () -> Unit,
+    onAuthenticatedComplete: (PostOtpGatewayDecision) -> Unit,
     onSwitchProfile: ((HiddenProfileEntity) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -35,12 +32,8 @@ fun OnboardingScreen(
         allHiddenProfiles = allHiddenProfiles,
         onTrustedOnlineLogin = onTrustedOnlineLogin,
         onOfflineCacheUnlock = onOfflineCacheUnlock,
-        onLoginWithPassword = onLoginWithPassword,
-        onRegisterAccount = onRegisterAccount,
         onRequestOtp = onRequestOtp,
         onVerifyOtp = onVerifyOtp,
-        onRequestRecoveryOtp = onRequestRecoveryOtp,
-        onConfirmRecovery = onConfirmRecovery,
         onAuthenticatedComplete = onAuthenticatedComplete,
         onSwitchProfile = onSwitchProfile,
         modifier = modifier

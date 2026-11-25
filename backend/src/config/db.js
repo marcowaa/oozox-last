@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { ensureSafeUserEmailPartialIndex } = require('../services/migrationService');
 
 const connectDB = async () => {
   try {
@@ -12,6 +13,9 @@ const connectDB = async () => {
       autoIndex: true,
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+    });
+    await ensureSafeUserEmailPartialIndex().catch((err) => {
+      console.warn(`[OOZOX-DATABASE-WARN] Email partial index check skipped: ${err.message}`);
     });
     console.log(`[OOZOX-DATABASE] MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {

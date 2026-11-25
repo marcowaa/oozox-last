@@ -15,6 +15,13 @@ const i18nRoutes = require('./routes/i18nRoutes');
 const businessRoutes = require('./routes/businessRoutes');
 const hrRoutes = require('./routes/hrRoutes');
 const taskRoutes = require('./routes/taskRoutes');
+const backupRoutes = require('./routes/backupRoutes');
+const transferRoutes = require('./routes/transferRoutes');
+const callRoutes = require('./routes/callRoutes');
+const { groupRouter, projectRouter, chatRouter, contentRouter } = require('./routes/workspaceRoutes');
+const { protect } = require('./middlewares/authMiddleware');
+const { validate, schemas } = require('./middlewares/validateMiddleware');
+const { syncFcmToken } = require('./controllers/otpController');
 const { sanitizeNoSql } = require('./middlewares/sanitizeMiddleware');
 const { i18nMiddleware } = require('./middlewares/i18nMiddleware');
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
@@ -55,6 +62,10 @@ app.use(
       'X-Device-Name',
       'X-Platform',
       'X-Device-Fingerprint',
+      'X-Signaling-Timestamp',
+      'X-Signaling-Signature',
+      'X-Request-Timestamp',
+      'X-Request-Signature',
     ],
     exposedHeaders: ['ETag', 'Content-Language', 'X-I18n-Version'],
     credentials: true,
@@ -77,15 +88,21 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Request parsing with safe payload limit + rawBody preservation for signed webhooks + NoSQL sanitization
-app.use(
-  express.json({
-    limit: '1mb',
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  })
-);
+// Route-scoped 16MB parser for encrypted backups and cross-device media chunks, 1MB default elsewhere
+const largeJsonParser = express.json({ limit: '16mb' });
+const defaultJsonParser = express.json({
+  limit: '1mb',
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/backups') || req.path.startsWith('/api/transfer')) {
+    return largeJsonParser(req, res, next);
+  }
+  return defaultJsonParser(req, res, next);
+});
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(sanitizeNoSql);
 
@@ -107,6 +124,14 @@ app.get('/', (req, res) => {
 app.use('/api/health', healthRoutes);
 app.use('/api/i18n', i18nRoutes);
 app.use('/api/auth', authRoutes);
+app.post('/api/devices/fcm-token', protect, validate(schemas.syncFcmToken), syncFcmToken);
+app.use('/api/backups', backupRoutes);
+app.use('/api/transfer', transferRoutes);
+app.use('/api/calls', callRoutes);
+app.use('/api/groups', groupRouter);
+app.use('/api/projects', projectRouter);
+app.use('/api/chats', chatRouter);
+app.use('/api/content', contentRouter);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/business', businessRoutes);

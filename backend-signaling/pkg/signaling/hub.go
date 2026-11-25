@@ -62,24 +62,31 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// Client represents an active WebSocket connection belonging to a specific user.
+// Client represents an active WebSocket connection belonging to a specific user & optional device.
 type Client struct {
-	ConnID string
-	UserID string
-	Conn   *websocket.Conn
-	Send   chan []byte
-	Done   chan struct{}
-	Once   sync.Once
+	ConnID   string
+	UserID   string
+	DeviceID string
+	Conn     *websocket.Conn
+	Send     chan []byte
+	Done     chan struct{}
+	Once     sync.Once
 }
 
 // NewClient initializes a new Client instance.
 func NewClient(userID string, conn *websocket.Conn) *Client {
+	return NewClientWithDevice(userID, "", conn)
+}
+
+// NewClientWithDevice initializes a new Client tagged with a specific DeviceID.
+func NewClientWithDevice(userID, deviceID string, conn *websocket.Conn) *Client {
 	return &Client{
-		ConnID: randomHex(12),
-		UserID: userID,
-		Conn:   conn,
-		Send:   make(chan []byte, sendChanBuf),
-		Done:   make(chan struct{}),
+		ConnID:   randomHex(12),
+		UserID:   userID,
+		DeviceID: strings.TrimSpace(deviceID),
+		Conn:     conn,
+		Send:     make(chan []byte, sendChanBuf),
+		Done:     make(chan struct{}),
 	}
 }
 
@@ -132,7 +139,8 @@ func (c *Client) WritePump() {
 
 type Shard struct {
 	sync.RWMutex
-	clients map[string]*Client
+	clients      map[string]*Client
+	multiClients map[string]map[string]*Client
 }
 
 // Hub manages active WebSocket clients and handles message routing across instances.
@@ -180,7 +188,10 @@ func NewHub(rdb *redis.Client) *Hub {
 	}
 
 	for i := 0; i < NumShards; i++ {
-		h.shards[i] = &Shard{clients: make(map[string]*Client)}
+		h.shards[i] = &Shard{
+			clients:      make(map[string]*Client),
+			multiClients: make(map[string]map[string]*Client),
+		}
 	}
 
 	return h
@@ -199,16 +210,25 @@ func (h *Hub) getMappingValue(connID string) string {
 	return fmt.Sprintf("%s:%s", h.NodeID, connID)
 }
 
-// Register adds a client connection to the hub shard.
+// Register adds a client connection to the hub shard, preserving concurrent distinct devices per user.
 func (h *Hub) Register(client *Client) {
 	if client == nil || strings.TrimSpace(client.UserID) == "" {
 		return
 	}
 	shard := h.getShard(client.UserID)
 	shard.Lock()
-	if old, ok := shard.clients[client.UserID]; ok {
-		old.Close()
+	if shard.multiClients[client.UserID] == nil {
+		shard.multiClients[client.UserID] = make(map[string]*Client)
 	}
+	// Replace only an existing connection on the same deviceId (or untagged legacy connection)
+	for existingConnID, existing := range shard.multiClients[client.UserID] {
+		if (client.DeviceID == "" && existing.DeviceID == "") ||
+			(client.DeviceID != "" && existing.DeviceID == client.DeviceID) {
+			delete(shard.multiClients[client.UserID], existingConnID)
+			existing.Close()
+		}
+	}
+	shard.multiClients[client.UserID][client.ConnID] = client
 	shard.clients[client.UserID] = client
 	shard.Unlock()
 }
@@ -260,7 +280,21 @@ func (h *Hub) Unregister(client *Client) {
 	}
 	shard := h.getShard(client.UserID)
 	shard.Lock()
-	if cur, ok := shard.clients[client.UserID]; ok && cur == client {
+	if conns, ok := shard.multiClients[client.UserID]; ok {
+		if _, found := conns[client.ConnID]; found {
+			delete(conns, client.ConnID)
+			client.Close()
+		}
+		if len(conns) == 0 {
+			delete(shard.multiClients, client.UserID)
+			delete(shard.clients, client.UserID)
+		} else if cur, exists := shard.clients[client.UserID]; exists && cur == client {
+			for _, replacement := range conns {
+				shard.clients[client.UserID] = replacement
+				break
+			}
+		}
+	} else if cur, ok := shard.clients[client.UserID]; ok && cur == client {
 		delete(shard.clients, client.UserID)
 		client.Close()
 	}
@@ -285,22 +319,42 @@ func (h *Hub) GetClient(userID string) (*Client, bool) {
 	return client, ok
 }
 
-// SendTo delivers a message directly to a locally connected client.
+// SendTo delivers a message directly to all active local device connections for userID.
 func (h *Hub) SendTo(userID string, msg []byte) bool {
-	client, ok := h.GetClient(userID)
-	if !ok {
-		return false
-	}
+	return h.SendToDevice(userID, "", msg)
+}
 
-	select {
-	case <-client.Done:
-		return false
-	case client.Send <- msg:
-		return true
-	default:
-		go h.Unregister(client)
-		return false
+// SendToDevice delivers a message to a specific deviceID for userID (or all devices if targetDeviceID is empty).
+func (h *Hub) SendToDevice(userID, targetDeviceID string, msg []byte) bool {
+	shard := h.getShard(userID)
+	shard.RLock()
+	connsMap := shard.multiClients[userID]
+	var targets []*Client
+	if len(connsMap) > 0 {
+		for _, c := range connsMap {
+			if targetDeviceID == "" || c.DeviceID == targetDeviceID {
+				targets = append(targets, c)
+			}
+		}
+	} else if c, ok := shard.clients[userID]; ok {
+		if targetDeviceID == "" || c.DeviceID == targetDeviceID {
+			targets = append(targets, c)
+		}
 	}
+	shard.RUnlock()
+
+	delivered := false
+	for _, client := range targets {
+		select {
+		case <-client.Done:
+			continue
+		case client.Send <- msg:
+			delivered = true
+		default:
+			go h.Unregister(client)
+		}
+	}
+	return delivered
 }
 
 // RouteSignal routes a message to a target user, either locally or through Redis Streams.
@@ -654,13 +708,22 @@ func (h *Hub) Shutdown(ctx context.Context) {
 	}
 }
 
-// Run listens to the Redis Pub/Sub pattern "match:notify:*" for backward-compatibility.
+// RealtimeEventEnvelope matches messages published on "oozox:realtime:events" by Node Backend.
+type RealtimeEventEnvelope struct {
+	Type           string          `json:"type"`
+	TargetUserIDs  []string        `json:"targetUserIds"`
+	TargetDeviceID string          `json:"targetDeviceId,omitempty"`
+	Payload        json.RawMessage `json:"payload"`
+	EmittedAt      string          `json:"emittedAt,omitempty"`
+}
+
+// Run listens to both "match:notify:*" and "oozox:realtime:events" Redis Pub/Sub channels.
 func (h *Hub) Run(ctx context.Context) {
 	if h.rdb == nil {
 		return
 	}
 
-	pubsub := h.rdb.PSubscribe(ctx, "match:notify:*")
+	pubsub := h.rdb.PSubscribe(ctx, "match:notify:*", "oozox:realtime:events")
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
@@ -672,6 +735,33 @@ func (h *Hub) Run(ctx context.Context) {
 			if !ok {
 				return
 			}
+			if msg.Channel == "oozox:realtime:events" {
+				var ev RealtimeEventEnvelope
+				if err := json.Unmarshal([]byte(msg.Payload), &ev); err != nil || ev.Type == "" {
+					continue
+				}
+				outbound, err := json.Marshal(map[string]interface{}{
+					"type":      ev.Type,
+					"payload":   ev.Payload,
+					"emittedAt": ev.EmittedAt,
+				})
+				if err != nil {
+					continue
+				}
+				for _, uid := range ev.TargetUserIDs {
+					cleanUID := strings.TrimSpace(uid)
+					if cleanUID == "" {
+						continue
+					}
+					if ev.TargetDeviceID != "" {
+						h.SendToDevice(cleanUID, ev.TargetDeviceID, outbound)
+					} else {
+						_ = h.RouteSignal(ctx, cleanUID, outbound)
+					}
+				}
+				continue
+			}
+
 			targetUserID := strings.TrimPrefix(msg.Channel, "match:notify:")
 			if targetUserID != "" {
 				h.SendTo(targetUserID, []byte(msg.Payload))

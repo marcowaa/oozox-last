@@ -7,6 +7,17 @@ sealed interface Screen {
     data object Onboarding : Screen
 
     @Serializable
+    data class PostOtpTransferGateway(
+        val isExistingUser: Boolean = true,
+        val backupCount: Int = 0
+    ) : Screen
+
+    @Serializable
+    data class PostOtpRestoreChoice(
+        val backupCount: Int = 0
+    ) : Screen
+
+    @Serializable
     data object MainTabs : Screen
 
     @Serializable
@@ -37,6 +48,11 @@ sealed interface Screen {
     data object Gold : Screen
 }
 
+data class PostOtpGatewayDecision(
+    val isExistingUser: Boolean = false,
+    val hasOtherActiveDevice: Boolean = false,
+    val backupCount: Int = 0
+)
 
 enum class BottomTab(val route: String, val labelKey: String) {
     CHATS("chats", "chats"),

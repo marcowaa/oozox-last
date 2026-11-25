@@ -24,8 +24,14 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE username = :username LIMIT 1")
     suspend fun getUserByUsername(username: String): UserEntity?
 
+    @Query("SELECT * FROM users")
+    suspend fun getAllUsersSync(): List<UserEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUsers(users: List<UserEntity>)
 
     @Query("DELETE FROM users WHERE id IN (:userIds)")
     suspend fun deleteUsers(userIds: List<String>)
@@ -74,6 +80,9 @@ interface ContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContact(contact: ContactEntity)
 
+    @Query("SELECT * FROM contacts ORDER BY name ASC")
+    suspend fun getAllContactsSync(): List<ContactEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContacts(contacts: List<ContactEntity>)
 }
@@ -97,6 +106,9 @@ interface ChatDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChat(chat: ChatEntity)
+
+    @Query("SELECT * FROM chats ORDER BY isPinned DESC, lastMessageTime DESC, createdAt DESC")
+    suspend fun getAllChatsSync(): List<ChatEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChats(chats: List<ChatEntity>)
@@ -145,6 +157,9 @@ interface MessageDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: MessageEntity)
+
+    @Query("SELECT * FROM messages ORDER BY timestamp ASC")
+    suspend fun getAllMessagesSync(): List<MessageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessages(messages: List<MessageEntity>)
@@ -239,11 +254,23 @@ interface ChatAccountDao {
     @Query("SELECT * FROM hashtag_entries")
     suspend fun getAllHashtagEntriesSync(): List<HashtagEntryEntity>
 
+    @Query("SELECT * FROM chat_accounts ORDER BY createdAt ASC")
+    suspend fun getAllChatAccountsSync(): List<ChatAccountEntity>
+
+    @Query("SELECT * FROM hashtag_accounts")
+    suspend fun getAllHashtagAccountsSync(): List<HashtagAccountEntity>
+
+    @Query("SELECT * FROM entry_comments ORDER BY createdAt ASC")
+    suspend fun getAllCommentsSync(): List<CommentEntity>
+
     @Query("SELECT * FROM entry_comments WHERE targetId = :targetId ORDER BY createdAt ASC")
     fun getCommentsForTarget(targetId: String): Flow<List<CommentEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertComment(comment: CommentEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertComments(comments: List<CommentEntity>)
 }
 
 @Dao
@@ -283,6 +310,12 @@ interface WorkGroupDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGroupMember(member: GroupMemberEntity)
+
+    @Query("SELECT * FROM work_groups ORDER BY createdAt DESC")
+    suspend fun getAllWorkGroupsSync(): List<WorkGroupEntity>
+
+    @Query("SELECT * FROM group_members")
+    suspend fun getAllGroupMembersSync(): List<GroupMemberEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGroupMembers(members: List<GroupMemberEntity>)
@@ -333,6 +366,9 @@ interface ProjectDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProject(project: ProjectEntity)
 
+    @Query("SELECT * FROM projects ORDER BY createdAt DESC")
+    suspend fun getAllProjectsSync(): List<ProjectEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProjects(projects: List<ProjectEntity>)
 
@@ -369,6 +405,9 @@ interface TransactionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransactions(transactions: List<TransactionEntity>)
 
+    @Query("SELECT * FROM gold_transactions ORDER BY timestamp DESC")
+    suspend fun getAllTransactionsSync(): List<TransactionEntity>
+
     @Query("UPDATE gold_transactions SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: String, status: String)
 
@@ -381,6 +420,9 @@ interface GoldPurchaseDao {
     @Query("SELECT * FROM gold_purchases ORDER BY createdAt DESC")
     fun getAllPurchases(): Flow<List<GoldPurchaseEntity>>
 
+    @Query("SELECT * FROM gold_purchases ORDER BY createdAt DESC")
+    suspend fun getAllPurchasesSync(): List<GoldPurchaseEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPurchase(purchase: GoldPurchaseEntity)
 
@@ -392,6 +434,9 @@ interface GoldPurchaseDao {
 interface TraderRequestDao {
     @Query("SELECT * FROM trader_requests ORDER BY submittedAt DESC")
     fun getAllTraderRequests(): Flow<List<TraderRequestEntity>>
+
+    @Query("SELECT * FROM trader_requests ORDER BY submittedAt DESC")
+    suspend fun getAllTraderRequestsSync(): List<TraderRequestEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTraderRequest(request: TraderRequestEntity)
@@ -408,6 +453,9 @@ interface AdminConfigDao {
     @Query("SELECT * FROM admin_config WHERE id = 1 LIMIT 1")
     fun getConfig(): Flow<AdminConfigEntity?>
 
+    @Query("SELECT * FROM admin_config WHERE id = 1 LIMIT 1")
+    suspend fun getConfigSync(): AdminConfigEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveConfig(config: AdminConfigEntity)
 }
@@ -423,8 +471,14 @@ interface ProjectMemberDao {
     @Query("SELECT * FROM project_members ORDER BY addedAt DESC")
     fun getAllProjectMembers(): Flow<List<ProjectMemberEntity>>
 
+    @Query("SELECT * FROM project_members ORDER BY addedAt DESC")
+    suspend fun getAllProjectMembersSync(): List<ProjectMemberEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: ProjectMemberEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMembers(members: List<ProjectMemberEntity>)
 
     @Query("UPDATE project_members SET role = :newRole WHERE id = :memberId")
     suspend fun updateMemberRole(memberId: String, newRole: String)
@@ -438,8 +492,14 @@ interface ProjectAuditLogDao {
     @Query("SELECT * FROM project_audit_logs WHERE projectId = :projectId ORDER BY timestamp DESC")
     fun getAuditLogsForProject(projectId: String): Flow<List<ProjectAuditLogEntity>>
 
+    @Query("SELECT * FROM project_audit_logs ORDER BY timestamp DESC")
+    suspend fun getAllAuditLogsSync(): List<ProjectAuditLogEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAuditLog(log: ProjectAuditLogEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAuditLogs(logs: List<ProjectAuditLogEntity>)
 }
 
 @Dao
@@ -447,11 +507,17 @@ interface ImmutableLedgerDao {
     @Query("SELECT * FROM immutable_ledger ORDER BY timestamp DESC")
     fun getAllLedgerEntries(): Flow<List<LedgerEntryEntity>>
 
+    @Query("SELECT * FROM immutable_ledger ORDER BY timestamp DESC")
+    suspend fun getAllLedgerEntriesSync(): List<LedgerEntryEntity>
+
     @Query("SELECT * FROM immutable_ledger WHERE accountOwnerId = :ownerId OR counterPartyId = :ownerId ORDER BY timestamp DESC")
     fun getLedgerEntriesForUser(ownerId: String): Flow<List<LedgerEntryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertEntry(entry: LedgerEntryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertEntriesIgnore(entries: List<LedgerEntryEntity>)
 }
 
 @Dao
@@ -459,8 +525,14 @@ interface ClearingSettlementDao {
     @Query("SELECT * FROM clearing_settlements ORDER BY timestamp DESC")
     fun getAllSettlements(): Flow<List<ClearingSettlementEntity>>
 
+    @Query("SELECT * FROM clearing_settlements ORDER BY timestamp DESC")
+    suspend fun getAllSettlementsSync(): List<ClearingSettlementEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSettlement(settlement: ClearingSettlementEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSettlements(settlements: List<ClearingSettlementEntity>)
 }
 
 @Dao
@@ -468,8 +540,14 @@ interface SyncQueueDao {
     @Query("SELECT * FROM sync_queue WHERE status = 'PENDING' ORDER BY timestamp ASC")
     fun getPendingItems(): Flow<List<SyncQueueEntity>>
 
+    @Query("SELECT * FROM sync_queue ORDER BY timestamp ASC")
+    suspend fun getAllSyncItemsSync(): List<SyncQueueEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSyncItem(item: SyncQueueEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSyncItems(items: List<SyncQueueEntity>)
 
     @Query("UPDATE sync_queue SET status = :status, retryCount = retryCount + 1, errorMessage = :error WHERE id = :id")
     suspend fun updateSyncStatus(id: String, status: String, error: String?)
@@ -492,6 +570,9 @@ interface SubscriptionPlanDao {
     @Query("SELECT * FROM subscription_plans ORDER BY monthlyPrice ASC")
     fun getAllPlans(): Flow<List<SubscriptionPlanEntity>>
 
+    @Query("SELECT * FROM subscription_plans ORDER BY monthlyPrice ASC")
+    suspend fun getAllPlansSync(): List<SubscriptionPlanEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlan(plan: SubscriptionPlanEntity)
 
@@ -507,8 +588,14 @@ interface SubscriptionRequestDao {
     @Query("SELECT * FROM subscription_requests ORDER BY requestedAt DESC")
     fun getAllRequests(): Flow<List<SubscriptionRequestEntity>>
 
+    @Query("SELECT * FROM subscription_requests ORDER BY requestedAt DESC")
+    suspend fun getAllRequestsSync(): List<SubscriptionRequestEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRequest(request: SubscriptionRequestEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRequests(requests: List<SubscriptionRequestEntity>)
 
     @Query("UPDATE subscription_requests SET status = :status, reviewedAt = :reviewedAt, adminNotes = :notes WHERE id = :id")
     suspend fun updateRequestStatus(id: String, status: String, reviewedAt: Long, notes: String?)
@@ -522,8 +609,14 @@ interface PromoAnnouncementDao {
     @Query("SELECT * FROM promo_announcements ORDER BY createdAt DESC")
     fun getAllAnnouncements(): Flow<List<PromoAnnouncementEntity>>
 
+    @Query("SELECT * FROM promo_announcements ORDER BY createdAt DESC")
+    suspend fun getAllAnnouncementsSync(): List<PromoAnnouncementEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAnnouncement(announcement: PromoAnnouncementEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAnnouncements(announcements: List<PromoAnnouncementEntity>)
 
     @Query("UPDATE promo_announcements SET isActive = :isActive WHERE id = :id")
     suspend fun setAnnouncementActive(id: String, isActive: Boolean)
@@ -539,6 +632,9 @@ interface PromoAnnouncementDao {
 interface MerchantStoreDao {
     @Query("SELECT * FROM merchant_products WHERE isAvailable = 1 ORDER BY createdAt DESC")
     fun getAllProducts(): Flow<List<MerchantProductEntity>>
+
+    @Query("SELECT * FROM merchant_products ORDER BY createdAt DESC")
+    suspend fun getAllProductsSync(): List<MerchantProductEntity>
 
     @Query("SELECT * FROM merchant_products WHERE merchantId = :merchantId ORDER BY createdAt DESC")
     fun getProductsByMerchant(merchantId: String): Flow<List<MerchantProductEntity>>
@@ -561,8 +657,14 @@ interface MerchantStoreDao {
     @Query("SELECT * FROM merchant_daily_sales WHERE merchantId = :merchantId ORDER BY saleTimestamp DESC")
     fun getAllSalesForMerchant(merchantId: String): Flow<List<MerchantDailySaleEntity>>
 
+    @Query("SELECT * FROM merchant_daily_sales ORDER BY saleTimestamp DESC")
+    suspend fun getAllSalesSync(): List<MerchantDailySaleEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSale(sale: MerchantDailySaleEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSales(sales: List<MerchantDailySaleEntity>)
 
     @Query("UPDATE merchant_daily_sales SET isClosedInDailyReport = 1 WHERE merchantId = :merchantId AND isClosedInDailyReport = 0")
     suspend fun markSalesAsClosed(merchantId: String)
@@ -570,8 +672,14 @@ interface MerchantStoreDao {
     @Query("SELECT * FROM merchant_daily_closing_reports WHERE merchantId = :merchantId ORDER BY reportTimestamp DESC")
     fun getClosingReportsForMerchant(merchantId: String): Flow<List<MerchantDailyClosingReportEntity>>
 
+    @Query("SELECT * FROM merchant_daily_closing_reports ORDER BY reportTimestamp DESC")
+    suspend fun getAllClosingReportsSync(): List<MerchantDailyClosingReportEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertClosingReport(report: MerchantDailyClosingReportEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertClosingReports(reports: List<MerchantDailyClosingReportEntity>)
 }
 
 @Dao
@@ -581,6 +689,9 @@ interface MerchantReviewDao {
 
     @Query("SELECT * FROM merchant_reviews ORDER BY timestamp DESC")
     fun getAllReviews(): Flow<List<MerchantReviewEntity>>
+
+    @Query("SELECT * FROM merchant_reviews ORDER BY timestamp DESC")
+    suspend fun getAllReviewsSync(): List<MerchantReviewEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReview(review: MerchantReviewEntity)
@@ -597,8 +708,14 @@ interface PriceAlertDao {
     @Query("SELECT * FROM price_alerts ORDER BY createdAt DESC")
     fun getAllAlerts(): Flow<List<PriceAlertEntity>>
 
+    @Query("SELECT * FROM price_alerts ORDER BY createdAt DESC")
+    suspend fun getAllAlertsSync(): List<PriceAlertEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlert(alert: PriceAlertEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAlerts(alerts: List<PriceAlertEntity>)
 
     @Query("DELETE FROM price_alerts WHERE id = :alertId")
     suspend fun deleteAlert(alertId: String)
@@ -615,11 +732,17 @@ interface HiddenProfileDao {
     @Query("SELECT * FROM hidden_profiles ORDER BY createdAt DESC")
     fun getAllHiddenProfiles(): Flow<List<HiddenProfileEntity>>
 
+    @Query("SELECT * FROM hidden_profiles ORDER BY createdAt DESC")
+    suspend fun getAllHiddenProfilesSync(): List<HiddenProfileEntity>
+
     @Query("SELECT * FROM hidden_profiles WHERE id = :profileId LIMIT 1")
     suspend fun getProfileById(profileId: String): HiddenProfileEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHiddenProfile(profile: HiddenProfileEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHiddenProfiles(profiles: List<HiddenProfileEntity>)
 
     @Query("UPDATE hidden_profiles SET silentNotifications = :silent WHERE id = :profileId")
     suspend fun updateProfileNotificationSetting(profileId: String, silent: Boolean)
@@ -636,6 +759,9 @@ interface HiddenSubAccountDao {
     @Query("SELECT * FROM hidden_sub_accounts ORDER BY createdAt DESC")
     fun getAllSubAccounts(): Flow<List<HiddenSubAccountEntity>>
 
+    @Query("SELECT * FROM hidden_sub_accounts ORDER BY createdAt DESC")
+    suspend fun getAllSubAccountsSync(): List<HiddenSubAccountEntity>
+
     @Query("SELECT * FROM hidden_sub_accounts WHERE id = :id LIMIT 1")
     suspend fun getSubAccountById(id: String): HiddenSubAccountEntity?
 
@@ -644,6 +770,9 @@ interface HiddenSubAccountDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubAccount(account: HiddenSubAccountEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubAccounts(accounts: List<HiddenSubAccountEntity>)
 
     @Update
     suspend fun updateSubAccount(account: HiddenSubAccountEntity)
@@ -665,6 +794,9 @@ interface HiddenSubAccountDao {
 interface DailyAccountingRecordDao {
     @Query("SELECT * FROM daily_accounting_records ORDER BY timestamp DESC")
     fun getAllRecords(): Flow<List<DailyAccountingRecordEntity>>
+
+    @Query("SELECT * FROM daily_accounting_records ORDER BY timestamp DESC")
+    suspend fun getAllRecordsSync(): List<DailyAccountingRecordEntity>
 
     @Query("SELECT * FROM daily_accounting_records WHERE groupId = :groupId ORDER BY timestamp DESC")
     fun getRecordsForGroup(groupId: String): Flow<List<DailyAccountingRecordEntity>>
@@ -689,6 +821,9 @@ interface DailyAccountingRecordDao {
 interface EmployeeAttendanceDao {
     @Query("SELECT * FROM employee_attendance ORDER BY timestamp DESC")
     fun getAllAttendance(): Flow<List<EmployeeAttendanceEntity>>
+
+    @Query("SELECT * FROM employee_attendance ORDER BY timestamp DESC")
+    suspend fun getAllAttendanceSync(): List<EmployeeAttendanceEntity>
 
     @Query("SELECT * FROM employee_attendance WHERE groupId = :groupId ORDER BY timestamp DESC")
     fun getAttendanceForGroup(groupId: String): Flow<List<EmployeeAttendanceEntity>>
@@ -716,6 +851,9 @@ interface EmployeeAttendanceDao {
 interface FinancialComplaintDao {
     @Query("SELECT * FROM financial_complaints ORDER BY timestamp DESC")
     fun getAllComplaints(): Flow<List<FinancialComplaintEntity>>
+
+    @Query("SELECT * FROM financial_complaints ORDER BY timestamp DESC")
+    suspend fun getAllComplaintsSync(): List<FinancialComplaintEntity>
 
     @Query("SELECT * FROM financial_complaints WHERE groupId = :groupId ORDER BY timestamp DESC")
     fun getComplaintsForGroup(groupId: String): Flow<List<FinancialComplaintEntity>>
@@ -903,6 +1041,9 @@ interface ProjectTaskDao {
     @Query("UPDATE project_tasks SET isArchived = 1, status = 'COMPLETED', financialAmount = :financialAmount, financialNotes = :financialNotes, adminConfirmedAt = :confirmedAt, updatedAt = :confirmedAt WHERE id = :id")
     suspend fun confirmAndArchiveTask(id: String, financialAmount: Double, financialNotes: String?, confirmedAt: Long = System.currentTimeMillis())
 
+    @Query("SELECT * FROM project_tasks ORDER BY createdAt DESC")
+    suspend fun getAllProjectTasksSync(): List<ProjectTaskEntity>
+
     @Query("SELECT * FROM project_tasks WHERE isArchived = 1 ORDER BY adminConfirmedAt DESC")
     fun getArchivedTasks(): Flow<List<ProjectTaskEntity>>
 }
@@ -912,6 +1053,9 @@ interface ShiftHandoverDao {
     @Query("SELECT * FROM shift_handovers ORDER BY logoutTime DESC")
     fun getAllShiftHandovers(): Flow<List<ShiftHandoverEntity>>
 
+    @Query("SELECT * FROM shift_handovers ORDER BY logoutTime DESC")
+    suspend fun getAllShiftHandoversSync(): List<ShiftHandoverEntity>
+
     @Query("SELECT * FROM shift_handovers WHERE cashierId = :cashierId ORDER BY logoutTime DESC")
     fun getHandoversForCashier(cashierId: String): Flow<List<ShiftHandoverEntity>>
 
@@ -920,6 +1064,9 @@ interface ShiftHandoverDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertShiftHandover(handover: ShiftHandoverEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertShiftHandovers(handovers: List<ShiftHandoverEntity>)
 
     @Query("SELECT * FROM shift_handovers WHERE id = :id LIMIT 1")
     suspend fun getHandoverById(id: String): ShiftHandoverEntity?
@@ -952,20 +1099,35 @@ interface DynamicExcelDao {
     @Query("SELECT * FROM dynamic_excel_templates WHERE projectId = :projectId OR projectId IS NULL ORDER BY updatedAt DESC")
     fun getTemplatesForProject(projectId: String?): Flow<List<DynamicExcelTemplateEntity>>
 
+    @Query("SELECT * FROM dynamic_excel_templates ORDER BY updatedAt DESC")
+    suspend fun getAllTemplatesSync(): List<DynamicExcelTemplateEntity>
+
     @Query("SELECT * FROM dynamic_excel_templates WHERE id = :id LIMIT 1")
     suspend fun getTemplateById(id: String): DynamicExcelTemplateEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTemplate(template: DynamicExcelTemplateEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTemplates(templates: List<DynamicExcelTemplateEntity>)
+
     @Query("SELECT * FROM dynamic_excel_custom_fields WHERE templateId = :templateId ORDER BY evaluationOrder ASC")
     fun getCustomFields(templateId: String): Flow<List<DynamicExcelCustomFieldEntity>>
+
+    @Query("SELECT * FROM dynamic_excel_custom_fields ORDER BY evaluationOrder ASC")
+    suspend fun getAllCustomFieldsSync(): List<DynamicExcelCustomFieldEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomField(field: DynamicExcelCustomFieldEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCustomFields(fields: List<DynamicExcelCustomFieldEntity>)
+
     @Query("SELECT * FROM dynamic_excel_row_records WHERE templateId = :templateId ORDER BY rowNumber ASC")
     fun getRowsForTemplate(templateId: String): Flow<List<DynamicExcelRowRecordEntity>>
+
+    @Query("SELECT * FROM dynamic_excel_row_records ORDER BY rowNumber ASC")
+    suspend fun getAllRowsSync(): List<DynamicExcelRowRecordEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRow(row: DynamicExcelRowRecordEntity)
@@ -994,11 +1156,20 @@ interface BusinessHrDao {
     @Query("SELECT * FROM business_profiles LIMIT 1")
     suspend fun getBusinessProfileSync(): BusinessProfileEntity?
 
+    @Query("SELECT * FROM business_profiles")
+    suspend fun getAllBusinessProfilesSync(): List<BusinessProfileEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveBusinessProfile(profile: BusinessProfileEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBusinessProfiles(profiles: List<BusinessProfileEntity>)
+
     @Query("SELECT * FROM payroll_adjustments ORDER BY timestamp DESC")
     fun getAllPayrollAdjustments(): Flow<List<PayrollAdjustmentEntity>>
+
+    @Query("SELECT * FROM payroll_adjustments ORDER BY timestamp DESC")
+    suspend fun getAllPayrollAdjustmentsSync(): List<PayrollAdjustmentEntity>
 
     @Query("SELECT * FROM payroll_adjustments WHERE employeeId = :employeeId ORDER BY timestamp DESC")
     fun getPayrollForEmployee(employeeId: String): Flow<List<PayrollAdjustmentEntity>>
@@ -1006,17 +1177,26 @@ interface BusinessHrDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPayrollAdjustment(adjustment: PayrollAdjustmentEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPayrollAdjustments(adjustments: List<PayrollAdjustmentEntity>)
+
     @Query("DELETE FROM payroll_adjustments WHERE id = :id")
     suspend fun deletePayrollAdjustment(id: String)
 
     @Query("SELECT * FROM employee_leaves ORDER BY startDate DESC")
     fun getAllEmployeeLeaves(): Flow<List<EmployeeLeaveEntity>>
 
+    @Query("SELECT * FROM employee_leaves ORDER BY startDate DESC")
+    suspend fun getAllEmployeeLeavesSync(): List<EmployeeLeaveEntity>
+
     @Query("SELECT * FROM employee_leaves WHERE employeeId = :employeeId ORDER BY startDate DESC")
     fun getLeavesForEmployee(employeeId: String): Flow<List<EmployeeLeaveEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEmployeeLeave(leave: EmployeeLeaveEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEmployeeLeaves(leaves: List<EmployeeLeaveEntity>)
 
     @Query("DELETE FROM employee_leaves WHERE id = :id")
     suspend fun deleteEmployeeLeave(id: String)

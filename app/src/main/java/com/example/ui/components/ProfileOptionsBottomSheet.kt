@@ -46,7 +46,7 @@ fun ProfileOptionsBottomSheet(
     onOpenVerification: () -> Unit = {},
     isVerified: Boolean = false,
     onOpenSecuritySettings: () -> Unit,
-    onOpenTrustedDevicesAndPassword: () -> Unit = {},
+    onOpenTrustedDevices: () -> Unit = {},
     onOpenCallPrivacy: () -> Unit = {},
     onImportContacts: () -> Unit = {},
     onOpenNotificationTones: () -> Unit = {},
@@ -259,11 +259,11 @@ fun ProfileOptionsBottomSheet(
                     icon = Icons.Default.DevicesOther,
                     iconBg = GoldPrimary.copy(alpha = 0.14f),
                     iconTint = GoldPrimary,
-                    title = "الأجهزة الموثوقة وكلمة المرور",
-                    subtitle = "إدارة ثقة 30 يوماً وتغيير كلمة السر",
+                    title = "الأجهزة الموثوقة",
+                    subtitle = "إدارة ثقة 30 يوماً والجلسات النشطة",
                     onClick = {
                         onDismiss()
-                        onOpenTrustedDevicesAndPassword()
+                        onOpenTrustedDevices()
                     }
                 )
                 WhatsAppDivider()

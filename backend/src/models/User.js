@@ -6,14 +6,15 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'Please provide user full name'],
+      default: 'مستخدم أوزوكس',
       trim: true,
       maxlength: [100, 'Name cannot exceed 100 characters'],
     },
+    // Preserved strictly for user profile, invoices, contacts & business records (NOT required or used for auth)
     email: {
       type: String,
-      required: [true, 'Please provide a valid email address'],
-      unique: true,
+      required: false,
+      default: undefined,
       trim: true,
       lowercase: true,
       match: [
@@ -34,10 +35,11 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    // Optional legacy column preserved for non-breaking schema compatibility
     password: {
       type: String,
-      required: [true, 'Please provide a secure password'],
-      minlength: [6, 'Password must be at least 6 characters'],
+      required: false,
+      default: undefined,
       select: false,
     },
     role: {
@@ -96,7 +98,25 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Partial unique index on email ONLY when non-empty string exists (allows phone-only users without email, preserves uniqueness for non-auth email profiles)
+userSchema.index(
+  { email: 1 },
+  {
+    name: 'email_1',
+    unique: true,
+    partialFilterExpression: { email: { $type: 'string', $gt: '' } },
+  }
+);
+
 userSchema.pre('validate', function (next) {
+  if (typeof this.email === 'string' && this.email.trim() === '') {
+    this.email = undefined;
+  } else if (this.email === null) {
+    this.email = undefined;
+  }
+  if (typeof this.name !== 'string' || this.name.trim() === '') {
+    this.name = 'مستخدم أوزوكس';
+  }
   if (this.phone && (!this.phoneE164 || this.isModified('phone'))) {
     const normalized = normalizePhoneE164(this.phone);
     if (normalized) {
@@ -106,9 +126,9 @@ userSchema.pre('validate', function (next) {
   next();
 });
 
-// Encrypt password using bcrypt before saving & track password change timestamp
+// Encrypt legacy password if explicitly modified and present
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
+  if (!this.isModified('password') || !this.password) {
     return next();
   }
   const salt = await bcrypt.genSalt(12);
@@ -119,8 +139,8 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-// Method to match user password
 userSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password || !enteredPassword) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

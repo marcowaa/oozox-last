@@ -144,8 +144,6 @@ fun ProfileScreen(
     isLoadingTrustedDevices: Boolean = false,
     onLoadTrustedDevices: () -> Unit = {},
     onRevokeTrustedDevice: (deviceId: String, onDone: (Boolean, String) -> Unit) -> Unit = { _, cb -> cb(false, "") },
-    onChangePassword: suspend (currentPassword: String, newPassword: String, stepUpChallengeId: String?, stepUpCode: String?) -> com.example.data.repository.PasswordChangeOutcome = { _, _, _, _ -> com.example.data.repository.PasswordChangeOutcome.Error("UNSUPPORTED", "") },
-    onRequestStepUpOtp: suspend (channel: String) -> com.example.data.repository.OtpRequestOutcome = { com.example.data.repository.OtpRequestOutcome.Error("UNSUPPORTED", "") },
     onSendBroadcast: ((BroadcastTargetCategory, String, String, Boolean, Boolean, (Int) -> Unit) -> Unit)? = null,
     onUpdateProfileInfo: ((name: String, username: String, type: UserType, jobTitle: String?, bio: String?, education: String?, sectionOrder: String?, storeName: String?, skills: String?) -> Unit)? = null
 ) {
@@ -193,7 +191,7 @@ fun ProfileScreen(
     var showDirectSubAccountModal by remember { mutableStateOf(false) }
     var showCreateParallelSubAccountModal by remember { mutableStateOf(false) }
     var showDatabaseSecurityAuditModal by remember { mutableStateOf(false) }
-    var showTrustedDevicesAndPasswordModal by remember { mutableStateOf(false) }
+    var showTrustedDevicesModal by remember { mutableStateOf(false) }
     var showBroadcastModal by remember { mutableStateOf(false) }
     var showProfileOptionsMenu by remember { mutableStateOf(false) }
     val userMnemonicSeed = remember { SecurityValidator.generateRecoverySeed() }
@@ -1456,16 +1454,14 @@ fun ProfileScreen(
         )
     }
 
-    // Modal: Trusted Devices (30-Day Server Trust) & Password Change
-    if (showTrustedDevicesAndPasswordModal) {
-        ProfileTrustedDevicesAndPasswordDialog(
+    // Modal: Trusted Devices (30-Day Server Trust)
+    if (showTrustedDevicesModal) {
+        ProfileTrustedDevicesDialog(
             trustedDevices = trustedDevices,
             isLoadingDevices = isLoadingTrustedDevices,
             onRefreshDevices = onLoadTrustedDevices,
             onRevokeDevice = onRevokeTrustedDevice,
-            onChangePassword = onChangePassword,
-            onRequestStepUpOtp = onRequestStepUpOtp,
-            onDismiss = { showTrustedDevicesAndPasswordModal = false }
+            onDismiss = { showTrustedDevicesModal = false }
         )
     }
 
@@ -1584,9 +1580,9 @@ fun ProfileScreen(
                 isAppLockActive = user.appLockEnabled
                 showAppLockDialog = true
             },
-            onOpenTrustedDevicesAndPassword = {
+            onOpenTrustedDevices = {
                 onLoadTrustedDevices()
-                showTrustedDevicesAndPasswordModal = true
+                showTrustedDevicesModal = true
             },
             onOpenCallPrivacy = { showCallPrivacyDialog = true },
             onImportContacts = {

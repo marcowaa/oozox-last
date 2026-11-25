@@ -18,13 +18,17 @@ let userBId = '';
 let outsiderToken = '';
 let invoiceId = '';
 
-async function registerAndVerify(payload) {
-  const regRes = await request(app).post('/api/auth/register').send(payload);
+async function registerAndVerify({ phone, name, email, deviceId }) {
+  const reqRes = await request(app).post('/api/auth/otp/request').send({ phone, deviceId });
   const verRes = await request(app).post('/api/auth/otp/verify').send({
-    challengeId: regRes.body.data.otpChallenge.challengeId,
+    challengeId: reqRes.body.data.challengeId,
     code: '998877',
-    deviceId: payload.deviceId,
+    deviceId,
   });
+  await request(app)
+    .patch('/api/auth/me')
+    .set('Authorization', `Bearer ${verRes.body.data.token}`)
+    .send({ name, email });
   return verRes.body.data;
 }
 
@@ -92,23 +96,26 @@ afterAll(async () => {
 });
 
 describe('Security & Penetration Test Suite', () => {
-  it('SEC-01 Privilege Escalation: public register rejects ADMIN role assignment', async () => {
-    const res = await request(app).post('/api/auth/register').send({
-      name: 'Attacker',
-      email: 'attacker@evil.com',
+  it('SEC-01 Privilege Escalation: public OTP verify rejects ADMIN portalScope for non-ADMIN accounts', async () => {
+    const reqRes = await request(app).post('/api/auth/otp/request').send({
       phone: '+201099999999',
-      password: 'Password123!',
-      role: 'ADMIN',
+      deviceId: 'sec_att_dev',
+    });
+    const res = await request(app).post('/api/auth/otp/verify').send({
+      challengeId: reqRes.body.data.challengeId,
+      code: '998877',
+      deviceId: 'sec_att_dev',
+      portalScope: 'ADMIN',
     });
 
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(403);
     expect(res.body.success).toBe(false);
   });
 
-  it('SEC-02 NoSQL Injection: rejects $ne and $gt operator payloads in login & invoice queries', async () => {
+  it('SEC-02 NoSQL Injection: rejects $ne and $gt operator payloads in trusted-login & invoice queries', async () => {
     const loginInj = await request(app)
-      .post('/api/auth/login')
-      .send({ emailOrPhone: { $ne: null }, password: { $gt: '' } });
+      .post('/api/auth/trusted-login')
+      .send({ phone: { $ne: null }, deviceId: { $gt: '' }, deviceTrustToken: 'abc' });
 
     expect(loginInj.statusCode).toBe(400);
     expect(loginInj.body.success).toBe(false);
@@ -231,12 +238,12 @@ describe('Security & Penetration Test Suite', () => {
     expect(delPaidRes.statusCode).toBe(400);
   });
 
-  it('SEC-09 Brute-Force Rate Limiting: blocks repeated failed logins with HTTP 429', async () => {
+  it('SEC-09 Brute-Force Rate Limiting: blocks repeated failed trusted-logins with HTTP 429', async () => {
     let hit429 = false;
     for (let i = 0; i < 15; i++) {
       const res = await request(app)
-        .post('/api/auth/login')
-        .send({ emailOrPhone: 'alpha@oozox.com', password: `WrongPass_${i}` });
+        .post('/api/auth/trusted-login')
+        .send({ phone: '+201011111111', deviceId: 'sec_dev_a', deviceTrustToken: `WrongToken_${i}` });
       if (res.statusCode === 429) {
         hit429 = true;
         break;

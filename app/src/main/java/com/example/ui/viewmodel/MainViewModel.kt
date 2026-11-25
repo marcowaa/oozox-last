@@ -1538,6 +1538,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             repository.saveUser(updated)
             saveRepeatUser(updated)
+            viewModelScope.launch(Dispatchers.IO) {
+                com.example.data.repository.AuthRepository.updateMyProfile(
+                    context = getApplication(),
+                    name = updated.name,
+                    jobTitle = updated.jobTitle,
+                    merchantBio = updated.merchantBio
+                )
+            }
             onComplete()
         }
     }
@@ -1595,44 +1603,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.saveUser(updatedUser)
         saveRepeatUser(updatedUser)
         _isOfflineCacheMode.value = false
-    }
-
-    suspend fun loginWithPassword(
-        emailOrPhone: String,
-        password: String,
-        channel: String = "AUTO"
-    ): com.example.data.repository.AuthOutcome {
-        val outcome = com.example.data.repository.AuthRepository.loginWithPassword(
-            context = getApplication(),
-            emailOrPhone = emailOrPhone,
-            password = password,
-            preferredChannel = channel,
-            autoSendOtp = true
-        )
-        if (outcome is com.example.data.repository.AuthOutcome.Authenticated) {
-            completeServerAuthenticatedUser(outcome.user)
-        }
-        return outcome
-    }
-
-    suspend fun registerAccount(
-        name: String,
-        email: String,
-        phone: String,
-        password: String,
-        role: String = "USER",
-        channel: String = "AUTO"
-    ): com.example.data.repository.AuthOutcome {
-        return com.example.data.repository.AuthRepository.registerAccount(
-            context = getApplication(),
-            name = name,
-            email = email,
-            phone = phone,
-            password = password,
-            role = role,
-            preferredLanguage = _currentLanguage.value.code,
-            preferredChannel = channel
-        )
     }
 
     suspend fun requestServerOtp(
@@ -1717,31 +1687,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return false
     }
 
-    suspend fun requestRecoveryOtp(phone: String, channel: String = "AUTO"): com.example.data.repository.OtpRequestOutcome {
-        return com.example.data.repository.AuthRepository.requestRecoveryOtp(
-            context = getApplication(),
-            phone = phone,
-            channel = channel
-        )
-    }
-
-    suspend fun confirmRecoveryWithOtp(
-        challengeId: String,
-        code: String,
-        newPassword: String
-    ): com.example.data.repository.AuthOutcome {
-        val outcome = com.example.data.repository.AuthRepository.confirmRecoveryWithOtp(
-            context = getApplication(),
-            challengeId = challengeId,
-            code = code,
-            newPassword = newPassword
-        )
-        if (outcome is com.example.data.repository.AuthOutcome.Authenticated) {
-            completeServerAuthenticatedUser(outcome.user)
-        }
-        return outcome
-    }
-
     fun loadTrustedDevices() {
         viewModelScope.launch {
             _isLoadingTrustedDevices.value = true
@@ -1774,21 +1719,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onDone(false, err.message ?: "تعذر إلغاء وثوق الجهاز")
             }
         }
-    }
-
-    suspend fun changeAccountPassword(
-        currentPassword: String,
-        newPassword: String,
-        stepUpChallengeId: String? = null,
-        stepUpCode: String? = null
-    ): com.example.data.repository.PasswordChangeOutcome {
-        return com.example.data.repository.AuthRepository.changePassword(
-            context = getApplication(),
-            currentPassword = currentPassword,
-            newPassword = newPassword,
-            stepUpChallengeId = stepUpChallengeId,
-            stepUpCode = stepUpCode
-        )
     }
 
     fun logout() {

@@ -28,8 +28,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +41,7 @@ import com.example.data.model.UserType
 import com.example.data.repository.AuthOutcome
 import com.example.data.repository.OtpRequestOutcome
 import com.example.data.repository.OtpVerifyOutcome
+import com.example.ui.navigation.PostOtpGatewayDecision
 import com.example.ui.theme.*
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
@@ -69,13 +68,9 @@ fun UserAppPortal(
     allHiddenProfiles: List<HiddenProfileEntity> = emptyList(),
     onTrustedOnlineLogin: suspend (phone: String) -> AuthOutcome,
     onOfflineCacheUnlock: suspend (phone: String) -> Boolean,
-    onLoginWithPassword: suspend (emailOrPhone: String, password: String, channel: String) -> AuthOutcome,
-    onRegisterAccount: suspend (name: String, email: String, phone: String, password: String, role: String, channel: String) -> AuthOutcome,
     onRequestOtp: suspend (purpose: String, channel: String, phone: String?, preAuthToken: String?) -> OtpRequestOutcome,
     onVerifyOtp: suspend (challengeId: String, code: String, phone: String?, preAuthToken: String?, trustDevice: Boolean) -> OtpVerifyOutcome,
-    onRequestRecoveryOtp: suspend (phone: String, channel: String) -> OtpRequestOutcome,
-    onConfirmRecovery: suspend (challengeId: String, code: String, newPassword: String) -> AuthOutcome,
-    onAuthenticatedComplete: () -> Unit,
+    onAuthenticatedComplete: (PostOtpGatewayDecision) -> Unit,
     onSwitchProfile: ((HiddenProfileEntity) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -94,28 +89,14 @@ fun UserAppPortal(
         mutableStateOf(repeatUser != null && isTrustedDevice)
     }
 
-    // Auth Mode Tabs: 0 = Phone OTP, 1 = Email/Phone + Password, 2 = Register
-    var selectedAuthTab by remember { mutableIntStateOf(0) }
-    var authStep by remember { mutableIntStateOf(0) } // 0 = Form, 1 = Server OTP Verification
+    var authStep by remember { mutableIntStateOf(0) } // 0 = Classic Phone Entry, 1 = Server OTP Verification
 
-    // Shared Country + Phone inputs
+    // Country + Phone inputs
     var selectedCountry by remember { mutableStateOf(SecurityValidator.SUPPORTED_COUNTRIES.first()) }
     var showCountryPicker by remember { mutableStateOf(false) }
     var countrySearchQuery by remember { mutableStateOf("") }
     var rawPhone by remember { mutableStateOf("") }
     var selectedDeliveryChannel by remember { mutableStateOf(OtpDeliveryChannel.TELEGRAM) }
-
-    // Password Login inputs
-    var loginIdentifier by remember { mutableStateOf("") }
-    var loginPassword by remember { mutableStateOf("") }
-    var showLoginPassword by remember { mutableStateOf(false) }
-
-    // Register inputs
-    var regName by remember { mutableStateOf("") }
-    var regEmail by remember { mutableStateOf("") }
-    var regPassword by remember { mutableStateOf("") }
-    var regRole by remember { mutableStateOf("USER") } // USER or MERCHANT
-    var showRegPassword by remember { mutableStateOf(false) }
 
     // Active OTP Challenge state (returned from backend)
     var otpChallengeId by remember { mutableStateOf("") }
@@ -135,7 +116,6 @@ fun UserAppPortal(
 
     // Dialog controllers
     var showPinDialog by remember { mutableStateOf(false) }
-    var showRecoveryDialog by remember { mutableStateOf(false) }
 
     val biometricStatus = remember(context) { BiometricHelper.checkBiometricStatus(context) }
     val isBiometricAvailable = biometricStatus == BiometricStatus.AVAILABLE
@@ -188,7 +168,13 @@ fun UserAppPortal(
                     when (val res = onTrustedOnlineLogin(targetPhone)) {
                         is AuthOutcome.Authenticated -> {
                             isProcessingNetwork = false
-                            onAuthenticatedComplete()
+                            onAuthenticatedComplete(
+                                PostOtpGatewayDecision(
+                                    isExistingUser = res.isExistingUser,
+                                    hasOtherActiveDevice = res.hasOtherActiveDevice,
+                                    backupCount = 0
+                                )
+                            )
                         }
                         is AuthOutcome.OtpRequired -> {
                             isProcessingNetwork = false
@@ -208,7 +194,13 @@ fun UserAppPortal(
                     val unlocked = onOfflineCacheUnlock(targetPhone)
                     isProcessingNetwork = false
                     if (unlocked) {
-                        onAuthenticatedComplete()
+                        onAuthenticatedComplete(
+                            PostOtpGatewayDecision(
+                                isExistingUser = true,
+                                hasOtherActiveDevice = false,
+                                backupCount = 0
+                            )
+                        )
                     } else {
                         specificErrorMessage = "انتهت صلاحية الثقة المحلية للجهاز (30 يوماً) — يلزم الاتصال بالإنترنت وإعادة التحقق عبر OTP."
                     }
@@ -329,65 +321,6 @@ fun UserAppPortal(
                             networkFailureError = otpRes.message
                         } else {
                             specificErrorMessage = otpRes.message
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val dispatchPasswordLogin: () -> Unit = {
-        val idTrim = loginIdentifier.trim()
-        if (idTrim.isBlank() || loginPassword.length < 6) {
-            specificErrorMessage = "يرجى إدخال البريد/الهاتف وكلمة السر (6 أحرف فأكثر)."
-        } else {
-            specificErrorMessage = null
-            networkFailureError = null
-            isProcessingNetwork = true
-            coroutineScope.launch {
-                when (val outcome = onLoginWithPassword(idTrim, loginPassword, selectedDeliveryChannel.name)) {
-                    is AuthOutcome.Authenticated -> {
-                        isProcessingNetwork = false
-                        onAuthenticatedComplete()
-                    }
-                    is AuthOutcome.OtpRequired -> {
-                        isProcessingNetwork = false
-                        moveToOtpStep(outcome, idTrim)
-                    }
-                    is AuthOutcome.Error -> {
-                        isProcessingNetwork = false
-                        if (outcome.code == "NETWORK_ERROR") networkFailureError = outcome.message else specificErrorMessage = outcome.message
-                    }
-                }
-            }
-        }
-    }
-
-    val dispatchRegister: () -> Unit = {
-        val res = SecurityValidator.validateMobileNumber(selectedCountry, rawPhone, currentLang)
-        when {
-            regName.trim().length < 2 -> specificErrorMessage = "يرجى إدخال الاسم الكامل."
-            !regEmail.trim().contains("@") -> specificErrorMessage = "يرجى إدخال بريد إلكتروني صحيح."
-            !res.isValid -> specificErrorMessage = res.specificError ?: Translations.get("portal.invalid_phone", currentLang)
-            regPassword.length < 8 -> specificErrorMessage = "كلمة السر يجب أن تكون 8 أحرف على الأقل."
-            else -> {
-                val fullPhone = res.fullFormattedPhone.ifBlank { "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}" }
-                specificErrorMessage = null
-                networkFailureError = null
-                isProcessingNetwork = true
-                coroutineScope.launch {
-                    when (val outcome = onRegisterAccount(regName.trim(), regEmail.trim(), fullPhone, regPassword, regRole, selectedDeliveryChannel.name)) {
-                        is AuthOutcome.Authenticated -> {
-                            isProcessingNetwork = false
-                            onAuthenticatedComplete()
-                        }
-                        is AuthOutcome.OtpRequired -> {
-                            isProcessingNetwork = false
-                            moveToOtpStep(outcome, fullPhone)
-                        }
-                        is AuthOutcome.Error -> {
-                            isProcessingNetwork = false
-                            if (outcome.code == "NETWORK_ERROR") networkFailureError = outcome.message else specificErrorMessage = outcome.message
                         }
                     }
                 }
@@ -553,7 +486,15 @@ fun UserAppPortal(
                                 onClick = {
                                     coroutineScope.launch {
                                         val ok = onOfflineCacheUnlock(repeatUser.phone)
-                                        if (ok) onAuthenticatedComplete()
+                                        if (ok) {
+                                            onAuthenticatedComplete(
+                                                PostOtpGatewayDecision(
+                                                    isExistingUser = true,
+                                                    hasOtherActiveDevice = false,
+                                                    backupCount = 0
+                                                )
+                                            )
+                                        }
                                     }
                                 },
                                 shape = RoundedCornerShape(12.dp),
@@ -651,7 +592,14 @@ fun UserAppPortal(
                                     trustThisDeviceChecked
                                 )) {
                                     is OtpVerifyOutcome.Verified -> {
-                                        onAuthenticatedComplete()
+                                        val authData = verifyRes.data
+                                        onAuthenticatedComplete(
+                                            PostOtpGatewayDecision(
+                                                isExistingUser = authData.isExistingUser,
+                                                hasOtherActiveDevice = authData.hasOtherActiveDevice,
+                                                backupCount = authData.backupSummary?.count ?: 0
+                                            )
+                                        )
                                         OtpVerifyUiResult.Success
                                     }
                                     is OtpVerifyOutcome.Error -> {
@@ -763,295 +711,153 @@ fun UserAppPortal(
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                        // Auth Mode Selector: Phone OTP | Password | New Account
-                        TabRow(
-                            selectedTabIndex = selectedAuthTab,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            contentColor = adaptiveGoldPrimary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                        ) {
-                            Tab(
-                                selected = selectedAuthTab == 0,
-                                onClick = { selectedAuthTab = 0; specificErrorMessage = null; networkFailureError = null },
-                                text = { Text("الهاتف (OTP)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
-                                modifier = Modifier.testTag("tab_auth_phone_otp")
-                            )
-                            Tab(
-                                selected = selectedAuthTab == 1,
-                                onClick = { selectedAuthTab = 1; specificErrorMessage = null; networkFailureError = null },
-                                text = { Text("كلمة المرور", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
-                                modifier = Modifier.testTag("tab_auth_password")
-                            )
-                            Tab(
-                                selected = selectedAuthTab == 2,
-                                onClick = { selectedAuthTab = 2; specificErrorMessage = null; networkFailureError = null },
-                                text = { Text("حساب جديد", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
-                                modifier = Modifier.testTag("tab_auth_register")
-                            )
-                        }
+                        Text(
+                            text = tr("portal.enter_phone_sub"),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        if (selectedAuthTab == 1) {
-                            // --- TAB 1: EMAIL / PHONE + PASSWORD LOGIN ---
-                            OutlinedTextField(
-                                value = loginIdentifier,
-                                onValueChange = { loginIdentifier = it; specificErrorMessage = null; networkFailureError = null },
-                                label = { Text("البريد الإلكتروني أو رقم الهاتف") },
-                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = adaptiveGoldPrimary) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("input_login_identifier")
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = tr("portal.mobile_label"),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 6.dp)
                             )
 
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            OutlinedTextField(
-                                value = loginPassword,
-                                onValueChange = { loginPassword = it; specificErrorMessage = null; networkFailureError = null },
-                                label = { Text("كلمة المرور") },
-                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = adaptiveGoldPrimary) },
-                                trailingIcon = {
-                                    IconButton(onClick = { showLoginPassword = !showLoginPassword }, modifier = Modifier.size(48.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    onClick = { showCountryPicker = true },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .height(54.dp)
+                                        .testTag("btn_country_picker")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(text = selectedCountry.flag, fontSize = 20.sp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = selectedCountry.code,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = adaptiveGoldPrimary,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Icon(
-                                            imageVector = if (showLoginPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "إظهار/إخفاء"
+                                            Icons.Default.ArrowDropDown,
+                                            contentDescription = null,
+                                            tint = adaptiveGoldPrimary,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
-                                },
-                                visualTransformation = if (showLoginPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { dispatchPasswordLogin() }),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("input_login_password")
-                            )
-                        } else {
-                            // --- TAB 0 (PHONE OTP) or TAB 2 (REGISTER) ---
-                            if (selectedAuthTab == 2) {
+                                }
+
                                 OutlinedTextField(
-                                    value = regName,
-                                    onValueChange = { regName = it; specificErrorMessage = null },
-                                    label = { Text("الاسم الكامل") },
-                                    leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = adaptiveGoldPrimary) },
+                                    value = rawPhone,
+                                    onValueChange = { input ->
+                                        rawPhone = input.filter { it.isDigit() || it == ' ' || it == '-' }
+                                        specificErrorMessage = null
+                                        networkFailureError = null
+                                    },
+                                    placeholder = {
+                                        Text(
+                                            text = tr("portal.mobile_hint"),
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    },
                                     singleLine = true,
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.PhoneAndroid,
+                                            contentDescription = null,
+                                            tint = adaptiveGoldPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (rawPhone.isNotEmpty()) {
+                                            IconButton(
+                                                onClick = { rawPhone = "" },
+                                                modifier = Modifier.size(48.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = tr("portal.clear_cd"),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Phone,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = { dispatchPhoneOtp() }
+                                    ),
                                     shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = adaptiveGoldPrimary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                    ),
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("input_reg_name")
+                                        .weight(1f)
+                                        .height(54.dp)
+                                        .testTag("input_phone_number")
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = regEmail,
-                                    onValueChange = { regEmail = it; specificErrorMessage = null },
-                                    label = { Text("البريد الإلكتروني") },
-                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = adaptiveGoldPrimary) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("input_reg_email")
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                            } else {
-                                Text(
-                                    text = tr("portal.enter_phone_sub"),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
                             }
 
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = tr("portal.mobile_label"),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 6.dp)
-                                )
-
+                            if (detectedCarrier != null) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 6.dp, start = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Surface(
-                                        onClick = { showCountryPicker = true },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        border = BorderStroke(1.dp, adaptiveGoldPrimary.copy(alpha = 0.5f)),
-                                        modifier = Modifier
-                                            .height(54.dp)
-                                            .testTag("btn_country_picker")
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = StatusGreen.copy(alpha = 0.15f),
+                                        border = BorderStroke(0.5.dp, StatusGreen.copy(alpha = 0.4f))
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Text(text = selectedCountry.flag, fontSize = 20.sp)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = selectedCountry.code,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = adaptiveGoldPrimary,
-                                                fontFamily = FontFamily.Monospace
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
-                                                Icons.Default.ArrowDropDown,
-                                                contentDescription = null,
-                                                tint = adaptiveGoldPrimary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
+                                        Text(
+                                            text = trFmt("portal.carrier_fmt", "carrier" to detectedCarrier!!),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = StatusGreen,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
                                     }
-
-                                    OutlinedTextField(
-                                        value = rawPhone,
-                                        onValueChange = { input ->
-                                            rawPhone = input.filter { it.isDigit() || it == ' ' || it == '-' }
-                                            specificErrorMessage = null
-                                            networkFailureError = null
-                                        },
-                                        placeholder = {
-                                            Text(
-                                                text = tr("portal.mobile_hint"),
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                            )
-                                        },
-                                        singleLine = true,
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Default.PhoneAndroid,
-                                                contentDescription = null,
-                                                tint = adaptiveGoldPrimary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            if (rawPhone.isNotEmpty()) {
-                                                IconButton(
-                                                    onClick = { rawPhone = "" },
-                                                    modifier = Modifier.size(48.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.Close,
-                                                        contentDescription = tr("portal.clear_cd"),
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = KeyboardType.Phone,
-                                            imeAction = if (selectedAuthTab == 0) ImeAction.Done else ImeAction.Next
-                                        ),
-                                        keyboardActions = KeyboardActions(
-                                            onDone = { if (selectedAuthTab == 0) dispatchPhoneOtp() }
-                                        ),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = adaptiveGoldPrimary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                                        ),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(54.dp)
-                                            .testTag("input_phone_number")
-                                    )
-                                }
-
-                                if (detectedCarrier != null) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 6.dp, start = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = StatusGreen.copy(alpha = 0.15f),
-                                            border = BorderStroke(0.5.dp, StatusGreen.copy(alpha = 0.4f))
-                                        ) {
-                                            Text(
-                                                text = trFmt("portal.carrier_fmt", "carrier" to detectedCarrier!!),
-                                                fontSize = 10.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = StatusGreen,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (autoCorrectionNotice != null) {
-                                    Text(
-                                        text = autoCorrectionNotice!!,
-                                        fontSize = 10.5.sp,
-                                        color = GoldAccent,
-                                        modifier = Modifier.padding(top = 4.dp, start = 4.dp)
-                                    )
                                 }
                             }
 
-                            if (selectedAuthTab == 2) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = regPassword,
-                                    onValueChange = { regPassword = it; specificErrorMessage = null },
-                                    label = { Text("كلمة المرور (8 أحرف فأكثر)") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = adaptiveGoldPrimary) },
-                                    trailingIcon = {
-                                        IconButton(onClick = { showRegPassword = !showRegPassword }, modifier = Modifier.size(48.dp)) {
-                                            Icon(
-                                                imageVector = if (showRegPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                                contentDescription = "إظهار/إخفاء"
-                                            )
-                                        }
-                                    },
-                                    visualTransformation = if (showRegPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("input_reg_password")
+                            if (autoCorrectionNotice != null) {
+                                Text(
+                                    text = autoCorrectionNotice!!,
+                                    fontSize = 10.5.sp,
+                                    color = GoldAccent,
+                                    modifier = Modifier.padding(top = 4.dp, start = 4.dp)
                                 )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    FilterChip(
-                                        selected = regRole == "USER",
-                                        onClick = { regRole = "USER" },
-                                        label = { Text("رجل أعمال / مستثمر", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    FilterChip(
-                                        selected = regRole == "MERCHANT",
-                                        onClick = { regRole = "MERCHANT" },
-                                        label = { Text("تاجر معتمد", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
                             }
                         }
 
@@ -1151,13 +957,7 @@ fun UserAppPortal(
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                                         TextButton(
-                                            onClick = {
-                                                when (selectedAuthTab) {
-                                                    1 -> dispatchPasswordLogin()
-                                                    2 -> dispatchRegister()
-                                                    else -> dispatchPhoneOtp()
-                                                }
-                                            },
+                                            onClick = { dispatchPhoneOtp() },
                                             modifier = Modifier.heightIn(min = 48.dp)
                                         ) {
                                             Icon(Icons.Default.Refresh, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
@@ -1172,13 +972,7 @@ fun UserAppPortal(
                         Spacer(modifier = Modifier.height(18.dp))
 
                         Button(
-                            onClick = {
-                                when (selectedAuthTab) {
-                                    1 -> dispatchPasswordLogin()
-                                    2 -> dispatchRegister()
-                                    else -> dispatchPhoneOtp()
-                                }
-                            },
+                            onClick = { dispatchPhoneOtp() },
                             enabled = !isProcessingNetwork,
                             colors = ButtonDefaults.buttonColors(containerColor = adaptiveGoldPrimary, contentColor = adaptiveOnPrimary),
                             shape = RoundedCornerShape(12.dp),
@@ -1197,11 +991,7 @@ fun UserAppPortal(
                                 )
                             } else {
                                 Text(
-                                    text = when (selectedAuthTab) {
-                                        1 -> "تسجيل الدخول بكلمة المرور"
-                                        2 -> "إنشاء الحساب وإرسال رمز التحقق"
-                                        else -> trFmt("portal.send_otp_via_fmt", "channel" to selectedDeliveryChannel.localizedTitle(currentLang))
-                                    },
+                                    text = trFmt("portal.send_otp_via_fmt", "channel" to selectedDeliveryChannel.localizedTitle(currentLang)),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1224,20 +1014,6 @@ fun UserAppPortal(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(trFmt("portal.back_to_prev_fmt", "name" to repeatUser.name), fontSize = 11.sp, color = adaptiveGoldPrimary)
                             }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        TextButton(
-                            onClick = { showRecoveryDialog = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_portal_open_recovery")
-                        ) {
-                            Icon(Icons.Default.LockReset, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text("نسيت كلمة المرور / استرجاع الحساب عبر OTP", fontSize = 11.5.sp, color = adaptiveGoldPrimary, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -1367,24 +1143,6 @@ fun UserAppPortal(
                 ) {
                     Text(tr("common.close"), color = adaptiveGoldPrimary, fontWeight = FontWeight.Bold)
                 }
-            }
-        )
-    }
-
-    if (showRecoveryDialog) {
-        val defaultRecoveryPhone = if (rawPhone.isNotBlank()) {
-            "${selectedCountry.code}${rawPhone.filter { it.isDigit() }}"
-        } else {
-            repeatUser?.phone.orEmpty()
-        }
-        AccountRecoveryDialog(
-            initialPhone = defaultRecoveryPhone,
-            onRequestRecoveryOtp = onRequestRecoveryOtp,
-            onConfirmRecovery = onConfirmRecovery,
-            onDismiss = { showRecoveryDialog = false },
-            onAccountRecovered = {
-                showRecoveryDialog = false
-                onAuthenticatedComplete()
             }
         )
     }
