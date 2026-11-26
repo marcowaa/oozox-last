@@ -130,6 +130,7 @@ fun ProfileScreen(
     onRestoreBackup: (fileContent: String, passphrase: String) -> Unit = { _, _ -> },
     onDeleteCloudBackup: (backupId: String) -> Unit = {},
     onRefreshCloudBackups: () -> Unit = {},
+    onDownloadCloudBackup: (backupId: String, onResult: (Result<String>) -> Unit) -> Unit = { _, cb -> cb(Result.failure(IllegalStateException("غير متصل بالخادم"))) },
     onCreateSubAccount: ((name: String, pin: String, company: String, role: String, cap: Double, silent: Boolean) -> Unit)? = null,
     onCreateParallelSubAccount: ((username: String, displayName: String, passwordSecret: String, mute: Boolean, discreet: Boolean) -> Unit)? = null,
     onAddDailyRecord: ((DailyAccountingRecordEntity) -> Unit)? = null,
@@ -1265,17 +1266,31 @@ fun ProfileScreen(
         )
     }
 
-    // Modal 4.4: Cloud Backups Registry Modal (Google Drive & Oozox Cloud)
+    // Modal 4.4: Cloud Backups Registry Modal (Oozox Cloud & .oozox)
     if (showCloudBackupsVaultModal) {
         ProfileCloudBackupsVaultDialog(
             userPhone = user.phone,
             cloudBackups = cloudBackups,
             onRestoreBackup = { backup ->
-                restoreFileContent = backup.encryptedPayloadBase64
-                restoreFileName = backup.fileName
-                backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(backup.encryptedPayloadBase64, user.phone)
-                showCloudBackupsVaultModal = false
-                showRestoreModal = true
+                if (backup.encryptedPayloadBase64.isNotBlank()) {
+                    restoreFileContent = backup.encryptedPayloadBase64
+                    restoreFileName = backup.fileName
+                    backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(backup.encryptedPayloadBase64, user.phone)
+                    showCloudBackupsVaultModal = false
+                    showRestoreModal = true
+                } else {
+                    onDownloadCloudBackup(backup.id) { res ->
+                        res.onSuccess { content ->
+                            restoreFileContent = content
+                            restoreFileName = backup.fileName
+                            backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(content, user.phone)
+                            showCloudBackupsVaultModal = false
+                            showRestoreModal = true
+                        }.onFailure { err ->
+                            appToast.showToast(err.message ?: "تعذر تنزيل النسخة السحابية", AppToastType.ERROR)
+                        }
+                    }
+                }
             },
             onDeleteCloudBackup = onDeleteCloudBackup,
             onDismiss = { showCloudBackupsVaultModal = false }
@@ -1394,7 +1409,7 @@ fun ProfileScreen(
         )
     }
 
-    // Modal: Fast Google Cloud Backup (النسخ الاحتياطي السحابي السريع مع زر Google)
+    // Modal: Fast Cloud Backup (النسخ السحابي الموثق مع سحابة أوزوكس)
     if (showGoogleQuickBackupModal) {
         GoogleQuickBackupDialog(
             currentUser = user,
@@ -1403,13 +1418,26 @@ fun ProfileScreen(
             onDismiss = { showGoogleQuickBackupModal = false },
             onCreateGoogleBackup = { passphrase ->
                 onCreateBackup(passphrase, true)
-                appToast.showToast("جاري إنشاء حزمة التشفير المحلية (.oozox)... 🔒", AppToastType.INFO)
+                appToast.showToast("جاري تشفير ورفع النسخة إلى سحابة أوزوكس... 🔒", AppToastType.INFO)
             },
             onRestoreBackup = { backupRecord ->
-                restoreFileContent = backupRecord.encryptedPayloadBase64
-                restoreFileName = backupRecord.fileName
-                backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(backupRecord.encryptedPayloadBase64, user.phone)
-                showRestoreModal = true
+                if (backupRecord.encryptedPayloadBase64.isNotBlank()) {
+                    restoreFileContent = backupRecord.encryptedPayloadBase64
+                    restoreFileName = backupRecord.fileName
+                    backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(backupRecord.encryptedPayloadBase64, user.phone)
+                    showRestoreModal = true
+                } else {
+                    onDownloadCloudBackup(backupRecord.id) { res ->
+                        res.onSuccess { content ->
+                            restoreFileContent = content
+                            restoreFileName = backupRecord.fileName
+                            backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(content, user.phone)
+                            showRestoreModal = true
+                        }.onFailure { err ->
+                            appToast.showToast(err.message ?: "تعذر تنزيل النسخة السحابية", AppToastType.ERROR)
+                        }
+                    }
+                }
             },
             onDeleteBackup = { backupId ->
                 onDeleteCloudBackup(backupId)

@@ -28,7 +28,8 @@ import com.example.ui.screens.ProjectsScreen
 import com.example.ui.theme.GoldChatTheme
 import com.example.util.ApiCreateInvoiceRequest
 import com.example.util.ApiInvoiceItemDto
-import com.example.util.ApiLoginRequest
+import com.example.util.ApiOtpRequestBody
+import com.example.util.ApiOtpVerifyBody
 import com.example.util.ApiUpdateInvoiceStatusRequest
 import com.example.util.DynamicBackendFormulaProcessor
 import com.example.util.ForensicHandoverAnalysisEngine
@@ -192,14 +193,32 @@ class FullStackSecurityAndUiFlowTest {
                 method == "GET" && path == "/api/health" -> 200 to
                     """{"success":true,"message":"OK","data":{"status":"OK","uptime":42.5}}"""
 
-                method == "POST" && path == "/api/auth/login" -> {
-                    assertTrue(reqBody.contains("merchant@oozox.com"))
+                method == "POST" && path == "/api/auth/otp/request" -> {
+                    assertTrue(reqBody.contains("+201012345678"))
+                    200 to """
+                        {
+                          "success": true,
+                          "message": "OTP Sent",
+                          "data": {
+                            "challengeId": "ch_fullstack_1",
+                            "activeChannel": "TELEGRAM",
+                            "cooldownSeconds": 60,
+                            "maxAttempts": 5,
+                            "maskedPhone": "+2010****5678",
+                            "isExistingUser": true
+                          }
+                        }
+                    """.trimIndent()
+                }
+
+                method == "POST" && path == "/api/auth/otp/verify" -> {
+                    assertTrue(reqBody.contains("123456"))
                     200 to """
                         {
                           "success": true,
                           "message": "Authenticated",
                           "data": {
-                            "user": {"id":"u_101","name":"تاجر الذهب","email":"merchant@oozox.com","phone":"01012345678","role":"MERCHANT"},
+                            "user": {"id":"u_101","name":"تاجر الذهب","email":"merchant@oozox.com","phone":"+201012345678","phoneE164":"+201012345678","role":"MERCHANT"},
                             "token": "jwt_signed_token_xyz_123"
                           }
                         }
@@ -253,8 +272,10 @@ class FullStackSecurityAndUiFlowTest {
         assertEquals("OK", healthResp.body()?.data?.status)
         assertEquals("", capturedAuthHeaders.last())
 
-        // 2. Login & persist Bearer token
-        val loginResp = api.login(ApiLoginRequest("merchant@oozox.com", "StrongPass!1"))
+        // 2. Phone-only OTP Request + Verify & persist Bearer token
+        val reqOtpResp = api.postOtpRequest(ApiOtpRequestBody(purpose = "LOGIN", channel = "TELEGRAM", phone = "+201012345678"))
+        assertTrue(reqOtpResp.isSuccessful)
+        val loginResp = api.postOtpVerify(ApiOtpVerifyBody(challengeId = "ch_fullstack_1", code = "123456", phone = "+201012345678"))
         assertTrue(loginResp.isSuccessful)
         val token = loginResp.body()?.data?.token.orEmpty()
         assertEquals("jwt_signed_token_xyz_123", token)

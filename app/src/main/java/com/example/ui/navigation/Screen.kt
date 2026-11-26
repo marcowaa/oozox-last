@@ -9,7 +9,8 @@ sealed interface Screen {
     @Serializable
     data class PostOtpTransferGateway(
         val isExistingUser: Boolean = true,
-        val backupCount: Int = 0
+        val backupCount: Int = 0,
+        val otherDeviceSummary: String = ""
     ) : Screen
 
     @Serializable
@@ -51,7 +52,8 @@ sealed interface Screen {
 data class PostOtpGatewayDecision(
     val isExistingUser: Boolean = false,
     val hasOtherActiveDevice: Boolean = false,
-    val backupCount: Int = 0
+    val backupCount: Int = 0,
+    val otherDeviceSummary: String = ""
 )
 
 enum class BottomTab(val route: String, val labelKey: String) {

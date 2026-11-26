@@ -13,6 +13,7 @@ import {
 } from "./dataStore";
 import { Announcement, TutorialGuide, LiveGoldPrice, ProjectFeature, SiteHeroConfig, AdminUser, SiteThemeConfig } from "./types";
 import { getSavedTheme, applyThemeToDocument, saveTheme } from "./themePresets";
+import { apiGetPublicCmsContent, apiUpdateCmsContent, getWebAccessToken } from "./lib/webAuthClient";
 import { modules as discoveredModules } from "./.generated/mockup-components";
 
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
@@ -188,17 +189,47 @@ function App() {
   const handleUpdateTheme = (updatedTheme: SiteThemeConfig) => {
     setCurrentTheme(updatedTheme);
     saveTheme(updatedTheme);
+    const adminTok = getWebAccessToken('admin');
+    if (adminTok) {
+      void apiUpdateCmsContent(adminTok, { themeConfig: updatedTheme });
+    }
   };
 
-  // Simulated Smooth Data Hydration / Loading state
   const [isDataLoading, setIsDataLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Initial fetch / hydration simulation
-    const timer = setTimeout(() => {
-      setIsDataLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
+    let active = true;
+    void apiGetPublicCmsContent()
+      .then((res) => {
+        if (!active || !res.ok || !res.data?.content) return;
+        const c = res.data.content as Record<string, unknown>;
+        if (c.hero && typeof c.hero === 'object') {
+          setHeroConfig((prev) => ({ ...prev, ...(c.hero as Partial<SiteHeroConfig>) }));
+        }
+        if (Array.isArray(c.features) && c.features.length > 0) {
+          setFeatures(c.features as ProjectFeature[]);
+        }
+        if (Array.isArray(c.announcements) && c.announcements.length > 0) {
+          setAnnouncements(c.announcements as Announcement[]);
+        }
+        if (Array.isArray(c.tutorials) && c.tutorials.length > 0) {
+          setTutorials(c.tutorials as TutorialGuide[]);
+        }
+        if (Array.isArray(c.goldRates) && c.goldRates.length > 0) {
+          setGoldPrices(c.goldRates as LiveGoldPrice[]);
+        }
+        if (c.themeConfig && typeof c.themeConfig === 'object' && (c.themeConfig as SiteThemeConfig).primary) {
+          const srvTheme = c.themeConfig as SiteThemeConfig;
+          setCurrentTheme(srvTheme);
+          applyThemeToDocument(srvTheme);
+        }
+      })
+      .finally(() => {
+        if (active) setIsDataLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Check URL on load & restore verified ADMIN session if token is still valid
@@ -255,30 +286,42 @@ function App() {
     }
   }, []);
 
-  // Save changes to localStorage for persistence
+  const persistCms = (payload: Record<string, unknown>) => {
+    const adminTok = getWebAccessToken('admin');
+    if (adminTok) {
+      void apiUpdateCmsContent(adminTok, payload);
+    }
+  };
+
+  // Save changes to localStorage & Backend PUT /api/content for persistence
   const handleUpdateHeroConfig = (updated: SiteHeroConfig) => {
     setHeroConfig(updated);
     localStorage.setItem('oozox_hero_config', JSON.stringify(updated));
+    persistCms({ hero: updated, heroTitleAr: updated.headline });
   };
 
   const handleUpdateFeatures = (updated: ProjectFeature[]) => {
     setFeatures(updated);
     localStorage.setItem('oozox_features', JSON.stringify(updated));
+    persistCms({ features: updated });
   };
 
   const handleUpdateAnnouncements = (updated: Announcement[]) => {
     setAnnouncements(updated);
     localStorage.setItem('oozox_announcements', JSON.stringify(updated));
+    persistCms({ announcements: updated });
   };
 
   const handleUpdateTutorials = (updated: TutorialGuide[]) => {
     setTutorials(updated);
     localStorage.setItem('oozox_tutorials', JSON.stringify(updated));
+    persistCms({ tutorials: updated });
   };
 
   const handleUpdateGoldPrices = (updated: LiveGoldPrice[]) => {
     setGoldPrices(updated);
     localStorage.setItem('oozox_gold_prices', JSON.stringify(updated));
+    persistCms({ goldRates: updated });
   };
 
   if (previewPath) {

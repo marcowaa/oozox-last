@@ -4,8 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 object FcmNotificationManager {
 
@@ -16,6 +21,15 @@ object FcmNotificationManager {
 
     private val _isPushEnabled = MutableStateFlow(true)
     val isPushEnabled = _isPushEnabled.asStateFlow()
+
+    private val _incomingTransferPushEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val incomingTransferPushEvents = _incomingTransferPushEvents.asSharedFlow()
+
+    private val _sessionRevokedPushEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val sessionRevokedPushEvents = _sessionRevokedPushEvents.asSharedFlow()
+
+    private val _incomingCallPushEvents = MutableSharedFlow<SignalingPayload>(extraBufferCapacity = 8)
+    val incomingCallPushEvents = _incomingCallPushEvents.asSharedFlow()
 
     private var isFirebaseReady = false
 
@@ -52,6 +66,7 @@ object FcmNotificationManager {
                     Log.d(TAG, "FCM Registration Token fetched")
                     _fcmToken.value = token
                     OozoxFirebaseMessagingService.saveToken(context, token)
+                    syncTokenWithServer(token, context)
                 }
 
                 subscribeToTopic("all_users")
@@ -67,9 +82,26 @@ object FcmNotificationManager {
         }
     }
 
-    fun syncTokenWithServer(token: String) {
+    fun syncTokenWithServer(token: String, context: Context? = null) {
         _fcmToken.value = token
-        Log.d(TAG, "FCM Token synchronized: $token")
+        Log.d(TAG, "FCM Token synchronized locally")
+        if (context != null && RetrofitClient.hasActiveSession()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                com.example.data.repository.AuthRepository.registerFcmToken(context.applicationContext, token)
+            }
+        }
+    }
+
+    fun notifyIncomingTransferRequest(transferId: String) {
+        _incomingTransferPushEvents.tryEmit(transferId)
+    }
+
+    fun notifySessionRevoked(reason: String) {
+        _sessionRevokedPushEvents.tryEmit(reason)
+    }
+
+    fun notifyIncomingCall(payload: SignalingPayload) {
+        _incomingCallPushEvents.tryEmit(payload)
     }
 
     fun subscribeToTopic(topic: String) {

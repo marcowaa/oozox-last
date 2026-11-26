@@ -48,13 +48,22 @@ import {
   MessageCircle,
   MessageSquare,
   Laptop,
-  LogOut
+  LogOut,
+  Phone,
+  Video
 } from 'lucide-react';
 import { WebAuthModal, WebTrustedDevicesModal } from './components/WebAuthPortal';
+import { WebRtcCallModal, ActiveWebCallSession } from './components/WebRtcCallModal';
 import {
+  WebChatMessageItem,
+  WebConversationItem,
   WebUserDto,
   apiFetchMe,
+  apiListConversations,
+  apiListMessages,
+  apiSendMessage,
   clearWebAuthSession,
+  getSignalingWsUrl,
   getWebAccessToken,
 } from './lib/webAuthClient';
 
@@ -240,15 +249,79 @@ export const UserAppPortal: React.FC<{
     );
   };
 
-  const [chats] = useState<Array<{
-    id: string;
-    name: string;
-    lastMessage: string;
-    time: string;
-    unreadCount: number;
-    avatarColor: string;
-    isOnline: boolean;
-  }>>([]);
+  const [conversations, setConversations] = useState<WebConversationItem[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [activeMessages, setActiveMessages] = useState<WebChatMessageItem[]>([]);
+  const [chatComposer, setChatComposer] = useState('');
+  const [activeCallSession, setActiveCallSession] = useState<ActiveWebCallSession | null>(null);
+  const [incomingCallSignal, setIncomingCallSignal] = useState<Record<string, unknown> | null>(null);
+  const wsRef = React.useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (!authToken || !authUser) {
+      wsRef.current?.close();
+      wsRef.current = null;
+      return undefined;
+    }
+    void apiListConversations(authToken).then((res) => {
+      if (res.ok && res.data?.conversations) {
+        setConversations(res.data.conversations);
+      }
+    });
+
+    const ws = new WebSocket(getSignalingWsUrl(authToken));
+    wsRef.current = ws;
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String(ev.data)) as Record<string, unknown>;
+        setIncomingCallSignal(msg);
+        if (msg.type === 'CALL_OFFER' && typeof msg.callId === 'string' && typeof msg.senderId === 'string') {
+          setActiveCallSession({
+            callId: msg.callId,
+            peerId: msg.senderId,
+            peerName: String(msg.callerName || msg.senderId),
+            callType: String(msg.callType || 'AUDIO').toUpperCase() === 'VIDEO' ? 'VIDEO' : 'AUDIO',
+            isIncoming: true,
+            offerSdp: typeof msg.sdp === 'string' ? msg.sdp : undefined,
+          });
+        } else if (msg.type === 'force_logout' || msg.type === 'session_revoked') {
+          clearWebAuthSession('user', true);
+          setAuthToken(null);
+          setAuthUser(null);
+          addToast('تم نقل الحساب', String(msg.message || 'تم تسجيل الخروج من هذا الجهاز بعد نقل الحساب.'), 'warning');
+        }
+      } catch {
+        // ignore non-json frames
+      }
+    };
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [authToken, authUser?.id]);
+
+  useEffect(() => {
+    if (!authToken || !selectedConversationId) return;
+    void apiListMessages(authToken, selectedConversationId).then((res) => {
+      if (res.ok && res.data?.messages) {
+        setActiveMessages(res.data.messages);
+      }
+    });
+  }, [authToken, selectedConversationId]);
+
+  const chats = conversations.map((c) => {
+    const peer = c.participantDetails?.find((p) => p.id !== authUser?.id) || c.participantDetails?.[0];
+    return {
+      id: c.conversationId || c._id,
+      peerId: peer?.id || '',
+      name: peer?.name || peer?.phone || 'محادثة مباشرة',
+      lastMessage: c.lastMessagePreview || 'ابدأ المحادثة...',
+      time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '',
+      unreadCount: c.unreadCount || 0,
+      avatarColor: 'bg-amber-500',
+      isOnline: true,
+    };
+  });
 
   // Toast Notifications State
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -801,7 +874,12 @@ export const UserAppPortal: React.FC<{
                   chats.map((chat) => (
                     <div
                       key={chat.id}
-                      className="p-4 rounded-[24px] border bg-white/80 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-lg transition-all cursor-pointer flex items-center gap-4 group relative"
+                      onClick={() => setSelectedConversationId(chat.id)}
+                      className={`p-4 rounded-[24px] border transition-all cursor-pointer flex items-center gap-4 group relative ${
+                        selectedConversationId === chat.id
+                          ? 'bg-amber-500/10 border-amber-500/50'
+                          : 'bg-white/80 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900'
+                      }`}
                     >
                       <div className="relative shrink-0">
                         <div className={`w-14 h-14 rounded-[18px] ${chat.avatarColor} text-white flex items-center justify-center text-xl font-black shadow-lg overflow-hidden`}>
@@ -825,43 +903,128 @@ export const UserAppPortal: React.FC<{
                 )}
               </div>
 
-              {/* Empty State / Select Chat Placeholder */}
-              <div className="lg:col-span-2 bg-white/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-[32px] p-10 flex flex-col items-center justify-center text-center space-y-8 min-h-[500px] shadow-sm backdrop-blur-sm relative overflow-hidden">
-                {/* Decorative Background Elements */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/5 blur-[100px] -ml-32 -mb-32" />
-
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-[32px] bg-white dark:bg-slate-950 border border-slate-100 dark:border-slate-800 flex items-center justify-center text-amber-500 shadow-xl shadow-amber-500/5 rotate-3">
-                    <MessageSquare className="w-10 h-10" />
+              {/* Conversation Thread + 1-on-1 Audio/Video Calls */}
+              {selectedConversationId && authToken ? (
+                (() => {
+                  const activeChat = chats.find((c) => c.id === selectedConversationId);
+                  return (
+                    <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-[32px] flex flex-col min-h-[500px] overflow-hidden">
+                      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-base font-black text-white">{activeChat?.name || 'محادثة'}</h3>
+                          <span className="text-[11px] text-emerald-400">مراسلة ومكالمات 1-on-1 مشفرة</span>
+                        </div>
+                        {activeChat?.peerId && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                setActiveCallSession({
+                                  callId: `web_${Date.now()}`,
+                                  peerId: activeChat.peerId,
+                                  peerName: activeChat.name,
+                                  callType: 'AUDIO',
+                                  isIncoming: false,
+                                })
+                              }
+                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl gap-1.5"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                              صوتية
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                setActiveCallSession({
+                                  callId: `web_${Date.now()}`,
+                                  peerId: activeChat.peerId,
+                                  peerName: activeChat.name,
+                                  callType: 'VIDEO',
+                                  isIncoming: false,
+                                })
+                              }
+                              className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl gap-1.5"
+                            >
+                              <Video className="w-3.5 h-3.5" />
+                              فيديو
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 p-5 space-y-3 overflow-y-auto max-h-[380px]">
+                        {activeMessages.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-10">لا توجد رسائل في هذه المحادثة بعد.</p>
+                        ) : (
+                          activeMessages.map((m) => {
+                            const isMe = m.senderId === authUser?.id;
+                            return (
+                              <div key={m._id} className={`flex ${isMe ? 'justify-start' : 'justify-end'}`}>
+                                <div className={`px-4 py-2.5 rounded-2xl text-xs max-w-[75%] ${
+                                  isMe ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-100'
+                                }`}>
+                                  {m.content}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const trimmed = chatComposer.trim();
+                          if (!trimmed || !authToken || !selectedConversationId) return;
+                          const res = await apiSendMessage(authToken, selectedConversationId, trimmed);
+                          if (res.ok && res.data?.message) {
+                            setActiveMessages((prev) => [...prev, res.data!.message]);
+                            setChatComposer('');
+                          } else {
+                            addToast('تعذر الإرسال', res.message, 'error');
+                          }
+                        }}
+                        className="p-4 border-t border-slate-800 flex gap-2"
+                      >
+                        <Input
+                          value={chatComposer}
+                          onChange={(e) => setChatComposer(e.target.value)}
+                          placeholder="اكتب رسالتك هنا..."
+                          className="bg-slate-950 border-slate-800 text-xs text-white"
+                        />
+                        <Button type="submit" className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs">
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      </form>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="lg:col-span-2 bg-white/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-[32px] p-10 flex flex-col items-center justify-center text-center space-y-8 min-h-[500px] shadow-sm backdrop-blur-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32" />
+                  <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/5 blur-[100px] -ml-32 -mb-32" />
+                  <div className="relative">
+                    <div className="w-24 h-24 rounded-[32px] bg-white dark:bg-slate-950 border border-slate-100 dark:border-slate-800 flex items-center justify-center text-amber-500 shadow-xl shadow-amber-500/5 rotate-3">
+                      <MessageSquare className="w-10 h-10" />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-2xl bg-teal-500 text-white flex items-center justify-center shadow-lg -rotate-12 border-2 border-white dark:border-slate-900">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
                   </div>
-                  <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-2xl bg-teal-500 text-white flex items-center justify-center shadow-lg -rotate-12 border-2 border-white dark:border-slate-900">
-                    <Sparkles className="w-5 h-5" />
+                  <div className="max-w-xs space-y-3">
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">ابدأ المحادثة الآن</h3>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                      سجل الدخول برقم هاتفك واختر محادثة لعرض الرسائل وإجراء مكالمات صوت وفيديو 1-on-1.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <Button
+                      onClick={() => setActiveView('hashtag_engine')}
+                      className="bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-black text-xs px-8 py-3 rounded-2xl shadow-xl hover:scale-105 transition-all"
+                    >
+                      فتح محرك الهاشتاج
+                    </Button>
                   </div>
                 </div>
-
-                <div className="max-w-xs space-y-3">
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">ابدأ المحادثة الآن</h3>
-                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-                    حدد أحد عملائك أو مورديك من القائمة الجانبية لعرض سجل المحادثة المشفر، إصدار الفواتير، واستخدام أدوات الهاشتاج المحاسبي.
-                  </p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <Button 
-                    onClick={() => setActiveView('hashtag_engine')}
-                    className="bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-black text-xs px-8 py-3 rounded-2xl shadow-xl hover:scale-105 transition-all"
-                  >
-                    فتح محرك الهاشتاج
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold text-xs px-6 py-3 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-all"
-                  >
-                    دليل الاستخدام
-                  </Button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -1739,19 +1902,19 @@ export const UserAppPortal: React.FC<{
             </div>
 
             <div className="space-y-4">
-              {/* Endpoint 1: Auth Login */}
+              {/* Endpoint 1: Phone-Only OTP Auth */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
                 <div className="flex items-center justify-between gap-4 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded-lg text-xs font-mono font-bold">
                       POST
                     </span>
-                    <span className="text-xs sm:text-sm font-mono text-white font-semibold">/api/auth/login</span>
+                    <span className="text-xs sm:text-sm font-mono text-white font-semibold">/api/auth/otp/request &amp; /verify</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-mono hidden sm:inline">Returns JWT Bearer Token</span>
+                    <span className="text-xs text-slate-400 font-mono hidden sm:inline">Phone + OTP Only</span>
                     <button
-                      onClick={() => handleCopyText(`curl -X POST https://api.oozox.com/api/auth/login -H "Content-Type: application/json" -d '{"emailOrPhone":"<EMAIL_OR_PHONE>","password":"<PASSWORD>"}'`, 'أمر تسجيل الدخول')}
+                      onClick={() => handleCopyText(`curl -X POST https://api.oozox.com/api/auth/otp/request -H "Content-Type: application/json" -d '{"phone":"+201012345678","channel":"TELEGRAM","purpose":"LOGIN"}'`, 'أمر المصادقة بالهاتف')}
                       className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs sm:text-sm text-amber-400 font-bold tracking-wide transition-colors"
                       title="نسخ أمر الربط"
                     >
@@ -1760,11 +1923,12 @@ export const UserAppPortal: React.FC<{
                   </div>
                 </div>
                 <div className="bg-slate-950 p-4 rounded-xl font-mono text-xs text-slate-300 overflow-x-auto border border-slate-800 leading-relaxed">
-                  <pre>{`curl -X POST https://api.oozox.com/api/auth/login \\
+                  <pre>{`curl -X POST https://api.oozox.com/api/auth/otp/request \\
   -H "Content-Type: application/json" \\
   -d '{
-    "emailOrPhone": "<EMAIL_OR_PHONE>",
-    "password": "<PASSWORD>"
+    "phone": "+201012345678",
+    "channel": "TELEGRAM",
+    "purpose": "LOGIN"
   }'`}</pre>
                 </div>
               </div>
@@ -2305,6 +2469,20 @@ export const UserAppPortal: React.FC<{
           onSessionInvalidated={() => {
             setAuthToken(null);
             setAuthUser(null);
+          }}
+        />
+      )}
+
+      {authToken && authUser && activeCallSession && (
+        <WebRtcCallModal
+          token={authToken}
+          currentUserId={authUser.id}
+          callSession={activeCallSession}
+          wsRef={wsRef}
+          incomingSignal={incomingCallSignal}
+          onClose={() => setActiveCallSession(null)}
+          onBudgetBlocked={(msg) => {
+            addToast('تعذر بدء المكالمة', msg, 'warning');
           }}
         />
       )}

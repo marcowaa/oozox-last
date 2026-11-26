@@ -503,16 +503,34 @@ fun CloudBackupAuthSection(
                         Row {
                             IconButton(
                                 onClick = {
-                                    pendingRestoreContent = snapshot.encryptedPayloadBase64
-                                    pendingRestoreFileName = snapshot.fileName
-                                    pendingRestorePassphrase = restorePassphrase
+                                    if (snapshot.encryptedPayloadBase64.isNotBlank()) {
+                                        pendingRestoreContent = snapshot.encryptedPayloadBase64
+                                        pendingRestoreFileName = snapshot.fileName
+                                        pendingRestorePassphrase = restorePassphrase
+                                    } else {
+                                        viewModel?.downloadCloudBackupContent(snapshot.id) { res ->
+                                            res.onSuccess { content ->
+                                                pendingRestoreContent = content
+                                                pendingRestoreFileName = snapshot.fileName
+                                                pendingRestorePassphrase = restorePassphrase
+                                            }.onFailure { err ->
+                                                Toast.makeText(
+                                                    context,
+                                                    err.message ?: "تعذر تنزيل النسخة السحابية",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    }
                                 },
+                                enabled = !isProcessing,
                                 modifier = Modifier.minimumInteractiveComponentSize()
                             ) {
                                 Icon(Icons.Default.Restore, contentDescription = "استعادة هذه النسخة", tint = blueColor)
                             }
                             IconButton(
                                 onClick = { viewModel?.deleteCloudBackup(snapshot.id) },
+                                enabled = !isProcessing,
                                 modifier = Modifier.minimumInteractiveComponentSize()
                             ) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = "حذف النسخة", tint = redColor)

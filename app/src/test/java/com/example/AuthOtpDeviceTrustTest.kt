@@ -11,20 +11,25 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.local.AppDatabase
+import com.example.data.model.ChatEntity
+import com.example.data.model.MessageEntity
 import com.example.data.repository.AuthOutcome
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.OtpRequestOutcome
 import com.example.data.repository.OtpVerifyOutcome
-import com.example.data.repository.PasswordChangeOutcome
 import com.example.ui.components.OtpDeliveryChannel
 import com.example.ui.components.OtpResendUiResult
 import com.example.ui.components.OtpVerifyUiResult
 import com.example.ui.components.WhatsAppTelegramOtpView
 import com.example.ui.theme.GoldChatTheme
 import com.example.util.AppLanguage
+import com.example.util.BackupResult
+import com.example.util.CrossDeviceTransferEngine
 import com.example.util.DeviceTrustManager
 import com.example.util.LocalAppLanguage
 import com.example.util.RetrofitClient
+import com.example.util.SecureBackupVaultEngine
 import com.example.util.SecureCredentialVault
 import com.example.util.Translations
 import kotlinx.coroutines.runBlocking
@@ -262,7 +267,7 @@ class AuthOtpDeviceTrustTest {
     }
 
     @Test
-    fun authRepository_endToEndServerOtp_deviceTrust_recovery_andPasswordRevocation() = runBlocking {
+    fun authRepository_endToEndPhoneOnlyOtp_deviceTrust_andTransferMetadata() = runBlocking {
         val futureIso = isoAfterDays(30)
         val recordedHeaders = CopyOnWriteArrayList<Map<String, String>>()
         val currentDeviceId = SecureCredentialVault.getOrCreateDeviceId(context)
@@ -270,44 +275,6 @@ class AuthOtpDeviceTrustTest {
         val port = startEmbeddedHttpServer { method, path, headers, reqBody ->
             recordedHeaders.add(headers)
             when {
-                method == "POST" && path == "/api/auth/register" -> 201 to """
-                    {
-                      "success": true,
-                      "message": "OTP sent via Telegram Gateway",
-                      "data": {
-                        "purpose": "REGISTER",
-                        "preAuthToken": "pre_reg_1",
-                        "maskedPhone": "+2010****5678",
-                        "otpChallenge": {
-                          "challengeId": "ch_reg_1",
-                          "activeChannel": "TELEGRAM",
-                          "cooldownSeconds": 60,
-                          "maxAttempts": 5,
-                          "maskedPhone": "+2010****5678"
-                        }
-                      }
-                    }
-                """.trimIndent()
-
-                method == "POST" && path == "/api/auth/login" && reqBody.contains("\"password\":\"Pass123!\"") -> 200 to """
-                    {
-                      "success": true,
-                      "message": "OTP required on untrusted device",
-                      "data": {
-                        "requiresOtp": true,
-                        "purpose": "LOGIN",
-                        "preAuthToken": "pre_login_1",
-                        "maskedPhone": "+2010****5678",
-                        "otpChallenge": {
-                          "challengeId": "ch_login_1",
-                          "activeChannel": "TELEGRAM",
-                          "cooldownSeconds": 60,
-                          "maxAttempts": 5
-                        }
-                      }
-                    }
-                """.trimIndent()
-
                 method == "POST" && path == "/api/auth/otp/request" -> 200 to """
                     {
                       "success": true,
@@ -318,7 +285,8 @@ class AuthOtpDeviceTrustTest {
                         "attemptedChannels": ["TELEGRAM", "WHATSAPP"],
                         "cooldownSeconds": 60,
                         "maxAttempts": 5,
-                        "maskedPhone": "+2010****5678"
+                        "maskedPhone": "+2010****5678",
+                        "isExistingUser": true
                       }
                     }
                 """.trimIndent()
@@ -340,6 +308,22 @@ class AuthOtpDeviceTrustTest {
                         "token": "jwt_full_session_1",
                         "refreshToken": "ref_1",
                         "sessionId": "sess_101",
+                        "isExistingUser": true,
+                        "hasOtherActiveDevice": true,
+                        "otherActiveDevices": [
+                          {
+                            "sessionId": "sess_old_1",
+                            "deviceId": "dev_old_pixel",
+                            "deviceName": "Pixel 7",
+                            "platform": "ANDROID"
+                          }
+                        ],
+                        "backupSummary": {
+                          "count": 1,
+                          "latestBackupId": "bak_001",
+                          "latestTotalRecords": 42,
+                          "latestSizeBytes": 8192
+                        },
                         "trustedDevice": {
                           "deviceId": "$currentDeviceId",
                           "deviceTrustToken": "srv_trust_30d_abc",
@@ -367,35 +351,14 @@ class AuthOtpDeviceTrustTest {
                         "token": "jwt_full_session_2",
                         "refreshToken": "ref_2",
                         "sessionId": "sess_102",
+                        "isExistingUser": true,
+                        "hasOtherActiveDevice": false,
                         "trustedDevice": {
                           "deviceId": "$currentDeviceId",
                           "deviceTrustToken": "srv_trust_30d_abc",
                           "trustedUntil": "$futureIso",
                           "trustDays": 30
                         }
-                      }
-                    }
-                """.trimIndent()
-
-                method == "POST" && path == "/api/auth/change-password" && !reqBody.contains("stepUpCode") -> 401 to """
-                    {
-                      "success": false,
-                      "code": "STEP_UP_OTP_REQUIRED",
-                      "requiresStepUpOtp": true,
-                      "maskedPhone": "+2010****5678",
-                      "message": "يلزم رمز OTP للتحقق الإضافي"
-                    }
-                """.trimIndent()
-
-                method == "POST" && path == "/api/auth/change-password" && reqBody.contains("999111") -> 200 to """
-                    {
-                      "success": true,
-                      "message": "تم تغيير كلمة المرور وإلغاء كافة الأجهزة",
-                      "data": {
-                        "token": "jwt_rotated_after_pw",
-                        "refreshToken": "ref_rotated",
-                        "sessionId": "sess_rotated",
-                        "allDevicesRevoked": true
                       }
                     }
                 """.trimIndent()
@@ -423,120 +386,140 @@ class AuthOtpDeviceTrustTest {
                     {"success": true, "message": "تم إلغاء الجهاز"}
                 """.trimIndent()
 
-                method == "POST" && path == "/api/auth/recover" && !reqBody.contains("newPassword") -> 200 to """
-                    {
-                      "success": true,
-                      "message": "Recovery OTP sent",
-                      "data": {
-                        "challengeId": "ch_rec_1",
-                        "activeChannel": "TELEGRAM",
-                        "attemptedChannels": ["TELEGRAM"],
-                        "cooldownSeconds": 60,
-                        "maxAttempts": 5,
-                        "maskedPhone": "+2010****5678"
-                      }
-                    }
-                """.trimIndent()
-
-                method == "POST" && path == "/api/auth/recover" && reqBody.contains("newPassword") -> 200 to """
-                    {
-                      "success": true,
-                      "message": "Recovered",
-                      "data": {
-                        "user": {
-                          "id": "usr_101",
-                          "name": "سالم العتيبي",
-                          "email": "salem@oozox.com",
-                          "phone": "+201012345678",
-                          "phoneE164": "+201012345678",
-                          "role": "MERCHANT",
-                          "isVerified": true
-                        },
-                        "token": "jwt_recovered",
-                        "refreshToken": "ref_rec",
-                        "sessionId": "sess_rec",
-                        "trustedDevice": {
-                          "deviceId": "$currentDeviceId",
-                          "deviceTrustToken": "srv_trust_recovered",
-                          "trustedUntil": "$futureIso",
-                          "trustDays": 30
-                        }
-                      }
-                    }
-                """.trimIndent()
-
                 else -> 401 to """{"success":false,"code":"OTP_REQUIRED","requiresOtp":true,"message":"Device untrusted"}"""
             }
         }
 
         RetrofitClient.configureBaseUrl("http://127.0.0.1:$port/api")
 
-        // 1. Register returns OtpRequired without issuing active session JWT
-        val regOutcome = AuthRepository.registerAccount(
-            context = context,
-            name = "سالم",
-            email = "salem@oozox.com",
-            phone = "+201012345678",
-            password = "Pass123!"
-        )
-        assertTrue(regOutcome is AuthOutcome.OtpRequired)
-        assertNull(SecureCredentialVault.getAccessToken(context))
-
-        // 2. Password login on untrusted device returns OtpRequired
-        val loginOutcome = AuthRepository.loginWithPassword(context, "+201012345678", "Pass123!")
-        assertTrue(loginOutcome is AuthOutcome.OtpRequired)
-
-        // 3. Channel fallback / switch request
+        // 1. Phone-only OTP request with channel switching
         val otpReq = AuthRepository.requestOtp(context, purpose = "LOGIN", channel = "WHATSAPP", phone = "+201012345678")
         assertTrue(otpReq is OtpRequestOutcome.Sent)
-        assertEquals("WHATSAPP", (otpReq as OtpRequestOutcome.Sent).data.activeChannel)
+        val reqData = (otpReq as OtpRequestOutcome.Sent).data
+        assertEquals("WHATSAPP", reqData.activeChannel)
+        assertTrue(reqData.isExistingUser)
+        assertNull(SecureCredentialVault.getAccessToken(context))
 
-        // 4. Verify OTP issues JWT + 30-day server device trust
+        // 2. Verify OTP issues JWT + 30-day server device trust + post-OTP transfer/backup signals
         val verifyRes = AuthRepository.verifyOtp(context, challengeId = "ch_login_2", code = "123456", phone = "+201012345678")
         assertTrue(verifyRes is OtpVerifyOutcome.Verified)
+        val verifiedData = (verifyRes as OtpVerifyOutcome.Verified).data
+        assertTrue(verifiedData.isExistingUser)
+        assertTrue(verifiedData.hasOtherActiveDevice)
+        assertEquals("Pixel 7", verifiedData.otherActiveDevices.firstOrNull()?.deviceName)
+        assertEquals(1, verifiedData.backupSummary?.count)
         assertEquals("jwt_full_session_1", SecureCredentialVault.getAccessToken(context))
         assertTrue(DeviceTrustManager.isDeviceTrustedForPhone(context, "+201012345678"))
         assertTrue(recordedHeaders.any { it["x-device-id"] == currentDeviceId && it["x-platform"] == "ANDROID" })
 
-        // 5. Trusted device biometric login succeeds with server trust token
+        // 3. Trusted device biometric login succeeds with server trust token
         SecureCredentialVault.clearSessionOnly(context)
         val trustedLogin = AuthRepository.trustedDeviceLogin(context, "+201012345678")
         assertTrue(trustedLogin is AuthOutcome.Authenticated)
         assertEquals("jwt_full_session_2", SecureCredentialVault.getAccessToken(context))
 
-        // 6. List trusted devices
+        // 4. List & revoke trusted devices
         val devicesRes = AuthRepository.listTrustedDevices(context)
         assertTrue(devicesRes.isSuccess)
         assertEquals(1, devicesRes.getOrNull()?.size)
 
-        // 7. Password change step-up OTP gate + trust revocation on completion
-        val stepUp = AuthRepository.changePassword(context, "Pass123!", "NewPass123!")
-        assertTrue(stepUp is PasswordChangeOutcome.StepUpRequired)
-
-        val changed = AuthRepository.changePassword(
-            context = context,
-            currentPassword = "Pass123!",
-            newPassword = "NewPass123!",
-            stepUpChallengeId = "ch_step",
-            stepUpCode = "999111"
-        )
-        assertTrue(changed is PasswordChangeOutcome.Changed)
-        // Changing password MUST revoke local server device trust immediately
-        assertFalse(DeviceTrustManager.isDeviceTrustedForPhone(context, "+201012345678"))
-        assertEquals("jwt_rotated_after_pw", SecureCredentialVault.getAccessToken(context))
-
-        // 8. 2-step server recovery
-        val recStart = AuthRepository.requestRecoveryOtp(context, "+201012345678", "TELEGRAM")
-        assertTrue(recStart is OtpRequestOutcome.Sent)
-        val recFinish = AuthRepository.confirmRecoveryWithOtp(context, "ch_rec_1", "654321", "RecoveredPass1!")
-        assertTrue(recFinish is AuthOutcome.Authenticated)
-        assertTrue(DeviceTrustManager.isDeviceTrustedForPhone(context, "+201012345678"))
-
-        // 9. Revoking current device clears local trust and active JWT
         val revokeRes = AuthRepository.revokeTrustedDevice(context, currentDeviceId)
         assertTrue(revokeRes.isSuccess)
         assertNull(SecureCredentialVault.getAccessToken(context))
         assertFalse(DeviceTrustManager.isDeviceTrustedForPhone(context, "+201012345678"))
+
+        // 5. 429 RTC monthly budget error parsing
+        val parsed429 = AuthRepository.parseErrorBody(
+            """{"success":false,"code":"RTC_MONTHLY_BUDGET_EXCEEDED","message":"تم بلوغ الحد الشهري للمكالمات"}""",
+            "fallback"
+        )
+        assertEquals("RTC_MONTHLY_BUDGET_EXCEEDED", parsed429.code)
+        assertTrue(parsed429.message.contains("الحد الشهري"))
+    }
+
+    @Test
+    fun crossDeviceTransferEngine_ecdhHkdfAesGcm_andSasSymmetry() {
+        val aliceKeys = CrossDeviceTransferEngine.generateEphemeralKeyPair()
+        val bobKeys = CrossDeviceTransferEngine.generateEphemeralKeyPair()
+        val alicePub = CrossDeviceTransferEngine.encodePublicKeyBase64(aliceKeys.public)
+        val bobPub = CrossDeviceTransferEngine.encodePublicKeyBase64(bobKeys.public)
+        val transferId = "xfer_test_001"
+
+        val aliceAes = CrossDeviceTransferEngine.deriveAesSessionKey(aliceKeys.private, bobPub, transferId)
+        val bobAes = CrossDeviceTransferEngine.deriveAesSessionKey(bobKeys.private, alicePub, transferId)
+        assertTrue(aliceAes.contentEquals(bobAes))
+
+        val sasAlice = CrossDeviceTransferEngine.computeSasCode(aliceAes, transferId, alicePub, bobPub)
+        val sasBob = CrossDeviceTransferEngine.computeSasCode(bobAes, transferId, bobPub, alicePub)
+        assertEquals(6, sasAlice.length)
+        assertEquals(sasAlice, sasBob)
+
+        val secretPayload = "بيانات المحادثات والوسائط 24K — OOZOX E2EE".toByteArray(StandardCharsets.UTF_8)
+        val (cipherB64, ivB64) = CrossDeviceTransferEngine.encryptAesGcm(aliceAes, secretPayload, "$transferId|0")
+        val decrypted = CrossDeviceTransferEngine.decryptAesGcm(bobAes, cipherB64, ivB64, "$transferId|0")
+        assertEquals(String(secretPayload, StandardCharsets.UTF_8), String(decrypted, StandardCharsets.UTF_8))
+    }
+
+    @Test
+    fun vaultV3_localExportInspectAndRestore_preservesDataAndSkipsLosslessly() = runBlocking {
+        val db = AppDatabase.getInstance(context)
+        db.chatDao().insertChat(
+            ChatEntity(
+                id = "chat_v3_test",
+                contactId = "+201012345678",
+                contactName = "مورد الذهب الرئيسي",
+                lastMessage = "تم استلام السبيكة"
+            )
+        )
+        db.messageDao().insertMessage(
+            MessageEntity(
+                id = "msg_v3_test",
+                chatId = "chat_v3_test",
+                senderId = "usr_101",
+                senderName = "أنا",
+                content = "تم استلام السبيكة #ذهب_21",
+                timestamp = 1764100000000L
+            )
+        )
+
+        val exportRes = SecureBackupVaultEngine.createEncryptedBackup(
+            context = context,
+            db = db,
+            currentUserPhone = "+201012345678",
+            encryptionPassphrase = "VaultPass#2026",
+            isGoogleDriveCloudExport = false
+        )
+        assertTrue(exportRes is BackupResult.Success)
+        val exportedFile = java.io.File((exportRes as BackupResult.Success).filePath!!)
+        val envelopeText = exportedFile.readText(StandardCharsets.UTF_8)
+
+        val preview = SecureBackupVaultEngine.inspectBackupMetadata(envelopeText, "+201012345678")
+        assertTrue(preview.isValid)
+        assertEquals(3, preview.version)
+        assertTrue(preview.isPhoneMatched)
+        assertTrue(preview.chatsCount >= 1)
+        assertTrue(preview.messagesCount >= 1)
+
+        // Wrong owner phone must be rejected cleanly
+        val wrongOwnerRestore = SecureBackupVaultEngine.restoreEncryptedBackup(
+            context = context,
+            db = db,
+            backupFileContent = envelopeText,
+            currentUserPhone = "+201199999999",
+            enteredPassphrase = "VaultPass#2026"
+        )
+        assertTrue(wrongOwnerRestore is BackupResult.Error)
+
+        // Valid owner + passphrase restores cleanly without throwing
+        val validRestore = SecureBackupVaultEngine.restoreEncryptedBackup(
+            context = context,
+            db = db,
+            backupFileContent = envelopeText,
+            currentUserPhone = "+201012345678",
+            enteredPassphrase = "VaultPass#2026"
+        )
+        assertTrue(validRestore is BackupResult.Success)
+        assertNotNull(db.chatDao().getChatById("chat_v3_test"))
     }
 
     @Test

@@ -458,7 +458,7 @@ fun EncryptedVaultModalSheet(
                     OutlinedTextField(
                         value = passphraseInput,
                         onValueChange = { passphraseInput = it },
-                        placeholder = { Text("كلمة المرور السرية (اختياري / موصى به)", fontSize = 12.sp) },
+                        placeholder = { Text("كلمة المرور السرية (4 أحرف أو أرقام فأكثر)", fontSize = 12.sp) },
                         visualTransformation = PasswordVisualTransformation(),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -477,7 +477,7 @@ fun EncryptedVaultModalSheet(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "خزينة الجهاز (.oozox)",
+                                text = "سحابة أوزوكس الموثقة",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selectedProvider == CloudStorageProvider.OOZOX_CLOUD) GoldLight else MaterialTheme.colorScheme.onSurface,
@@ -487,17 +487,17 @@ fun EncryptedVaultModalSheet(
                         }
 
                         Surface(
-                            onClick = { selectedProvider = CloudStorageProvider.GOOGLE_DRIVE },
+                            onClick = { selectedProvider = CloudStorageProvider.LOCAL_DEVICE },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (selectedProvider == CloudStorageProvider.GOOGLE_DRIVE) GoldPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            border = BorderStroke(1.dp, if (selectedProvider == CloudStorageProvider.GOOGLE_DRIVE) GoldPrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                            color = if (selectedProvider == CloudStorageProvider.LOCAL_DEVICE) GoldPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            border = BorderStroke(1.dp, if (selectedProvider == CloudStorageProvider.LOCAL_DEVICE) GoldPrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "تصدير Share Sheet",
+                                text = "ملف محلي (.oozox)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (selectedProvider == CloudStorageProvider.GOOGLE_DRIVE) GoldLight else MaterialTheme.colorScheme.onSurface,
+                                color = if (selectedProvider == CloudStorageProvider.LOCAL_DEVICE) GoldLight else MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(vertical = 10.dp)
                             )
@@ -508,11 +508,15 @@ fun EncryptedVaultModalSheet(
             confirmButton = {
                 Button(
                     onClick = {
+                        if (passphraseInput.trim().length < 4) {
+                            Toast.makeText(context, "أدخل كلمة مرور من 4 أحرف على الأقل", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
                         showCreateDialog = false
-                        val isGoogleDrive = (selectedProvider == CloudStorageProvider.GOOGLE_DRIVE)
-                        onCreateBackup(passphraseInput, isGoogleDrive)
+                        val uploadToCloud = (selectedProvider != CloudStorageProvider.LOCAL_DEVICE)
+                        onCreateBackup(passphraseInput.trim(), uploadToCloud)
                         passphraseInput = ""
-                        Toast.makeText(context, "جارٍ إنشاء النسخة الاحتياطية المشفرة...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "جارٍ تشفير النسخة الاحتياطية...", Toast.LENGTH_SHORT).show()
                     },
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(

@@ -370,7 +370,7 @@ internal fun ProfileCloudBackupsVaultDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.FolderZip, contentDescription = null, tint = OozoxTeal)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("خزينة النسخ المشفرة المحلية", color = OozoxTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("خزينة سحابة أوزوكس المشفرة", color = OozoxTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         },
         text = {
@@ -379,7 +379,7 @@ internal fun ProfileCloudBackupsVaultDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "النسخ الاحتياطية المشفرة المحفوظة محلياً والمربوطة برقم هاتفك ($userPhone). يمكنك استعادتها أو تصديرها.",
+                    "النسخ الاحتياطية المشفرة المحفوظة على الخادم والمربوطة بحساب رقم هاتفك ($userPhone). يتم تنزيلها والتحقق من بصمتها SHA-256 قبل فك التشفير.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 17.sp
@@ -393,9 +393,9 @@ internal fun ProfileCloudBackupsVaultDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.FolderOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
+                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("لا توجد لقطات مشفرة محفوظة على الجهاز حتى الآن.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("لا توجد نسخ احتياطية مرفوعة على الخادم لهذا الحساب حتى الآن.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 } else {

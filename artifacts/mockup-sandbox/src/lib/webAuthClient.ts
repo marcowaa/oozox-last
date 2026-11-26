@@ -1,9 +1,10 @@
 export type WebOtpChannel = 'TELEGRAM' | 'WHATSAPP' | 'SMS';
+export type WebPortalScope = 'USER' | 'ADMIN';
 
 export interface WebUserDto {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
   phoneE164?: string;
   role: string;
@@ -38,6 +39,8 @@ export interface WebOtpChallengeDto {
   cooldownSeconds?: number;
   maxAttempts?: number;
   maskedPhone?: string;
+  isExistingUser?: boolean;
+  preAuthToken?: string;
 }
 
 export interface WebAuthResponsePayload {
@@ -47,6 +50,8 @@ export interface WebAuthResponsePayload {
   sessionId?: string;
   requiresOtp?: boolean;
   requiresStepUpOtp?: boolean;
+  isExistingUser?: boolean;
+  hasOtherActiveDevice?: boolean;
   code?: string;
   purpose?: string;
   preAuthToken?: string;
@@ -55,6 +60,71 @@ export interface WebAuthResponsePayload {
   otpDeliveryError?: { code?: string; message?: string; retryAfterSeconds?: number };
   trustedDevice?: WebDeviceTrustDto;
   deviceTrust?: WebDeviceTrustDto;
+}
+
+export interface WebCallAuthorizeData {
+  allowed: boolean;
+  callId: string;
+  callType: 'AUDIO' | 'VIDEO';
+  exp: number;
+  callAuthSignature: string;
+  usagePct: number;
+}
+
+export interface WebCallBudgetTelemetry {
+  monthKey: string;
+  monthlyBudgetUsd: number;
+  estimatedCostUsd: number;
+  usagePct: number;
+  thresholds: { alert1Pct: number; alert2Pct: number; hardStopPct: number };
+  alertsTriggered: number[];
+  newCallsBlocked: boolean;
+  blockedNewCallsAt?: string | null;
+  totalCallsCount: number;
+  answeredCallsCount: number;
+  totalBilledMinutes: number;
+  turnBytesTotal: number;
+  coturnRestartCount: number;
+  lastScrapedAt?: string | null;
+  recentAlerts?: Array<{ _id?: string; title: string; message: string; createdAt: string }>;
+}
+
+export interface WebCallHistoryItem {
+  _id: string;
+  callId: string;
+  callType: 'AUDIO' | 'VIDEO';
+  status: string;
+  billedDurationSeconds: number;
+  billedMinutes: number;
+  estimatedCostUsd: number;
+  turnUsed: boolean;
+  createdAt: string;
+  callerId?: { _id?: string; name?: string; phone?: string };
+  calleeId?: { _id?: string; name?: string; phone?: string };
+}
+
+export interface WebConversationItem {
+  _id: string;
+  conversationId: string;
+  participantDetails?: Array<{ id: string; name?: string; phone?: string }>;
+  lastMessagePreview?: string;
+  lastMessageAt?: string;
+  unreadCount?: number;
+}
+
+export interface WebChatMessageItem {
+  _id: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  messageType: string;
+  createdAt: string;
+}
+
+export interface WebIceServerConfig {
+  urls: string[];
+  username?: string;
+  credential?: string;
 }
 
 const KEY_WEB_DEVICE_ID = 'oozox_web_device_id';
@@ -66,6 +136,18 @@ const KEY_WEB_ADMIN_TOKEN = 'oozox_admin_token';
 export function getApiBase(): string {
   const envBase = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE_URL;
   return envBase ? envBase.replace(/\/+$/, '') : '';
+}
+
+export function getSignalingHttpBase(): string {
+  const envSig = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SIGNALING_HTTP_URL;
+  return (envSig || 'https://signaling.oozox.com').replace(/\/+$/, '');
+}
+
+export function getSignalingWsUrl(token: string): string {
+  const envWs = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SIGNALING_WS_URL;
+  const base = (envWs || 'wss://signaling.oozox.com/ws').replace(/\/+$/, '');
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}token=${encodeURIComponent(token)}&deviceId=${encodeURIComponent(getOrCreateWebDeviceId())}`;
 }
 
 export function getOrCreateWebDeviceId(): string {
@@ -213,14 +295,14 @@ export interface ApiResult<T> {
   data?: T;
 }
 
-async function callAuthApi<T>(
-  path: string,
+async function callApi<T>(
+  url: string,
   method: string,
   body?: Record<string, unknown>,
   token?: string | null
 ): Promise<ApiResult<T>> {
   const headers = await webAuthHeaders(token);
-  const res = await fetch(`${getApiBase()}${path}`, {
+  const res = await fetch(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -244,46 +326,21 @@ async function callAuthApi<T>(
   };
 }
 
-export async function apiLoginPassword(emailOrPhone: string, password: string, preferredChannel: WebOtpChannel | 'AUTO' = 'AUTO') {
-  const fp = await getWebHardwareFingerprint();
-  const trust = getStoredWebTrust();
-  return callAuthApi<WebAuthResponsePayload>('/api/auth/login', 'POST', {
-    emailOrPhone: emailOrPhone.trim(),
-    password,
-    deviceId: getOrCreateWebDeviceId(),
-    deviceTrustToken: trust?.deviceTrustToken,
-    hardwareFingerprint: fp,
-    preferredChannel,
-    autoSendOtp: true,
-  });
-}
-
-export async function apiRegisterUser(params: {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  preferredChannel?: WebOtpChannel | 'AUTO';
-}) {
-  return callAuthApi<WebAuthResponsePayload>('/api/auth/register', 'POST', {
-    ...params,
-    preferredLanguage: 'ar',
-    preferredChannel: params.preferredChannel || 'AUTO',
-    autoSendOtp: true,
-    deviceId: getOrCreateWebDeviceId(),
-  });
-}
-
 export async function apiRequestOtp(params: {
-  purpose: 'LOGIN' | 'REGISTER' | 'RECOVER' | 'CHANGE_PHONE' | 'DEVICE_TRUST' | 'SENSITIVE_ACTION';
+  purpose?: 'LOGIN' | 'CHANGE_PHONE' | 'DEVICE_TRUST' | 'SENSITIVE_ACTION';
   channel: WebOtpChannel | 'AUTO';
   phone?: string;
   preAuthToken?: string;
   allowFallback?: boolean;
+  portalScope?: WebPortalScope;
 }) {
   const fp = await getWebHardwareFingerprint();
-  return callAuthApi<WebOtpChallengeDto>('/api/auth/otp/request', 'POST', {
-    ...params,
+  return callApi<WebOtpChallengeDto>(`${getApiBase()}/api/auth/otp/request`, 'POST', {
+    purpose: params.purpose || 'LOGIN',
+    channel: params.channel,
+    phone: params.phone?.trim(),
+    preAuthToken: params.preAuthToken,
+    portalScope: params.portalScope || 'USER',
     allowFallback: params.allowFallback ?? true,
     deviceId: getOrCreateWebDeviceId(),
     deviceName: getWebDeviceName(),
@@ -298,10 +355,12 @@ export async function apiVerifyOtp(params: {
   phone?: string;
   preAuthToken?: string;
   trustDevice?: boolean;
+  portalScope?: WebPortalScope;
 }) {
   const fp = await getWebHardwareFingerprint();
-  return callAuthApi<WebAuthResponsePayload>('/api/auth/otp/verify', 'POST', {
+  return callApi<WebAuthResponsePayload>(`${getApiBase()}/api/auth/otp/verify`, 'POST', {
     ...params,
+    portalScope: params.portalScope || 'USER',
     trustDevice: params.trustDevice ?? true,
     deviceId: getOrCreateWebDeviceId(),
     deviceName: getWebDeviceName(),
@@ -310,7 +369,7 @@ export async function apiVerifyOtp(params: {
   });
 }
 
-export async function apiTrustedDeviceLogin() {
+export async function apiTrustedDeviceLogin(portalScope: WebPortalScope = 'USER') {
   const trust = getStoredWebTrust();
   if (!trust) {
     return {
@@ -321,74 +380,119 @@ export async function apiTrustedDeviceLogin() {
     } as ApiResult<WebAuthResponsePayload>;
   }
   const fp = await getWebHardwareFingerprint();
-  return callAuthApi<WebAuthResponsePayload>('/api/auth/trusted-login', 'POST', {
+  return callApi<WebAuthResponsePayload>(`${getApiBase()}/api/auth/trusted-login`, 'POST', {
     userId: trust.userId,
-    emailOrPhone: trust.phone,
+    phone: trust.phone,
+    portalScope,
     deviceId: getOrCreateWebDeviceId(),
     deviceTrustToken: trust.deviceTrustToken,
     hardwareFingerprint: fp,
   });
 }
 
-export async function apiRecoverRequest(phone: string, channel: WebOtpChannel | 'AUTO' = 'AUTO') {
-  const fp = await getWebHardwareFingerprint();
-  return callAuthApi<WebOtpChallengeDto>('/api/auth/recover', 'POST', {
-    phone: phone.trim(),
-    channel,
-    deviceId: getOrCreateWebDeviceId(),
-    deviceName: getWebDeviceName(),
-    platform: 'WEB',
-    hardwareFingerprint: fp,
-  });
-}
-
-export async function apiRecoverConfirm(challengeId: string, code: string, newPassword: string) {
-  const fp = await getWebHardwareFingerprint();
-  return callAuthApi<WebAuthResponsePayload>('/api/auth/recover', 'POST', {
-    challengeId,
-    code: code.trim(),
-    newPassword,
-    deviceId: getOrCreateWebDeviceId(),
-    deviceName: getWebDeviceName(),
-    platform: 'WEB',
-    hardwareFingerprint: fp,
-  });
-}
-
 export async function apiFetchMe(token: string) {
-  return callAuthApi<{ user: WebUserDto }>('/api/auth/me', 'GET', undefined, token);
+  return callApi<{ user: WebUserDto }>(`${getApiBase()}/api/auth/me`, 'GET', undefined, token);
 }
 
 export async function apiListTrustedDevices(token: string) {
-  return callAuthApi<{ devices: WebTrustedDeviceInfo[] }>('/api/auth/devices', 'GET', undefined, token);
+  return callApi<{ devices: WebTrustedDeviceInfo[] }>(`${getApiBase()}/api/auth/devices`, 'GET', undefined, token);
 }
 
 export async function apiRevokeTrustedDevice(token: string, deviceId: string) {
-  return callAuthApi<{ revokedDeviceId?: string }>(
-    `/api/auth/devices/${encodeURIComponent(deviceId)}`,
+  return callApi<{ revokedDeviceId?: string }>(
+    `${getApiBase()}/api/auth/devices/${encodeURIComponent(deviceId)}`,
     'DELETE',
     undefined,
     token
   );
 }
 
-export async function apiChangePassword(
-  token: string,
-  currentPassword: string,
-  newPassword: string,
-  stepUpChallengeId?: string,
-  stepUpCode?: string
-) {
-  return callAuthApi<WebAuthResponsePayload>(
-    '/api/auth/change-password',
+// --- 1-on-1 WebRTC Calls & Budget Gate ---
+export async function apiAuthorizeCall(token: string, calleeId: string, callType: 'AUDIO' | 'VIDEO' = 'AUDIO') {
+  return callApi<WebCallAuthorizeData>(
+    `${getApiBase()}/api/calls/authorize`,
     'POST',
-    {
-      currentPassword,
-      newPassword,
-      stepUpChallengeId,
-      stepUpCode,
-      deviceId: getOrCreateWebDeviceId(),
-    },
+    { calleeId, callType },
     token
   );
+}
+
+export async function apiGetCallStatus(token: string) {
+  return callApi<{ canStartNewCalls: boolean; blockedReason?: string | null; dailyUserLimitMinutes?: number }>(
+    `${getApiBase()}/api/calls/status`,
+    'GET',
+    undefined,
+    token
+  );
+}
+
+export async function apiGetCallHistory(token: string, page = 1, limit = 20) {
+  return callApi<{ calls: WebCallHistoryItem[] }>(
+    `${getApiBase()}/api/calls/history?page=${page}&limit=${limit}`,
+    'GET',
+    undefined,
+    token
+  );
+}
+
+export async function apiGetAdminCallBudget(token: string, month?: string) {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : '';
+  return callApi<WebCallBudgetTelemetry>(`${getApiBase()}/api/calls/budget${qs}`, 'GET', undefined, token);
+}
+
+export async function apiFetchTurnCredentials(token: string, ttl = 3600): Promise<WebIceServerConfig[]> {
+  try {
+    const res = await fetch(`${getSignalingHttpBase()}/turn-credentials`, {
+      method: 'POST',
+      headers: await webAuthHeaders(token),
+      body: JSON.stringify({ ttl }),
+    });
+    if (!res.ok) return [{ urls: ['stun:stun.l.google.com:19302'] }];
+    const json = (await res.json()) as { iceServers?: WebIceServerConfig[]; data?: { iceServers?: WebIceServerConfig[] } };
+    const servers = json.iceServers || json.data?.iceServers || [];
+    return servers.length > 0 ? servers : [{ urls: ['stun:stun.l.google.com:19302'] }];
+  } catch {
+    return [{ urls: ['stun:stun.l.google.com:19302'] }];
+  }
+}
+
+// --- Workspace Real-Time Chats ---
+export async function apiListConversations(token: string) {
+  return callApi<{ conversations: WebConversationItem[] }>(`${getApiBase()}/api/chats`, 'GET', undefined, token);
+}
+
+export async function apiCreateOrGetConversation(token: string, participantId: string) {
+  return callApi<{ conversation: WebConversationItem }>(
+    `${getApiBase()}/api/chats`,
+    'POST',
+    { participantId },
+    token
+  );
+}
+
+export async function apiListMessages(token: string, conversationId: string) {
+  return callApi<{ messages: WebChatMessageItem[] }>(
+    `${getApiBase()}/api/chats/${encodeURIComponent(conversationId)}/messages`,
+    'GET',
+    undefined,
+    token
+  );
+}
+
+export async function apiSendMessage(token: string, conversationId: string, content: string) {
+  return callApi<{ message: WebChatMessageItem }>(
+    `${getApiBase()}/api/chats/${encodeURIComponent(conversationId)}/messages`,
+    'POST',
+    { content, messageType: 'TEXT' },
+    token
+  );
+}
+
+// --- Public & Admin CMS Persistence (/api/content) ---
+export async function apiGetPublicCmsContent() {
+  return callApi<{ content: Record<string, unknown> }>(`${getApiBase()}/api/content`, 'GET');
+}
+
+export async function apiUpdateCmsContent(token: string, payload: Record<string, unknown>) {
+  return callApi<{ content: Record<string, unknown> }>(`${getApiBase()}/api/content`, 'PUT', payload, token);
 }

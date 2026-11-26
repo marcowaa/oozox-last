@@ -1,28 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
-  Key,
   Smartphone,
-  Send,
   RefreshCw,
-  CheckCircle2,
   AlertTriangle,
-  Lock,
-  Trash2,
   X,
   Laptop,
   ArrowRight,
 } from 'lucide-react';
 import {
   WebOtpChannel,
+  WebPortalScope,
   WebTrustedDeviceInfo,
   WebUserDto,
-  apiChangePassword,
   apiListTrustedDevices,
-  apiLoginPassword,
-  apiRecoverConfirm,
-  apiRecoverRequest,
-  apiRegisterUser,
   apiRequestOtp,
   apiRevokeTrustedDevice,
   apiTrustedDeviceLogin,
@@ -39,23 +30,49 @@ const CHANNELS: Array<{ id: WebOtpChannel; label: string; desc: string }> = [
   { id: 'SMS', label: 'SMS', desc: 'رسالة نصية مباشرة عبر الجوال' },
 ];
 
+const COUNTRY_CODES = [
+  { code: '+20', label: '🇪🇬 مصر (+20)' },
+  { code: '+966', label: '🇸🇦 السعودية (+966)' },
+  { code: '+971', label: '🇦🇪 الإمارات (+971)' },
+  { code: '+965', label: '🇰🇼 الكويت (+965)' },
+  { code: '+974', label: '🇶🇦 قطر (+974)' },
+  { code: '+962', label: '🇯🇴 الأردن (+962)' },
+  { code: '+1', label: '🇺🇸 أمريكا/كندا (+1)' },
+];
+
+export function formatPhoneToE164(countryCode: string, rawPhone: string): string {
+  const cleaned = rawPhone.replace(/[^\d+]/g, '').trim();
+  if (cleaned.startsWith('+')) return cleaned;
+  const local = cleaned.replace(/^0+/, '');
+  return `${countryCode}${local}`;
+}
+
 export const WebOtpVerificationCard: React.FC<{
   phoneDisplay: string;
   challengeId: string;
   initialChannel: WebOtpChannel;
   preAuthToken?: string;
-  purpose: 'LOGIN' | 'REGISTER' | 'RECOVER' | 'CHANGE_PHONE' | 'DEVICE_TRUST' | 'SENSITIVE_ACTION';
+  portalScope?: WebPortalScope;
+  purpose?: 'LOGIN' | 'CHANGE_PHONE' | 'DEVICE_TRUST' | 'SENSITIVE_ACTION';
   fallbackNotice?: string | null;
   cooldownSeconds?: number;
   onBack: () => void;
-  onVerified: (data: { user?: WebUserDto; token?: string; refreshToken?: string; trustedDevice?: unknown }) => void;
+  onVerified: (data: {
+    user?: WebUserDto;
+    token?: string;
+    refreshToken?: string;
+    trustedDevice?: unknown;
+    isExistingUser?: boolean;
+    hasOtherActiveDevice?: boolean;
+  }) => void;
   onChallengeUpdated?: (newChallengeId: string, newChannel: WebOtpChannel) => void;
 }> = ({
   phoneDisplay,
   challengeId: initialChallengeId,
   initialChannel,
   preAuthToken,
-  purpose,
+  portalScope = 'USER',
+  purpose = 'LOGIN',
   fallbackNotice: initialNotice,
   cooldownSeconds: initialCooldown = 60,
   onBack,
@@ -92,6 +109,7 @@ export const WebOtpVerificationCard: React.FC<{
       phone: preAuthToken ? undefined : phoneDisplay,
       preAuthToken,
       trustDevice,
+      portalScope,
     });
     setIsBusy(false);
     if (!res.ok || !res.data?.token) {
@@ -99,7 +117,8 @@ export const WebOtpVerificationCard: React.FC<{
       setError(res.message || 'تعذر التحقق من الرمز.');
       return;
     }
-    saveWebAuthSession(res.data, res.data.user?.role === 'ADMIN' ? 'admin' : 'user');
+    const sessionMode = portalScope === 'ADMIN' || res.data.user?.role === 'ADMIN' ? 'admin' : 'user';
+    saveWebAuthSession(res.data, sessionMode);
     onVerified(res.data);
   };
 
@@ -113,6 +132,7 @@ export const WebOtpVerificationCard: React.FC<{
       channel: targetChannel,
       phone: preAuthToken ? undefined : phoneDisplay,
       preAuthToken,
+      portalScope,
       allowFallback: true,
     });
     setIsBusy(false);
@@ -143,7 +163,7 @@ export const WebOtpVerificationCard: React.FC<{
           className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300"
         >
           <ArrowRight className="w-4 h-4" />
-          تعديل البيانات
+          تغيير رقم الهاتف
         </button>
         <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">
           عبر {CHANNELS.find((c) => c.id === channel)?.label || channel}
@@ -190,7 +210,7 @@ export const WebOtpVerificationCard: React.FC<{
           onChange={(e) => setTrustDevice(e.target.checked)}
           className="rounded border-slate-700 bg-slate-950 text-amber-500"
         />
-        <span>الوثوق بهذا المتصفح لمدة 30 يوماً (يُلغى تلقائياً عند تغيير كلمة المرور)</span>
+        <span>الوثوق بهذا المتصفح لمدة 30 يوماً</span>
       </label>
 
       <div className="grid grid-cols-3 gap-2">
@@ -238,19 +258,13 @@ export const WebAuthModal: React.FC<{
   onClose: () => void;
   onAuthenticated: (user: WebUserDto) => void;
 }> = ({ open, onClose, onAuthenticated }) => {
-  const [tab, setTab] = useState<'otp' | 'password' | 'register' | 'recover'>('otp');
   const [channel, setChannel] = useState<WebOtpChannel>('TELEGRAM');
+  const [countryCode, setCountryCode] = useState('+20');
   const [phone, setPhone] = useState('');
-  const [emailOrPhone, setEmailOrPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  // OTP Step state
   const [otpStep, setOtpStep] = useState<{
-    purpose: 'LOGIN' | 'REGISTER' | 'DEVICE_TRUST';
     challengeId: string;
     activeChannel: WebOtpChannel;
     phoneDisplay: string;
@@ -259,19 +273,15 @@ export const WebAuthModal: React.FC<{
     cooldown?: number;
   } | null>(null);
 
-  // Recovery Step state
-  const [recChallengeId, setRecChallengeId] = useState<string | null>(null);
-  const [recCode, setRecCode] = useState('');
-  const [recNewPassword, setRecNewPassword] = useState('');
-
   const storedTrust = open ? getStoredWebTrust() : null;
 
   if (!open) return null;
 
   const handlePhoneOtpStart = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phone.trim()) {
-      setError('أدخل رقم الهاتف بصيغة دولية مثل +201012345678');
+    const e164 = formatPhoneToE164(countryCode, phone);
+    if (e164.length < 8) {
+      setError('أدخل رقم هاتف صحيح لتسجيل الدخول.');
       return;
     }
     setIsBusy(true);
@@ -279,7 +289,8 @@ export const WebAuthModal: React.FC<{
     const res = await apiRequestOtp({
       purpose: 'LOGIN',
       channel,
-      phone: phone.trim(),
+      phone: e164,
+      portalScope: 'USER',
       allowFallback: true,
     });
     setIsBusy(false);
@@ -289,10 +300,9 @@ export const WebAuthModal: React.FC<{
     }
     const activeCh = (String(res.data.activeChannel || channel).toUpperCase() as WebOtpChannel) || channel;
     setOtpStep({
-      purpose: 'LOGIN',
       challengeId: res.data.challengeId,
       activeChannel: activeCh,
-      phoneDisplay: phone.trim(),
+      phoneDisplay: e164,
       cooldown: res.data.cooldownSeconds ?? 60,
       notice:
         res.data.attemptedChannels && res.data.attemptedChannels.length > 1
@@ -301,78 +311,10 @@ export const WebAuthModal: React.FC<{
     });
   };
 
-  const handlePasswordStart = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailOrPhone.trim() || password.length < 6) {
-      setError('أدخل البريد/الهاتف وكلمة المرور.');
-      return;
-    }
-    setIsBusy(true);
-    setError(null);
-    const res = await apiLoginPassword(emailOrPhone.trim(), password, channel);
-    setIsBusy(false);
-    if (!res.ok || !res.data) {
-      setError(res.message || 'بيانات الدخول غير صحيحة.');
-      return;
-    }
-    if (res.data.requiresOtp) {
-      const ch = res.data.otpChallenge;
-      const activeCh = (String(ch?.activeChannel || channel).toUpperCase() as WebOtpChannel) || channel;
-      setOtpStep({
-        purpose: 'LOGIN',
-        challengeId: ch?.challengeId || '',
-        activeChannel: activeCh,
-        phoneDisplay: res.data.maskedPhone || emailOrPhone.trim(),
-        preAuthToken: res.data.preAuthToken,
-        cooldown: ch?.cooldownSeconds ?? 60,
-        notice: res.data.otpDeliveryError?.message || null,
-      });
-      return;
-    }
-    if (res.data.token && res.data.user) {
-      saveWebAuthSession(res.data, 'user');
-      onAuthenticated(res.data.user);
-      onClose();
-    }
-  };
-
-  const handleRegisterStart = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!regName.trim() || !regEmail.trim() || !phone.trim() || password.length < 8) {
-      setError('أدخل الاسم والبريد والهاتف الدولي وكلمة مرور (8 أحرف فأكثر).');
-      return;
-    }
-    setIsBusy(true);
-    setError(null);
-    const res = await apiRegisterUser({
-      name: regName.trim(),
-      email: regEmail.trim(),
-      phone: phone.trim(),
-      password,
-      preferredChannel: channel,
-    });
-    setIsBusy(false);
-    if (!res.ok || !res.data) {
-      setError(res.message || 'تعذر إنشاء الحساب.');
-      return;
-    }
-    const ch = res.data.otpChallenge;
-    const activeCh = (String(ch?.activeChannel || channel).toUpperCase() as WebOtpChannel) || channel;
-    setOtpStep({
-      purpose: 'REGISTER',
-      challengeId: ch?.challengeId || '',
-      activeChannel: activeCh,
-      phoneDisplay: res.data.maskedPhone || phone.trim(),
-      preAuthToken: res.data.preAuthToken,
-      cooldown: ch?.cooldownSeconds ?? 60,
-      notice: res.message,
-    });
-  };
-
   const handleTrustedLogin = async () => {
     setIsBusy(true);
     setError(null);
-    const res = await apiTrustedDeviceLogin();
+    const res = await apiTrustedDeviceLogin('USER');
     setIsBusy(false);
     if (res.ok && res.data?.token && res.data.user) {
       saveWebAuthSession(res.data, 'user');
@@ -381,31 +323,6 @@ export const WebAuthModal: React.FC<{
       return;
     }
     setError(res.message || 'انتهت الثقة المحلية لهذا المتصفح — يلزم التحقق عبر OTP.');
-  };
-
-  const handleRecoverSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsBusy(true);
-    setError(null);
-    if (!recChallengeId) {
-      const res = await apiRecoverRequest(phone.trim(), channel);
-      setIsBusy(false);
-      if (!res.ok || !res.data?.challengeId) {
-        setError(res.message || 'تعذر إرسال رمز الاسترداد.');
-        return;
-      }
-      setRecChallengeId(res.data.challengeId);
-    } else {
-      const res = await apiRecoverConfirm(recChallengeId, recCode, recNewPassword);
-      setIsBusy(false);
-      if (!res.ok || !res.data?.token || !res.data.user) {
-        setError(res.message || 'تعذر إكمال استعادة الحساب.');
-        return;
-      }
-      saveWebAuthSession(res.data, 'user');
-      onAuthenticated(res.data.user);
-      onClose();
-    }
   };
 
   return (
@@ -417,8 +334,8 @@ export const WebAuthModal: React.FC<{
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white">المصادقة المركزية — OOZOX</h3>
-              <p className="text-[11px] text-slate-400">تحقق خادم فعلي (Telegram Gateway / WhatsApp / SMS)</p>
+              <h3 className="text-base font-black text-white">تسجيل الدخول برقم الهاتف — OOZOX</h3>
+              <p className="text-[11px] text-slate-400">تحقق فوري (Telegram Gateway / WhatsApp / SMS)</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
@@ -432,7 +349,8 @@ export const WebAuthModal: React.FC<{
             challengeId={otpStep.challengeId}
             initialChannel={otpStep.activeChannel}
             preAuthToken={otpStep.preAuthToken}
-            purpose={otpStep.purpose}
+            portalScope="USER"
+            purpose="LOGIN"
             fallbackNotice={otpStep.notice}
             cooldownSeconds={otpStep.cooldown}
             onBack={() => setOtpStep(null)}
@@ -460,29 +378,6 @@ export const WebAuthModal: React.FC<{
               </div>
             )}
 
-            <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
-              {[
-                { id: 'otp', label: 'هاتف OTP' },
-                { id: 'password', label: 'كلمة السر' },
-                { id: 'register', label: 'جديد' },
-                { id: 'recover', label: 'استرداد' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setTab(item.id as typeof tab);
-                    setError(null);
-                  }}
-                  className={`py-2 rounded-lg transition-all ${
-                    tab === item.id ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
             {error && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -490,9 +385,10 @@ export const WebAuthModal: React.FC<{
               </div>
             )}
 
-            {/* Preferred OTP Channel Selector */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-400 mb-1.5">قناة التحقق المفضلة (Fallback: Telegram ← WhatsApp ← SMS)</label>
+              <label className="block text-[11px] font-bold text-slate-400 mb-1.5">
+                قناة التحقق المفضلة (Fallback: Telegram ← WhatsApp ← SMS)
+              </label>
               <div className="grid grid-cols-3 gap-2">
                 {CHANNELS.map((c) => (
                   <button
@@ -511,133 +407,42 @@ export const WebAuthModal: React.FC<{
               </div>
             </div>
 
-            {tab === 'otp' && (
-              <form onSubmit={handlePhoneOtpStart} className="space-y-3">
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+201012345678"
-                  dir="ltr"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-3 text-sm text-white outline-none font-mono"
-                />
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm disabled:opacity-50"
+            <form onSubmit={handlePhoneOtpStart} className="space-y-3">
+              <label className="block text-xs font-bold text-slate-300">رقم الهاتف المحمول</label>
+              <div className="flex gap-2" dir="ltr">
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-2.5 py-3 text-xs text-white outline-none"
                 >
-                  {isBusy ? 'جاري الإرسال...' : 'إرسال رمز OTP'}
-                </button>
-              </form>
-            )}
-
-            {tab === 'password' && (
-              <form onSubmit={handlePasswordStart} className="space-y-3">
-                <input
-                  type="text"
-                  value={emailOrPhone}
-                  onChange={(e) => setEmailOrPhone(e.target.value)}
-                  placeholder="البريد الإلكتروني أو الهاتف الدولي"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-3 text-sm text-white outline-none"
-                />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="كلمة المرور"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-3 text-sm text-white outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm disabled:opacity-50"
-                >
-                  {isBusy ? 'جاري التحقق...' : 'دخول'}
-                </button>
-              </form>
-            )}
-
-            {tab === 'register' && (
-              <form onSubmit={handleRegisterStart} className="space-y-3">
-                <input
-                  type="text"
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  placeholder="الاسم الكامل"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
-                />
-                <input
-                  type="email"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  dir="ltr"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
-                />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+201012345678"
-                  dir="ltr"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none font-mono"
-                />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="كلمة مرور جديدة (8 أحرف فأكثر)"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm disabled:opacity-50"
-                >
-                  {isBusy ? 'جاري التسجيل...' : 'إنشاء الحساب والتحقق'}
-                </button>
-              </form>
-            )}
-
-            {tab === 'recover' && (
-              <form onSubmit={handleRecoverSubmit} className="space-y-3">
-                {!recChallengeId ? (
+                  {COUNTRY_CODES.map((cc) => (
+                    <option key={cc.code} value={cc.code}>
+                      {cc.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="relative flex-1">
+                  <Smartphone className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+201012345678"
-                    dir="ltr"
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-3 text-sm text-white outline-none font-mono"
+                    placeholder="1012345678"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-3 text-sm text-white outline-none font-mono"
                   />
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={recCode}
-                      onChange={(e) => setRecCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="رمز OTP من 6 أرقام"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none font-mono text-center"
-                    />
-                    <input
-                      type="password"
-                      value={recNewPassword}
-                      onChange={(e) => setRecNewPassword(e.target.value)}
-                      placeholder="كلمة المرور الجديدة (8 أحرف فأكثر)"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none"
-                    />
-                  </>
-                )}
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm disabled:opacity-50"
-                >
-                  {isBusy ? 'جاري التنفيذ...' : recChallengeId ? 'تأكيد استرداد الحساب' : 'إرسال رمز الاسترداد'}
-                </button>
-              </form>
-            )}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                يتم تسجيل الدخول أو فتح حسابك تلقائياً عبر رقم هاتفك ورمز OTP فقط دون الحاجة إلى كلمة مرور أو بريد إلكتروني.
+              </p>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm disabled:opacity-50"
+              >
+                {isBusy ? 'جاري الإرسال...' : 'إرسال رمز التحقق (OTP)'}
+              </button>
+            </form>
           </>
         )}
       </div>
@@ -653,10 +458,6 @@ export const WebTrustedDevicesModal: React.FC<{
 }> = ({ open, token, onClose, onSessionInvalidated }) => {
   const [devices, setDevices] = useState<WebTrustedDeviceInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [stepUpChallengeId, setStepUpChallengeId] = useState<string | null>(null);
-  const [stepUpCode, setStepUpCode] = useState('');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const myDeviceId = getOrCreateWebDeviceId();
@@ -695,48 +496,13 @@ export const WebTrustedDevicesModal: React.FC<{
     void refreshDevices();
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setStatusMsg(null);
-    const res = await apiChangePassword(
-      token,
-      currentPassword,
-      newPassword,
-      stepUpChallengeId || undefined,
-      stepUpCode || undefined
-    );
-    if (!res.ok) {
-      if (res.requiresStepUpOtp || res.code === 'STEP_UP_OTP_REQUIRED') {
-        const otpRes = await apiRequestOtp({ purpose: 'SENSITIVE_ACTION', channel: 'AUTO', allowFallback: true });
-        if (otpRes.ok && otpRes.data?.challengeId) {
-          setStepUpChallengeId(otpRes.data.challengeId);
-        }
-        setErrorMsg(res.message || 'يلزم تأكيد رمز OTP لتغيير كلمة المرور.');
-      } else {
-        setErrorMsg(res.message);
-      }
-      return;
-    }
-    if (res.data?.token) {
-      saveWebAuthSession(res.data, 'user');
-    }
-    clearWebAuthSession('user', true);
-    setStatusMsg('تم تغيير كلمة المرور وإلغاء جميع الأجهزة الموثوقة تلقائياً.');
-    setCurrentPassword('');
-    setNewPassword('');
-    setStepUpChallengeId(null);
-    setStepUpCode('');
-    void refreshDevices();
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" dir="rtl">
       <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 text-slate-100 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Laptop className="w-5 h-5 text-amber-400" />
-            <h3 className="text-base font-black">الأجهزة الموثوقة (30 يوماً) وكلمة المرور</h3>
+            <h3 className="text-base font-black">الأجهزة والمتصفحات الموثوقة (30 يوماً)</h3>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
@@ -782,37 +548,6 @@ export const WebTrustedDevicesModal: React.FC<{
             ))
           )}
         </div>
-
-        <form onSubmit={handleChangePassword} className="pt-4 border-t border-slate-800 space-y-3">
-          <p className="text-xs font-bold text-amber-300">تغيير كلمة المرور (يُلغي ثقة جميع الأجهزة فوراً)</p>
-          <input
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder="كلمة المرور الحالية"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white"
-          />
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="كلمة المرور الجديدة (8 أحرف فأكثر)"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white"
-          />
-          {stepUpChallengeId && (
-            <input
-              type="text"
-              maxLength={6}
-              value={stepUpCode}
-              onChange={(e) => setStepUpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="رمز OTP للتأكيد الأمني (6 أرقام)"
-              className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-4 py-2.5 text-xs text-white font-mono text-center"
-            />
-          )}
-          <button type="submit" className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs">
-            تحديث كلمة المرور
-          </button>
-        </form>
       </div>
     </div>
   );

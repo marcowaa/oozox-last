@@ -150,12 +150,23 @@ object OfflineSyncManager {
         _show24hBackupPrompt.value = false
     }
 
+    fun markServerBackupSucceeded(context: Context) {
+        val now = System.currentTimeMillis()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putLong(KEY_LAST_SERVER_BACKUP, now)
+            .remove(KEY_OFFLINE_SINCE)
+            .apply()
+        _show24hBackupPrompt.value = false
+    }
+
     /**
-     * Checks server readiness; real encrypted server backup upload (/api/backups) is queued for Phase 3.
-     * Until /api/backups is active, never falsely records KEY_LAST_SERVER_BACKUP or claims data was uploaded.
+     * Uploads an encrypted Vault V3 snapshot to POST /api/backups and marks KEY_LAST_SERVER_BACKUP
+     * only after the server confirms persistence.
      */
     fun performServerBackup(
         context: Context,
+        passphrase: String = "",
         onComplete: (success: Boolean, message: String) -> Unit
     ) {
         _isBackingUp.value = true
@@ -176,25 +187,37 @@ object OfflineSyncManager {
                     return@launch
                 }
 
-                val healthResponse = RetrofitClient.apiService().getHealth()
-                _isBackingUp.value = false
-                if (!healthResponse.isSuccessful) {
+                val db = com.example.data.local.AppDatabase.getInstance(context)
+                val userPhone = db.userDao().getCurrentUserSync()?.phone
+                    ?: SecureCredentialVault.getTrustedPhone(context).orEmpty()
+                if (userPhone.isBlank()) {
+                    _isBackingUp.value = false
                     withContext(Dispatchers.Main) {
-                        onComplete(false, "تعذر التحقق من الخادم (رمز ${healthResponse.code()}).")
+                        onComplete(false, "تعذر تحديد رقم هاتف الحساب المسجل للنسخ السحابي.")
                     }
                     return@launch
                 }
 
+                val effectivePass = passphrase.takeIf { it.length >= 4 }
+                    ?: SecureCredentialVault.getOrCreateDeviceId(context)
+                val res = SecureBackupVaultEngine.createEncryptedBackup(
+                    context = context,
+                    db = db,
+                    currentUserPhone = userPhone,
+                    encryptionPassphrase = effectivePass,
+                    isGoogleDriveCloudExport = true
+                )
+                _isBackingUp.value = false
                 withContext(Dispatchers.Main) {
-                    onComplete(
-                        false,
-                        "النسخ السحابي التلقائي عبر الخادم (/api/backups) قيد التجهيز؛ استخدم خزينة النسخ المحلية المشفرة (.oozox) وتصدير Share Sheet لحفظ بياناتك بأمان حالياً."
-                    )
+                    when (res) {
+                        is BackupResult.Success -> onComplete(true, res.message)
+                        is BackupResult.Error -> onComplete(false, res.errorMessage)
+                    }
                 }
             } catch (e: Exception) {
                 _isBackingUp.value = false
                 withContext(Dispatchers.Main) {
-                    onComplete(false, "تعذر التحقق من خدمة النسخ الاحتياطي: ${e.message}")
+                    onComplete(false, "تعذر رفع النسخة السحابية: ${e.message}")
                 }
             }
         }

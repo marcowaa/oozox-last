@@ -259,7 +259,7 @@ data class ApiBackupStatsDto(
 @Serializable
 data class ApiUploadBackupRequest(
     val fileName: String,
-    val backupType: String = "CLOUD_VAULT_V3",
+    val backupType: String = "FULL_VAULT_V3",
     val formatVersion: Int = 3,
     val phoneHash: String,
     val vaultContent: String,
@@ -270,7 +270,7 @@ data class ApiUploadBackupRequest(
 @Serializable
 data class ApiCloudBackupItemDto(
     val backupId: String = "",
-    val backupType: String = "CLOUD_VAULT_V3",
+    val backupType: String = "FULL_VAULT_V3",
     val formatVersion: Int = 3,
     val fileName: String = "",
     val sizeBytes: Long = 0L,

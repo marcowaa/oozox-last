@@ -1,97 +1,116 @@
 package com.example.util
 
 import android.util.Log
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import java.util.UUID
+import org.json.JSONObject
 
-@Serializable
-enum class SignalingMessageType {
-    OFFER,
-    ANSWER,
-    ICE_CANDIDATE,
-    CALL_REQUEST,
-    CALL_ACCEPTED,
-    CALL_REJECTED,
-    HANGUP,
-    HEARTBEAT
+object SignalingMessageType {
+    const val CALL_OFFER = "CALL_OFFER"
+    const val CALL_ACCEPT = "CALL_ACCEPT"
+    const val CALL_ACCEPTED = "CALL_ACCEPTED"
+    const val CALL_ANSWER = "CALL_ANSWER"
+    const val CALL_REJECT = "CALL_REJECT"
+    const val CALL_END = "CALL_END"
+    const val CALL_ENDED = "CALL_ENDED"
+    const val CALL_MISSED = "CALL_MISSED"
+    const val ICE_CANDIDATE = "ICE_CANDIDATE"
+    const val CALL_BUDGET_BLOCKED = "CALL_BUDGET_BLOCKED"
+    const val HEARTBEAT = "HEARTBEAT"
 }
 
-@Serializable
 data class SignalingPayload(
-    val type: SignalingMessageType,
-    val callId: String,
-    val senderId: String,
-    val targetId: String,
+    val type: String,
+    val callId: String = "",
+    val senderId: String = "",
+    val targetId: String = "",
+    val senderName: String = "",
     val sdp: String? = null,
     val candidate: IceCandidateData? = null,
     val isVideo: Boolean = false,
+    val callAuthExp: Long = 0L,
+    val callAuthSignature: String? = null,
+    val reason: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
-@Serializable
 data class IceCandidateData(
     val sdpMid: String?,
     val sdpMLineIndex: Int,
     val sdpCandidate: String
 )
 
-@Serializable
 data class IceServerConfig(
     val urls: List<String>,
     val username: String? = null,
     val credential: String? = null
 )
 
+data class RealtimeTransferEvent(
+    val type: String,
+    val transferId: String = "",
+    val status: String = ""
+)
+
 /**
- * Client-Side WebRTC Signaling & Call Lifecycle Manager
- * Handles bidirectional WebSocket events, ICE Candidate exchange, and SDP negotiations.
+ * Client-Side WebRTC Signaling & Realtime Event Manager
+ * Connects to Go Signaling WS (/ws) with JWT + Device-ID headers and relays:
+ * - 1-on-1 P2P Call SDP Offer/Answer + ICE Candidates + 100% Budget Signatures
+ * - Cross-device encrypted account transfer requests & completions
+ * - Remote force_logout / session_revoked events
  */
 class WebRtcSignalingManager(
     private val currentUserId: String,
+    private val deviceId: String = "",
     private val serverUrl: String = "wss://signaling.oozox.com/ws",
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
     private var webSocket: WebSocket? = null
     private var heartbeatJob: Job? = null
 
     private val _connectionState = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _connectionState
 
-    private val _incomingCalls = MutableSharedFlow<SignalingPayload>()
+    private val _incomingCalls = MutableSharedFlow<SignalingPayload>(extraBufferCapacity = 16)
     val incomingCalls: SharedFlow<SignalingPayload> = _incomingCalls
 
-    private val _remoteSdpEvents = MutableSharedFlow<SignalingPayload>()
+    private val _remoteSdpEvents = MutableSharedFlow<SignalingPayload>(extraBufferCapacity = 16)
     val remoteSdpEvents: SharedFlow<SignalingPayload> = _remoteSdpEvents
 
-    private val _remoteIceCandidates = MutableSharedFlow<IceCandidateData>()
-    val remoteIceCandidates: SharedFlow<IceCandidateData> = _remoteIceCandidates
+    private val _remoteIceCandidates = MutableSharedFlow<Pair<String, IceCandidateData>>(extraBufferCapacity = 64)
+    val remoteIceCandidates: SharedFlow<Pair<String, IceCandidateData>> = _remoteIceCandidates
 
-    private val _callEndEvents = MutableSharedFlow<String>()
+    private val _callEndEvents = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val callEndEvents: SharedFlow<String> = _callEndEvents
 
-    // Public STUN discovery only by default; TURN credentials MUST be injected via updateEphemeralIceServers()
+    private val _budgetBlockedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val budgetBlockedEvents: SharedFlow<String> = _budgetBlockedEvents
+
+    private val _transferEvents = MutableSharedFlow<RealtimeTransferEvent>(extraBufferCapacity = 8)
+    val transferEvents: SharedFlow<RealtimeTransferEvent> = _transferEvents
+
+    private val _forceLogoutEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val forceLogoutEvents: SharedFlow<String> = _forceLogoutEvents
+
     val defaultIceServers = listOf(
         IceServerConfig(urls = listOf("stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"))
     )
 
-    private val _activeIceServers = MutableStateFlow<List<IceServerConfig>>(defaultIceServers)
+    private val _activeIceServers = MutableStateFlow(defaultIceServers)
     val activeIceServers: StateFlow<List<IceServerConfig>> = _activeIceServers
 
-    /**
-     * Updates active ICE servers with Ephemeral Coturn credentials fetched from backend REST API
-     */
     fun updateEphemeralIceServers(servers: List<IceServerConfig>) {
         if (servers.isNotEmpty()) {
             _activeIceServers.value = servers
@@ -105,10 +124,13 @@ class WebRtcSignalingManager(
             return
         }
         webSocket?.cancel()
-        val request = Request.Builder()
+        val builder = Request.Builder()
             .url(serverUrl)
             .header("Authorization", "Bearer $authToken")
-            .build()
+        if (deviceId.isNotBlank()) {
+            builder.header("X-Device-Id", deviceId)
+        }
+        val request = builder.build()
 
         webSocket = RetrofitClient.okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
@@ -126,7 +148,7 @@ class WebRtcSignalingManager(
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-                Log.e("WebRtcSignaling", "Signaling WebSocket failure: ${t.message}")
+                Log.w("WebRtcSignaling", "Signaling WebSocket closed/offline: ${t.message}")
                 _connectionState.value = false
                 heartbeatJob?.cancel()
             }
@@ -138,105 +160,203 @@ class WebRtcSignalingManager(
         heartbeatJob = coroutineScope.launch {
             while (_connectionState.value) {
                 delay(30_000L)
-                val ping = SignalingPayload(
-                    type = SignalingMessageType.HEARTBEAT,
-                    callId = "",
-                    senderId = currentUserId,
-                    targetId = "SERVER"
+                sendJson(
+                    JSONObject().apply {
+                        put("type", SignalingMessageType.HEARTBEAT)
+                        put("senderId", currentUserId)
+                        put("timestamp", System.currentTimeMillis())
+                    }
                 )
-                sendMessage(ping)
             }
         }
     }
 
-    fun initiateCall(targetUserId: String, isVideo: Boolean): String {
-        val callId = UUID.randomUUID().toString()
-        val payload = SignalingPayload(
-            type = SignalingMessageType.CALL_REQUEST,
-            callId = callId,
-            senderId = currentUserId,
-            targetId = targetUserId,
-            isVideo = isVideo
+    fun sendCallOffer(
+        callId: String,
+        targetUserId: String,
+        sdp: String,
+        isVideo: Boolean,
+        callAuthExp: Long,
+        callAuthSignature: String,
+        senderName: String = ""
+    ) {
+        sendJson(
+            JSONObject().apply {
+                put("type", SignalingMessageType.CALL_OFFER)
+                put("callId", callId)
+                put("senderId", currentUserId)
+                put("senderName", senderName)
+                put("target", targetUserId)
+                put("callType", if (isVideo) "VIDEO" else "AUDIO")
+                put("isVideo", isVideo)
+                put("sdp", sdp)
+                put("callAuthExp", callAuthExp)
+                put("callAuthSignature", callAuthSignature)
+                put("timestamp", System.currentTimeMillis())
+            }
         )
-        sendMessage(payload)
-        return callId
     }
 
-    fun sendOffer(callId: String, targetUserId: String, sdp: String, isVideo: Boolean) {
-        val payload = SignalingPayload(
-            type = SignalingMessageType.OFFER,
-            callId = callId,
-            senderId = currentUserId,
-            targetId = targetUserId,
-            sdp = sdp,
-            isVideo = isVideo
+    fun sendCallAccept(
+        callId: String,
+        targetUserId: String,
+        sdp: String,
+        isVideo: Boolean
+    ) {
+        sendJson(
+            JSONObject().apply {
+                put("type", SignalingMessageType.CALL_ACCEPT)
+                put("callId", callId)
+                put("senderId", currentUserId)
+                put("target", targetUserId)
+                put("callType", if (isVideo) "VIDEO" else "AUDIO")
+                put("isVideo", isVideo)
+                put("sdp", sdp)
+                put("timestamp", System.currentTimeMillis())
+            }
         )
-        sendMessage(payload)
-    }
-
-    fun sendAnswer(callId: String, targetUserId: String, sdp: String) {
-        val payload = SignalingPayload(
-            type = SignalingMessageType.ANSWER,
-            callId = callId,
-            senderId = currentUserId,
-            targetId = targetUserId,
-            sdp = sdp
-        )
-        sendMessage(payload)
     }
 
     fun sendIceCandidate(callId: String, targetUserId: String, candidate: IceCandidateData) {
-        val payload = SignalingPayload(
-            type = SignalingMessageType.ICE_CANDIDATE,
-            callId = callId,
-            senderId = currentUserId,
-            targetId = targetUserId,
-            candidate = candidate
+        sendJson(
+            JSONObject().apply {
+                put("type", SignalingMessageType.ICE_CANDIDATE)
+                put("callId", callId)
+                put("senderId", currentUserId)
+                put("target", targetUserId)
+                put("candidate", JSONObject().apply {
+                    put("sdpMid", candidate.sdpMid ?: "")
+                    put("sdpMLineIndex", candidate.sdpMLineIndex)
+                    put("sdpCandidate", candidate.sdpCandidate)
+                })
+                put("timestamp", System.currentTimeMillis())
+            }
         )
-        sendMessage(payload)
     }
 
-    fun endCall(callId: String, targetUserId: String) {
-        val payload = SignalingPayload(
-            type = SignalingMessageType.HANGUP,
-            callId = callId,
-            senderId = currentUserId,
-            targetId = targetUserId
+    fun rejectCall(callId: String, targetUserId: String, isVideo: Boolean, reason: String = "declined") {
+        sendJson(
+            JSONObject().apply {
+                put("type", SignalingMessageType.CALL_REJECT)
+                put("callId", callId)
+                put("senderId", currentUserId)
+                put("target", targetUserId)
+                put("callType", if (isVideo) "VIDEO" else "AUDIO")
+                put("reason", reason)
+                put("timestamp", System.currentTimeMillis())
+            }
         )
-        sendMessage(payload)
-        coroutineScope.launch {
-            _callEndEvents.emit(callId)
-        }
+        coroutineScope.launch { _callEndEvents.emit(callId) }
+    }
+
+    fun endCall(callId: String, targetUserId: String, isVideo: Boolean = false, reason: String = "hangup") {
+        sendJson(
+            JSONObject().apply {
+                put("type", SignalingMessageType.CALL_END)
+                put("callId", callId)
+                put("senderId", currentUserId)
+                put("target", targetUserId)
+                put("callType", if (isVideo) "VIDEO" else "AUDIO")
+                put("reason", reason)
+                put("timestamp", System.currentTimeMillis())
+            }
+        )
+        coroutineScope.launch { _callEndEvents.emit(callId) }
     }
 
     /**
-     * Dispatches incoming raw WebSocket JSON message to appropriate flow.
-     * Supports newline-delimited JSON (NDJSON) batches to avoid parsing errors
-     * if the server flushes multiple frames in a single TCP/WS payload.
+     * Dispatches incoming WebSocket JSON lines (supports NDJSON batches from Go Hub).
      */
     fun onRawMessageReceived(messageJson: String) {
         messageJson.lineSequence().filter { it.isNotBlank() }.forEach { rawLine ->
             try {
-                val payload = json.decodeFromString<SignalingPayload>(rawLine.trim())
+                val obj = JSONObject(rawLine.trim())
+                val rawType = obj.optString("type").trim()
+                if (rawType.isBlank()) return@forEach
+                val normType = rawType.uppercase()
+
                 coroutineScope.launch {
-                    when (payload.type) {
-                        SignalingMessageType.CALL_REQUEST -> _incomingCalls.emit(payload)
-                        SignalingMessageType.OFFER, SignalingMessageType.ANSWER -> _remoteSdpEvents.emit(payload)
-                        SignalingMessageType.ICE_CANDIDATE -> payload.candidate?.let { _remoteIceCandidates.emit(it) }
-                        SignalingMessageType.HANGUP, SignalingMessageType.CALL_REJECTED -> _callEndEvents.emit(payload.callId)
-                        SignalingMessageType.CALL_ACCEPTED, SignalingMessageType.HEARTBEAT -> Unit
+                    when (normType) {
+                        "CALL_OFFER", "OFFER", "CALL_REQUEST" -> {
+                            val isVid = obj.optBoolean("isVideo", false) ||
+                                obj.optString("callType").equals("VIDEO", ignoreCase = true)
+                            _incomingCalls.emit(
+                                SignalingPayload(
+                                    type = SignalingMessageType.CALL_OFFER,
+                                    callId = obj.optString("callId"),
+                                    senderId = obj.optString("senderId").ifBlank { obj.optString("from") },
+                                    targetId = obj.optString("target").ifBlank { obj.optString("targetId") },
+                                    senderName = obj.optString("senderName"),
+                                    sdp = obj.optString("sdp").takeIf { it.isNotBlank() },
+                                    isVideo = isVid
+                                )
+                            )
+                        }
+                        "CALL_ACCEPT", "CALL_ACCEPTED", "CALL_ANSWER", "ANSWER" -> {
+                            val isVid = obj.optBoolean("isVideo", false) ||
+                                obj.optString("callType").equals("VIDEO", ignoreCase = true)
+                            _remoteSdpEvents.emit(
+                                SignalingPayload(
+                                    type = normType,
+                                    callId = obj.optString("callId"),
+                                    senderId = obj.optString("senderId").ifBlank { obj.optString("from") },
+                                    targetId = obj.optString("target").ifBlank { obj.optString("targetId") },
+                                    sdp = obj.optString("sdp").takeIf { it.isNotBlank() },
+                                    isVideo = isVid
+                                )
+                            )
+                        }
+                        "ICE_CANDIDATE" -> {
+                            val candObj = obj.optJSONObject("candidate")
+                            if (candObj != null) {
+                                val cand = IceCandidateData(
+                                    sdpMid = candObj.optString("sdpMid").takeIf { it.isNotBlank() },
+                                    sdpMLineIndex = candObj.optInt("sdpMLineIndex", 0),
+                                    sdpCandidate = candObj.optString("sdpCandidate")
+                                        .ifBlank { candObj.optString("candidate") }
+                                )
+                                if (cand.sdpCandidate.isNotBlank()) {
+                                    _remoteIceCandidates.emit(obj.optString("callId") to cand)
+                                }
+                            }
+                        }
+                        "CALL_END", "CALL_ENDED", "HANGUP", "CALL_REJECT", "CALL_REJECTED", "CALL_MISSED" -> {
+                            val cId = obj.optString("callId")
+                            if (cId.isNotBlank()) {
+                                _callEndEvents.emit(cId)
+                            }
+                        }
+                        "CALL_BUDGET_BLOCKED" -> {
+                            _budgetBlockedEvents.emit(obj.optString("callId"))
+                        }
+                        "ACCOUNT_TRANSFER_REQUEST", "ACCOUNT_TRANSFER_READY", "ACCOUNT_TRANSFER_COMPLETED" -> {
+                            val payloadObj = obj.optJSONObject("payload")
+                            _transferEvents.emit(
+                                RealtimeTransferEvent(
+                                    type = rawType,
+                                    transferId = payloadObj?.optString("transferId").orEmpty(),
+                                    status = payloadObj?.optString("status").orEmpty()
+                                )
+                            )
+                        }
+                        "FORCE_LOGOUT", "SESSION_REVOKED" -> {
+                            val payloadObj = obj.optJSONObject("payload")
+                            val reason = payloadObj?.optString("reason")
+                                ?: obj.optString("reason")
+                                ?: "تم تسجيل الخروج من هذا الجهاز بعد نقل الحساب أو إلغاء الجلسة."
+                            _forceLogoutEvents.emit(reason)
+                        }
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w("WebRtcSignaling", "Ignored non-standard signaling frame: ${e.message}")
             }
         }
     }
 
-    private fun sendMessage(payload: SignalingPayload) {
+    private fun sendJson(obj: JSONObject) {
         try {
-            val serialized = json.encodeToString(payload)
-            webSocket?.send(serialized)
+            webSocket?.send(obj.toString())
         } catch (e: Exception) {
             Log.e("WebRtcSignaling", "Failed sending signaling message", e)
         }
@@ -247,6 +367,5 @@ class WebRtcSignalingManager(
         webSocket?.close(1000, "Client disconnected")
         webSocket = null
         _connectionState.value = false
-        coroutineScope.cancel()
     }
 }

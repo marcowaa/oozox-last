@@ -229,6 +229,19 @@ class GoldChatRepository(context: Context) {
             lastMessageTime = System.currentTimeMillis()
         )
         db.chatDao().insertChat(newChat)
+        if (OfflineSyncManager.isNetworkAvailable(appContext) && com.example.util.RetrofitClient.hasActiveSession()) {
+            try {
+                com.example.util.RetrofitClient.apiService().createChat(
+                    com.example.util.ApiWorkspaceCreateChatRequest(
+                        type = if (contact.id.startsWith("wg_")) "GROUP" else "DIRECT",
+                        targetUserId = contact.id,
+                        title = contact.name,
+                        clientId = newChat.id
+                    )
+                )
+            } catch (_: Exception) {
+            }
+        }
         newChat
     }
 
@@ -243,7 +256,7 @@ class GoldChatRepository(context: Context) {
         content: String,
         type: String = MessageType.TEXT.name
     ): MessageEntity = withContext(Dispatchers.IO) {
-        val isOnline = OfflineSyncManager.isNetworkAvailable(appContext)
+        val isOnline = OfflineSyncManager.isNetworkAvailable(appContext) && com.example.util.RetrofitClient.hasActiveSession()
         val initialStatus = if (isOnline) MessageStatus.SENT.name else MessageStatus.PENDING.name
         val plainMsg = MessageEntity(
             id = UUID.randomUUID().toString(),
@@ -255,16 +268,36 @@ class GoldChatRepository(context: Context) {
             timestamp = System.currentTimeMillis(),
             status = initialStatus
         )
+        var pushedRemotely = false
+        if (isOnline) {
+            pushedRemotely = try {
+                val res = com.example.util.RetrofitClient.apiService().sendChatMessage(
+                    conversationId = chatId,
+                    request = com.example.util.ApiWorkspaceSendMessageRequest(
+                        content = content,
+                        type = type,
+                        clientId = plainMsg.id
+                    )
+                )
+                res.isSuccessful
+            } catch (_: Exception) {
+                false
+            }
+        }
+
         db.withTransaction {
             // Store AES-256 encrypted ciphertext in Room SQLite database
-            val encryptedMsg = RoomLocalAES256Engine.encryptMessage(plainMsg, null, appContext)
+            val finalStatus = if (pushedRemotely) MessageStatus.SENT.name else MessageStatus.PENDING.name
+            val encryptedMsg = RoomLocalAES256Engine.encryptMessage(plainMsg.copy(status = finalStatus), null, appContext)
             db.messageDao().insertMessage(encryptedMsg)
 
-            // Queue for synchronization if offline or spotty network
-            if (!isOnline) {
+            // Queue for synchronization if offline or remote upload failed
+            if (!pushedRemotely) {
                 val payload = JSONObject().apply {
                     put("messageId", plainMsg.id)
                     put("chatId", chatId)
+                    put("content", content)
+                    put("type", type)
                 }.toString()
                 val syncItem = SyncQueueEntity(
                     id = UUID.randomUUID().toString(),
@@ -294,7 +327,7 @@ class GoldChatRepository(context: Context) {
             val isFromMe = (currentUser != null && currentUser.id == senderId)
             val existingChat = db.chatDao().getChatById(chatId)
             val newUnread = if (isFromMe) 0 else ((existingChat?.unreadCount ?: 0) + 1)
-            db.chatDao().updateLastMessage(chatId, previewText, System.currentTimeMillis(), senderId, initialStatus, newUnread)
+            db.chatDao().updateLastMessage(chatId, previewText, System.currentTimeMillis(), senderId, finalStatus, newUnread)
         }
         plainMsg
     }
@@ -302,6 +335,12 @@ class GoldChatRepository(context: Context) {
     suspend fun markChatAsRead(chatId: String, currentUserId: String) = withContext(Dispatchers.IO) {
         db.chatDao().clearUnread(chatId)
         db.messageDao().markIncomingMessagesAsRead(chatId, currentUserId, MessageStatus.READ.name)
+        if (OfflineSyncManager.isNetworkAvailable(appContext) && com.example.util.RetrofitClient.hasActiveSession()) {
+            try {
+                com.example.util.RetrofitClient.apiService().markChatReadRemote(chatId)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     suspend fun updateMessageStatus(messageId: String, status: String, chatId: String? = null) = withContext(Dispatchers.IO) {
@@ -913,6 +952,37 @@ class GoldChatRepository(context: Context) {
             ownerId = ownerId
         )
         db.workGroupDao().insertWorkGroup(wg)
+        var synced = false
+        if (OfflineSyncManager.isNetworkAvailable(appContext) && com.example.util.RetrofitClient.hasActiveSession()) {
+            synced = try {
+                com.example.util.RetrofitClient.apiService().createGroup(
+                    com.example.util.ApiWorkspaceCreateGroupRequest(
+                        name = name,
+                        description = description.orEmpty(),
+                        isPrivate = wg.isPrivate,
+                        clientId = wg.id
+                    )
+                ).isSuccessful
+            } catch (_: Exception) {
+                false
+            }
+        }
+        if (!synced) {
+            val payload = JSONObject().apply {
+                put("groupId", wg.id)
+                put("name", name)
+                put("description", description.orEmpty())
+                put("isPrivate", wg.isPrivate)
+            }.toString()
+            db.syncQueueDao().insertSyncItem(
+                SyncQueueEntity(
+                    id = UUID.randomUUID().toString(),
+                    actionType = "CREATE_GROUP",
+                    payloadJson = payload,
+                    status = "PENDING"
+                )
+            )
+        }
         wg
     }
 
@@ -938,21 +1008,42 @@ class GoldChatRepository(context: Context) {
             coManagerName = coManagerName,
             membersInfo = membersInfo
         )
+        var synced = false
+        if (OfflineSyncManager.isNetworkAvailable(appContext) && com.example.util.RetrofitClient.hasActiveSession()) {
+            synced = try {
+                com.example.util.RetrofitClient.apiService().createProject(
+                    com.example.util.ApiWorkspaceCreateProjectRequest(
+                        name = name,
+                        type = type,
+                        workGroupId = workGroupId,
+                        estimatedCapital = safeCapital,
+                        location = location,
+                        clientId = proj.id
+                    )
+                ).isSuccessful
+            } catch (_: Exception) {
+                false
+            }
+        }
         db.withTransaction {
             db.projectDao().insertProject(proj)
-            val isOnline = OfflineSyncManager.isNetworkAvailable(appContext)
-            val payload = JSONObject().apply {
-                put("projectId", proj.id)
-                put("name", name)
-                put("capital", safeCapital)
-            }.toString()
-            val syncItem = SyncQueueEntity(
-                id = UUID.randomUUID().toString(),
-                actionType = "ADD_PROJECT",
-                payloadJson = payload,
-                status = if (isOnline) "SYNCED" else "PENDING"
-            )
-            db.syncQueueDao().insertSyncItem(syncItem)
+            if (!synced) {
+                val payload = JSONObject().apply {
+                    put("projectId", proj.id)
+                    put("name", name)
+                    put("type", type)
+                    put("workGroupId", workGroupId)
+                    put("capital", safeCapital)
+                    put("location", location)
+                }.toString()
+                val syncItem = SyncQueueEntity(
+                    id = UUID.randomUUID().toString(),
+                    actionType = "ADD_PROJECT",
+                    payloadJson = payload,
+                    status = "PENDING"
+                )
+                db.syncQueueDao().insertSyncItem(syncItem)
+            }
         }
         proj
     }
@@ -2609,27 +2700,111 @@ class GoldChatRepository(context: Context) {
 
         val pendingMsgs = db.messageDao().getPendingMessagesSync()
         for (msg in pendingMsgs) {
-            db.messageDao().updateMessageStatus(msg.id, MessageStatus.DELIVERED.name)
-            db.chatDao().updateLastMessageStatus(msg.chatId, MessageStatus.DELIVERED.name)
+            val sent = try {
+                val plain = RoomLocalAES256Engine.decryptMessage(msg, null, appContext)
+                com.example.util.RetrofitClient.apiService().sendChatMessage(
+                    conversationId = plain.chatId,
+                    request = com.example.util.ApiWorkspaceSendMessageRequest(
+                        content = plain.content,
+                        type = plain.type,
+                        clientId = plain.id
+                    )
+                ).isSuccessful
+            } catch (_: Exception) {
+                false
+            }
+            if (sent) {
+                db.messageDao().updateMessageStatus(msg.id, MessageStatus.DELIVERED.name)
+                db.chatDao().updateLastMessageStatus(msg.chatId, MessageStatus.DELIVERED.name)
+            }
         }
 
         val unsyncedTasks = db.projectTaskDao().getUnsyncedTasksSync()
         for (task in unsyncedTasks) {
-            db.projectTaskDao().updateSyncStatus(task.id, true)
+            val taskSynced = try {
+                com.example.util.RetrofitClient.apiService().createWorkTask(
+                    com.example.util.ApiCreateTaskRequest(
+                        projectId = task.projectId,
+                        projectName = task.projectName,
+                        workGroupId = task.workGroupId ?: "wg_company_main",
+                        title = task.title,
+                        description = task.description.orEmpty(),
+                        timingMode = task.timingMode,
+                        durationValue = task.durationValue,
+                        assignees = listOfNotNull(task.assignedToName?.takeIf { it.isNotBlank() }),
+                        priority = task.priority,
+                        financialAmount = task.financialAmount
+                    )
+                ).isSuccessful
+            } catch (_: Exception) {
+                false
+            }
+            if (taskSynced) {
+                db.projectTaskDao().updateSyncStatus(task.id, true)
+            }
         }
 
         val pendingQueue = db.syncQueueDao().getPendingItemsSync()
+        var queueSyncedCount = 0
         for (item in pendingQueue) {
-            db.syncQueueDao().updateSyncStatus(item.id, "SYNCED", null)
+            val ok = try {
+                val json = JSONObject(item.payloadJson)
+                when (item.actionType) {
+                    "SEND_MESSAGE" -> {
+                        val content = json.optString("content")
+                        val chatId = json.optString("chatId")
+                        if (chatId.isNotBlank() && content.isNotBlank()) {
+                            com.example.util.RetrofitClient.apiService().sendChatMessage(
+                                conversationId = chatId,
+                                request = com.example.util.ApiWorkspaceSendMessageRequest(
+                                    content = content,
+                                    type = json.optString("type", "TEXT"),
+                                    clientId = json.optString("messageId").takeIf { it.isNotBlank() }
+                                )
+                            ).isSuccessful
+                        } else true
+                    }
+                    "CREATE_GROUP" -> {
+                        com.example.util.RetrofitClient.apiService().createGroup(
+                            com.example.util.ApiWorkspaceCreateGroupRequest(
+                                name = json.optString("name", "مجموعة عمل"),
+                                description = json.optString("description"),
+                                isPrivate = json.optBoolean("isPrivate", true),
+                                clientId = json.optString("groupId").takeIf { it.isNotBlank() }
+                            )
+                        ).isSuccessful
+                    }
+                    "ADD_PROJECT" -> {
+                        com.example.util.RetrofitClient.apiService().createProject(
+                            com.example.util.ApiWorkspaceCreateProjectRequest(
+                                name = json.optString("name", "مشروع جديد"),
+                                type = json.optString("type", "GOLD_TRADING"),
+                                workGroupId = json.optString("workGroupId").takeIf { it.isNotBlank() },
+                                estimatedCapital = json.optDouble("capital", 0.0),
+                                location = json.optString("location"),
+                                clientId = json.optString("projectId").takeIf { it.isNotBlank() }
+                            )
+                        ).isSuccessful
+                    }
+                    else -> true
+                }
+            } catch (_: Exception) {
+                false
+            }
+            if (ok) {
+                db.syncQueueDao().updateSyncStatus(item.id, "SYNCED", null)
+                queueSyncedCount++
+            }
         }
         db.syncQueueDao().clearSynced()
 
-        val totalSynced = pendingMsgs.size + unsyncedTasks.size + pendingQueue.size
+        val totalSynced = pendingMsgs.size + unsyncedTasks.size + queueSyncedCount
 
         val chatsTotal = db.chatDao().getAllChats().first().size
         val projectsTotal = db.projectDao().getProjectsCountSync()
         val messagesTotal = db.messageDao().getMessagesCountSync()
         val tasksTotal = db.projectTaskDao().getTasksCountSync()
+        val remainingPending = db.syncQueueDao().getPendingCountSync()
 
         OfflineSyncManager.setLastSyncTimestamp(appContext, System.currentTimeMillis())
         OfflineSyncManager.setCachedDataSummary(
@@ -2637,7 +2812,7 @@ class GoldChatRepository(context: Context) {
             projectsCount = projectsTotal,
             messagesCount = messagesTotal,
             tasksCount = tasksTotal,
-            pendingCount = 0
+            pendingCount = remainingPending
         )
 
         totalSynced

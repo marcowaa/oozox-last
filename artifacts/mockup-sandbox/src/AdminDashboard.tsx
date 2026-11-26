@@ -12,6 +12,13 @@ import {
 } from './types';
 import { themePresets, defaultTheme, applyThemeToDocument, generateShadesFromHex } from './themePresets';
 import { AdminDashboardSkeleton } from './components/skeletons/AdminDashboardSkeleton';
+import {
+  WebCallBudgetTelemetry,
+  WebCallHistoryItem,
+  apiGetAdminCallBudget,
+  apiGetCallHistory,
+  getWebAccessToken,
+} from './lib/webAuthClient';
 import { 
   LayoutDashboard, 
   Megaphone, 
@@ -50,7 +57,8 @@ import {
   Sliders,
   Paintbrush,
   Briefcase,
-  Pipette
+  Pipette,
+  PhoneCall
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -92,7 +100,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'cms_features' | 'cms_announcements' | 'cms_tutorials' | 'cms_hero' | 'gold_prices' | 'companies' | 'jobs' | 'theme_customizer'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'cms_features' | 'cms_announcements' | 'cms_tutorials' | 'cms_hero' | 'gold_prices' | 'companies' | 'jobs' | 'calls_budget' | 'theme_customizer'>('overview');
+
+  // --- Calls & Monthly RTC Budget Telemetry State ---
+  const [rtcBudget, setRtcBudget] = useState<WebCallBudgetTelemetry | null>(null);
+  const [rtcCalls, setRtcCalls] = useState<WebCallHistoryItem[]>([]);
+  const [rtcLoading, setRtcLoading] = useState(false);
+
+  const loadRtcTelemetry = useCallback(async () => {
+    const adminToken = getWebAccessToken('admin');
+    if (!adminToken) return;
+    setRtcLoading(true);
+    const [bRes, hRes] = await Promise.all([
+      apiGetAdminCallBudget(adminToken),
+      apiGetCallHistory(adminToken, 1, 20),
+    ]);
+    setRtcLoading(false);
+    if (bRes.ok && bRes.data) setRtcBudget(bRes.data);
+    if (hRes.ok && hRes.data?.calls) setRtcCalls(hRes.data.calls);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'calls_budget' || activeTab === 'overview') {
+      void loadRtcTelemetry();
+    }
+  }, [activeTab, loadRtcTelemetry]);
   
   // --- Jobs CMS State ---
   const [jobs, setJobs] = useState<JobOpportunity[]>(() => {
@@ -847,6 +879,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>الشركات والمشتركين</span>
             <span className="text-xs font-mono font-bold bg-slate-950 px-2 py-0.5 rounded text-slate-400">
               1,248
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('calls_budget')}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all tracking-wide leading-normal ${
+              activeTab === 'calls_budget'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <PhoneCall className="w-4 h-4 text-emerald-400" />
+              <span>المكالمات وميزانية RTC</span>
+            </div>
+            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+              rtcBudget?.newCallsBlocked
+                ? 'bg-rose-500/20 text-rose-300'
+                : 'bg-slate-950 text-emerald-400'
+            }`}>
+              {rtcBudget ? `${rtcBudget.usagePct.toFixed(0)}%` : 'LIVE'}
             </span>
           </button>
 
@@ -2214,7 +2267,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 </div>
               </div>
+            </div>
+          )}
 
+          {/* TAB: CALLS & MONTHLY RTC BUDGET TELEMETRY */}
+          {activeTab === 'calls_budget' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h1 className="text-2xl font-black text-white flex items-center gap-2">
+                    <PhoneCall className="w-6 h-6 text-emerald-400" />
+                    مراقبة المكالمات (WebRTC / TURN) وميزانية الإنفاق الشهرية
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                    تنبيهات تلقائية عند 50% و80%، وإيقاف بدء المكالمات الجديدة فقط عند 100% دون قطع المكالمات النشطة.
+                  </p>
+                </div>
+                <button
+                  onClick={() => void loadRtcTelemetry()}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${rtcLoading ? 'animate-spin' : ''}`} />
+                  تحديث القياسات
+                </button>
+              </div>
+
+              {rtcBudget ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                      <span className="text-xs text-slate-400 font-bold">نسبة الاستهلاك الشهري ({rtcBudget.monthKey})</span>
+                      <p className={`text-3xl font-black font-mono mt-2 ${
+                        rtcBudget.usagePct >= 100 ? 'text-rose-400' : rtcBudget.usagePct >= 80 ? 'text-amber-400' : 'text-emerald-400'
+                      }`}>
+                        {rtcBudget.usagePct.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1 font-mono">
+                        ${rtcBudget.estimatedCostUsd.toFixed(2)} / ${rtcBudget.monthlyBudgetUsd.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                      <span className="text-xs text-slate-400 font-bold">حالة المكالمات الجديدة</span>
+                      <p className={`text-xl font-black mt-2 ${rtcBudget.newCallsBlocked ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {rtcBudget.newCallsBlocked ? 'موقوفة عند 100%' : 'متاحة وتعمل بشكل طبيعي'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        عتبات التنبيه: {rtcBudget.thresholds.alert1Pct}% • {rtcBudget.thresholds.alert2Pct}% • 100%
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                      <span className="text-xs text-slate-400 font-bold">إجمالي الدقائق المفوترة</span>
+                      <p className="text-3xl font-black font-mono text-white mt-2">{rtcBudget.totalBilledMinutes}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        مكالمات مجاب عليها: {rtcBudget.answeredCallsCount} من {rtcBudget.totalCallsCount}
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                      <span className="text-xs text-slate-400 font-bold">ترافيك Coturn TURN</span>
+                      <p className="text-3xl font-black font-mono text-cyan-400 mt-2">
+                        {(rtcBudget.turnBytesTotal / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        إعادة تشغيل الخادم: {rtcBudget.coturnRestartCount}
+                      </p>
+                    </div>
+                  </div>
+
+                  {rtcBudget.alertsTriggered.length > 0 && (
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-xs text-amber-200">
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                      <span>
+                        التنبيهات المُفعّلة هذا الشهر: {rtcBudget.alertsTriggered.map((t) => `${t}%`).join(' ، ')}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                      <h3 className="text-sm font-black text-white">أحدث سجلات المكالمات</h3>
+                      <span className="text-xs text-slate-400">{rtcCalls.length} سجل</span>
+                    </div>
+                    {rtcCalls.length === 0 ? (
+                      <p className="p-6 text-center text-xs text-slate-500">لا توجد مكالمات مسجلة حتى الآن.</p>
+                    ) : (
+                      <div className="divide-y divide-slate-800">
+                        {rtcCalls.map((call) => (
+                          <div key={call._id} className="px-5 py-3 flex items-center justify-between gap-4 text-xs">
+                            <div>
+                              <p className="font-bold text-white">
+                                {call.callerId?.name || call.callerId?.phone || 'متصل'} ← {call.calleeId?.name || call.calleeId?.phone || 'مستقبل'}
+                              </p>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                {call.callType} • {call.status} • {call.billedDurationSeconds}s
+                              </p>
+                            </div>
+                            <span className="font-mono font-bold text-amber-400">
+                              ${Number(call.estimatedCostUsd || 0).toFixed(4)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-400">
+                  {rtcLoading ? 'جاري جلب بيانات الميزانية والمكالمات من الخادم...' : 'لا تتوفر بيانات حالياً — تأكد من تسجيل الدخول كـ ADMIN.'}
+                </div>
+              )}
             </div>
           )}
 

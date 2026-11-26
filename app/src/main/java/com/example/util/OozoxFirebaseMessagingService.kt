@@ -25,9 +25,9 @@ class OozoxFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "New FCM Token received: $token")
+        Log.d(TAG, "New FCM Token received")
         saveToken(applicationContext, token)
-        FcmNotificationManager.syncTokenWithServer(token)
+        FcmNotificationManager.syncTokenWithServer(token, applicationContext)
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -137,6 +137,50 @@ class OozoxFirebaseMessagingService : FirebaseMessagingService() {
                     currentPrice = currentPrice,
                     direction = direction,
                     note = note
+                )
+            }
+
+            "account_transfer_request", "ACCOUNT_TRANSFER_REQUEST" -> {
+                val transferId = data["transferId"] ?: data["transfer_id"] ?: ""
+                val deviceName = data["targetDeviceName"] ?: data["deviceName"] ?: "جهاز جديد"
+                FcmNotificationManager.notifyIncomingTransferRequest(transferId)
+                NotificationHelper.showSystemNotification(
+                    context = applicationContext,
+                    title = "طلب نقل حساب أوزوكس",
+                    message = "يطلب الجهاز ($deviceName) تفويض نقل المحادثات والوسائط المشفرة."
+                )
+            }
+
+            "session_revoked", "force_logout", "SESSION_REVOKED", "FORCE_LOGOUT" -> {
+                val reason = data["reason"] ?: notification?.body ?: "تم إنهاء الجلسة بعد نقل الحساب إلى الهاتف الجديد."
+                FcmNotificationManager.notifySessionRevoked(reason)
+                NotificationHelper.showSystemNotification(
+                    context = applicationContext,
+                    title = "تم تسجيل الخروج من هذا الجهاز",
+                    message = reason
+                )
+            }
+
+            "incoming_call", "INCOMING_CALL" -> {
+                val callId = data["callId"] ?: data["call_id"] ?: ""
+                val callerId = data["callerId"] ?: data["caller_id"] ?: ""
+                val callerName = data["callerName"] ?: data["caller_name"] ?: notification?.title ?: "مستخدم OOZOX"
+                val isVid = data["callType"]?.equals("VIDEO", ignoreCase = true) == true
+                if (callId.isNotBlank() && callerId.isNotBlank()) {
+                    FcmNotificationManager.notifyIncomingCall(
+                        SignalingPayload(
+                            type = SignalingMessageType.CALL_OFFER,
+                            callId = callId,
+                            senderId = callerId,
+                            senderName = callerName,
+                            isVideo = isVid
+                        )
+                    )
+                }
+                NotificationHelper.showSystemNotification(
+                    context = applicationContext,
+                    title = notification?.title ?: if (isVid) "مكالمة فيديو واردة" else "مكالمة صوتية واردة",
+                    message = notification?.body ?: "مكالمة من $callerName"
                 )
             }
 

@@ -212,6 +212,7 @@ enum class SubscriptionTier(
     }
 }
 
+@Serializable
 @Entity(tableName = "users")
 data class UserEntity(
     @PrimaryKey val id: String,
@@ -264,6 +265,7 @@ data class RepeatUserSummary(
     val lastLoginTimestamp: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "contacts")
 data class ContactEntity(
     @PrimaryKey val id: String,
@@ -276,6 +278,7 @@ data class ContactEntity(
     val subAccountId: String? = null
 )
 
+@Serializable
 @Entity(tableName = "chats")
 data class ChatEntity(
     @PrimaryKey val id: String,
@@ -297,6 +300,7 @@ data class ChatEntity(
     val subAccountId: String? = null
 )
 
+@Serializable
 @Entity(tableName = "messages")
 data class MessageEntity(
     @PrimaryKey val id: String,
@@ -313,6 +317,7 @@ data class MessageEntity(
     val subAccountId: String? = null
 )
 
+@Serializable
 @Entity(tableName = "chat_accounts")
 data class ChatAccountEntity(
     @PrimaryKey val id: String,
@@ -323,6 +328,7 @@ data class ChatAccountEntity(
     val status: String = HashtagStatus.ACTIVE.name
 )
 
+@Serializable
 @Entity(tableName = "hashtag_accounts")
 data class HashtagAccountEntity(
     @PrimaryKey val id: String,
@@ -336,6 +342,7 @@ data class HashtagAccountEntity(
     val projectName: String? = null
 )
 
+@Serializable
 @Entity(tableName = "hashtag_entries")
 data class HashtagEntryEntity(
     @PrimaryKey val id: String,
@@ -353,6 +360,7 @@ data class HashtagEntryEntity(
     val projectName: String? = null
 )
 
+@Serializable
 @Entity(tableName = "entry_comments")
 data class CommentEntity(
     @PrimaryKey val id: String,
@@ -362,6 +370,7 @@ data class CommentEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "hidden_profiles")
 data class HiddenProfileEntity(
     @PrimaryKey val id: String,
@@ -378,6 +387,7 @@ data class HiddenProfileEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "hidden_sub_accounts")
 data class HiddenSubAccountEntity(
     @PrimaryKey val id: String,
@@ -416,6 +426,7 @@ data class HiddenSubAccountEntity(
     val isActiveEmployee: Boolean = true
 )
 
+@Serializable
 @Entity(tableName = "work_groups")
 data class WorkGroupEntity(
     @PrimaryKey val id: String,
@@ -433,6 +444,7 @@ data class WorkGroupEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "group_members")
 data class GroupMemberEntity(
     @PrimaryKey val id: String,
@@ -461,6 +473,7 @@ data class GroupMemberEntity(
     val geofencingRadiusMeters: Int = 200
 )
 
+@Serializable
 @Entity(tableName = "employee_attendance")
 data class EmployeeAttendanceEntity(
     @PrimaryKey val id: String,
@@ -492,6 +505,7 @@ data class EmployeeAttendanceEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "daily_accounting_records")
 data class DailyAccountingRecordEntity(
     @PrimaryKey val id: String,
@@ -517,6 +531,7 @@ data class DailyAccountingRecordEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "financial_complaints")
 data class FinancialComplaintEntity(
     @PrimaryKey val id: String,
@@ -562,6 +577,7 @@ data class FinancialComplaintEntity(
     val forensicJointDeductionApplied: Boolean = false // هل تم تطبيق الخصم المشترك
 )
 
+@Serializable
 @Entity(tableName = "projects")
 data class ProjectEntity(
     @PrimaryKey val id: String,
@@ -592,6 +608,7 @@ data class ProjectMemberInput(
     val canMessageDirectly: Boolean = true
 )
 
+@Serializable
 @Entity(tableName = "gold_transactions")
 data class TransactionEntity(
     @PrimaryKey val id: String,
@@ -620,6 +637,7 @@ data class TransactionEntity(
     val metalLossGrams: Double = 0.0
 )
 
+@Serializable
 @Entity(tableName = "gold_purchases")
 data class GoldPurchaseEntity(
     @PrimaryKey val id: String,
@@ -651,6 +669,7 @@ data class GoldPurchaseEntity(
     val metalLossGrams: Double = 0.0
 )
 
+@Serializable
 @Entity(tableName = "trader_requests")
 data class TraderRequestEntity(
     @PrimaryKey val id: String,
@@ -667,6 +686,7 @@ data class TraderRequestEntity(
     val adminNotes: String? = null
 )
 
+@Serializable
 @Entity(tableName = "admin_config")
 data class AdminConfigEntity(
     @PrimaryKey val id: Int = 1,
@@ -692,6 +712,7 @@ data class AdminConfigEntity(
     val isBiometricEnabled: Boolean = true
 )
 
+@Serializable
 @Entity(tableName = "price_alerts")
 data class PriceAlertEntity(
     @PrimaryKey val id: String,
@@ -820,6 +841,7 @@ enum class ProjectMemberRole(val label: String, val description: String) {
     fun defaultCanExportReports(): Boolean = this != PROCUREMENT_OFFICER
 }
 
+@Serializable
 @Entity(tableName = "project_members")
 data class ProjectMemberEntity(
     @PrimaryKey val id: String,
@@ -832,6 +854,7 @@ data class ProjectMemberEntity(
     val addedAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "project_audit_logs")
 data class ProjectAuditLogEntity(
     @PrimaryKey val id: String,
@@ -852,6 +875,7 @@ enum class LedgerEntryType {
     DEBIT, CREDIT, REVERSAL
 }
 
+@Serializable
 @Entity(tableName = "immutable_ledger")
 data class LedgerEntryEntity(
     @PrimaryKey val id: String,
@@ -873,6 +897,7 @@ data class LedgerEntryEntity(
 )
 
 // --- Architecture Feature 3: Automated Clearing House (التقاص الآلي للصنعيات والذهب) ---
+@Serializable
 @Entity(tableName = "clearing_settlements")
 data class ClearingSettlementEntity(
     @PrimaryKey val id: String,
@@ -890,6 +915,7 @@ data class ClearingSettlementEntity(
 )
 
 // --- Architecture Feature 4: Offline-First Write-Ahead Sync Queue ---
+@Serializable
 @Entity(tableName = "sync_queue")
 data class SyncQueueEntity(
     @PrimaryKey val id: String,
@@ -902,6 +928,7 @@ data class SyncQueueEntity(
 )
 
 // --- Dynamic Subscriptions & Admin Offer Management ---
+@Serializable
 @Entity(tableName = "subscription_plans")
 data class SubscriptionPlanEntity(
     @PrimaryKey val id: String, // FREE_TRIAL, SILVER_TRADER, GOLD_ENTERPRISE, DIAMOND_VIP
@@ -918,6 +945,7 @@ data class SubscriptionPlanEntity(
     val isEnabled: Boolean = true
 )
 
+@Serializable
 @Entity(tableName = "subscription_requests")
 data class SubscriptionRequestEntity(
     @PrimaryKey val id: String,
@@ -935,6 +963,7 @@ data class SubscriptionRequestEntity(
     val adminNotes: String? = null
 )
 
+@Serializable
 @Entity(tableName = "promo_announcements")
 data class PromoAnnouncementEntity(
     @PrimaryKey val id: String,
@@ -966,6 +995,7 @@ enum class MerchantProductCategory(val label: String, val icon: String) {
     }
 }
 
+@Serializable
 @Entity(tableName = "merchant_reviews")
 data class MerchantReviewEntity(
     @PrimaryKey val id: String,
@@ -983,6 +1013,7 @@ data class MerchantReviewEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "merchant_products")
 data class MerchantProductEntity(
     @PrimaryKey val id: String,
@@ -1012,6 +1043,7 @@ data class MerchantProductEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "merchant_daily_sales")
 data class MerchantDailySaleEntity(
     @PrimaryKey val id: String,
@@ -1030,6 +1062,7 @@ data class MerchantDailySaleEntity(
     val isClosedInDailyReport: Boolean = false
 )
 
+@Serializable
 @Entity(tableName = "merchant_daily_closing_reports")
 data class MerchantDailyClosingReportEntity(
     @PrimaryKey val id: String,
@@ -1076,6 +1109,7 @@ data class EndOfDayReportModel(
     val invoicesListToday: List<InvoiceEntity>
 )
 
+@Serializable
 @Entity(tableName = "invoices")
 data class InvoiceEntity(
     @PrimaryKey val id: String,
@@ -1125,6 +1159,7 @@ enum class TaskStatus {
     PENDING, IN_PROGRESS, COMPLETED, CANCELLED
 }
 
+@Serializable
 @Entity(tableName = "project_tasks")
 data class ProjectTaskEntity(
     @PrimaryKey val id: String,
@@ -1184,6 +1219,7 @@ object QuickBusinessReplies {
     )
 }
 
+@Serializable
 @Entity(tableName = "shift_handovers")
 data class ShiftHandoverEntity(
     @PrimaryKey val id: String,
@@ -1250,6 +1286,7 @@ data class RetroactiveEmployeeLedger(
 
 // --- Dynamic Excel Spreadsheet Data Schema for Backend Formulas & Extensibility ---
 
+@Serializable
 @Entity(tableName = "dynamic_excel_templates")
 data class DynamicExcelTemplateEntity(
     @PrimaryKey val id: String,
@@ -1266,6 +1303,7 @@ data class DynamicExcelTemplateEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "dynamic_excel_custom_fields")
 data class DynamicExcelCustomFieldEntity(
     @PrimaryKey val id: String,
@@ -1280,6 +1318,7 @@ data class DynamicExcelCustomFieldEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "dynamic_excel_row_records")
 data class DynamicExcelRowRecordEntity(
     @PrimaryKey val id: String,
@@ -1320,6 +1359,7 @@ enum class BusinessActivitySector(val labelAr: String, val labelEn: String) {
     }
 }
 
+@Serializable
 @Entity(tableName = "business_profiles")
 data class BusinessProfileEntity(
     @PrimaryKey val id: String = "company_profile_main",
@@ -1343,6 +1383,7 @@ data class BusinessProfileEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "payroll_adjustments")
 data class PayrollAdjustmentEntity(
     @PrimaryKey val id: String,
@@ -1357,6 +1398,7 @@ data class PayrollAdjustmentEntity(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Serializable
 @Entity(tableName = "employee_leaves")
 data class EmployeeLeaveEntity(
     @PrimaryKey val id: String,

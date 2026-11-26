@@ -28,7 +28,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoneyOff
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -192,7 +195,8 @@ fun ChatDetailScreen(
     onAddProjectAccountingEntry: (projectId: String, projectName: String, title: String, amount: Double, isIncome: Boolean, category: String) -> Unit = { _, _, _, _, _, _ -> },
     onAddProjectMemberWithPerms: (projectId: String, name: String, phone: String, role: ProjectMemberRole, task: String, userId: String?, isAdmin: Boolean, canPost: Boolean, canEdit: Boolean, canExport: Boolean, canDirect: Boolean) -> Unit = { _, _, _, _, _, _, _, _, _, _, _ -> },
     onPromoteProjectMember: (projectId: String, ProjectMemberEntity) -> Unit = { _, _ -> },
-    onRemoveProjectMember: (projectId: String, ProjectMemberEntity) -> Unit = { _, _ -> }
+    onRemoveProjectMember: (projectId: String, ProjectMemberEntity) -> Unit = { _, _ -> },
+    signalingManager: com.example.util.WebRtcSignalingManager? = null
 ) {
     val context = LocalContext.current
     val ttsHelper = remember { TextToSpeechHelper(context) }
@@ -565,6 +569,7 @@ fun ChatDetailScreen(
     var isAutoTranslateEnabled by rememberSaveable { mutableStateOf(true) }
     var translateMyMessagesToo by rememberSaveable { mutableStateOf(false) }
     var activeCallType by remember { mutableStateOf<CallType?>(null) }
+    var callBudgetBlockedMessage by remember { mutableStateOf<String?>(null) }
     var showZoxCallBlockedDialog by remember { mutableStateOf(false) }
     val isZoxAdminChat = remember(chat) { chat?.contactType == "ADMIN" }
     var selectedHashtagIdForEntry by remember { mutableStateOf<String?>(null) }
@@ -1049,8 +1054,26 @@ fun ChatDetailScreen(
             contactName = chat.contactName,
             contactAvatarUri = null,
             isTrader = chat.contactType == com.example.data.model.UserType.GOLD_TRADER.name,
+            calleeUserId = chat.contactId,
+            currentUserName = currentUser?.name.orEmpty(),
+            signalingManager = signalingManager,
+            onBudgetExceeded = { msg -> callBudgetBlockedMessage = msg },
             onDismiss = { activeCallType = null },
             onSendMessageNotice = { notice, type -> onSendMessage(notice, type) }
+        )
+    }
+
+    if (!callBudgetBlockedMessage.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = { callBudgetBlockedMessage = null },
+            icon = { Icon(Icons.Default.MoneyOff, contentDescription = null, tint = com.example.ui.theme.StatusRed) },
+            title = { Text("تم إيقاف المكالمات الجديدة مؤقتاً", fontWeight = FontWeight.Bold) },
+            text = { Text(callBudgetBlockedMessage.orEmpty(), fontSize = 13.5.sp) },
+            confirmButton = {
+                Button(onClick = { callBudgetBlockedMessage = null }) {
+                    Text("حسناً")
+                }
+            }
         )
     }
 

@@ -39,6 +39,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val isInitialized = MutableStateFlow(false)
 
+    private val _signalingManager = MutableStateFlow<com.example.util.WebRtcSignalingManager?>(null)
+    val signalingManager: StateFlow<com.example.util.WebRtcSignalingManager?> = _signalingManager.asStateFlow()
+
+    private val _incomingCallPayload = MutableStateFlow<com.example.util.SignalingPayload?>(null)
+    val incomingCallPayload: StateFlow<com.example.util.SignalingPayload?> = _incomingCallPayload.asStateFlow()
+
+    private val _incomingTransferSignal = MutableStateFlow(0L)
+    val incomingTransferSignal: StateFlow<Long> = _incomingTransferSignal.asStateFlow()
+
+    private var signalingCollectorJob: kotlinx.coroutines.Job? = null
+
+    init {
+        viewModelScope.launch {
+            launch {
+                com.example.util.FcmNotificationManager.incomingTransferPushEvents.collect {
+                    _incomingTransferSignal.value = System.currentTimeMillis()
+                }
+            }
+            launch {
+                com.example.util.FcmNotificationManager.sessionRevokedPushEvents.collect { reason ->
+                    com.example.ui.components.ToastNotificationBus.showToast(
+                        message = reason,
+                        type = com.example.ui.components.AppToastType.ERROR
+                    )
+                    logout()
+                }
+            }
+            launch {
+                com.example.util.FcmNotificationManager.incomingCallPushEvents.collect { payload ->
+                    _incomingCallPayload.value = payload
+                }
+            }
+        }
+    }
+
     val currentUser: StateFlow<UserEntity?> = repository.currentUser.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
@@ -1540,10 +1575,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             saveRepeatUser(updated)
             viewModelScope.launch(Dispatchers.IO) {
                 com.example.data.repository.AuthRepository.updateMyProfile(
-                    context = getApplication(),
                     name = updated.name,
-                    jobTitle = updated.jobTitle,
-                    merchantBio = updated.merchantBio
+                    preferredLanguage = _currentLanguage.value.code
                 )
             }
             onComplete()
@@ -1649,7 +1682,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun trustedBiometricOnlineLogin(phone: String): com.example.data.repository.AuthOutcome {
         val outcome = com.example.data.repository.AuthRepository.trustedDeviceLogin(
             context = getApplication(),
-            emailOrPhone = phone
+            phoneOrIdentifier = phone
         )
         if (outcome is com.example.data.repository.AuthOutcome.Authenticated) {
             completeServerAuthenticatedUser(outcome.user, fallbackPhone = phone)
@@ -1721,8 +1754,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun syncRealtimeSignalingState() {
+        val user = currentUser.value
+        val hasSession = com.example.util.RetrofitClient.hasActiveSession()
+        if (user == null || _isOfflineCacheMode.value || !hasSession) {
+            signalingCollectorJob?.cancel()
+            signalingCollectorJob = null
+            _signalingManager.value?.disconnect()
+            _signalingManager.value = null
+            return
+        }
+        val existing = _signalingManager.value
+        if (existing != null && existing.isConnected.value) return
+
+        existing?.disconnect()
+        val devId = com.example.util.SecureCredentialVault.getOrCreateDeviceId(getApplication())
+        val mgr = com.example.util.WebRtcSignalingManager(
+            currentUserId = user.id,
+            deviceId = devId,
+            coroutineScope = viewModelScope
+        )
+        _signalingManager.value = mgr
+        signalingCollectorJob?.cancel()
+        signalingCollectorJob = viewModelScope.launch {
+            launch {
+                mgr.incomingCalls.collect { payload ->
+                    _incomingCallPayload.value = payload
+                }
+            }
+            launch {
+                mgr.transferEvents.collect {
+                    _incomingTransferSignal.value = System.currentTimeMillis()
+                }
+            }
+            launch {
+                mgr.forceLogoutEvents.collect { reason ->
+                    com.example.ui.components.ToastNotificationBus.showToast(
+                        message = reason,
+                        type = com.example.ui.components.AppToastType.ERROR
+                    )
+                    logout()
+                }
+            }
+            launch {
+                val fcmToken = com.example.util.FcmNotificationManager.fcmToken.value
+                    ?: com.example.util.OozoxFirebaseMessagingService.getSavedToken(getApplication())
+                if (!fcmToken.isNullOrBlank()) {
+                    com.example.data.repository.AuthRepository.registerFcmToken(getApplication(), fcmToken)
+                }
+            }
+        }
+        mgr.connect()
+    }
+
+    fun dismissIncomingCall() {
+        _incomingCallPayload.value = null
+    }
+
     fun logout() {
         viewModelScope.launch {
+            signalingCollectorJob?.cancel()
+            signalingCollectorJob = null
+            _signalingManager.value?.disconnect()
+            _signalingManager.value = null
+            _incomingCallPayload.value = null
             com.example.data.repository.AuthRepository.logout(getApplication(), clearDeviceTrust = false)
             _isOfflineCacheMode.value = false
             _trustedDevices.value = emptyList()
@@ -3457,15 +3552,104 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _cloudBackups = MutableStateFlow<List<com.example.util.CloudBackupRecord>>(emptyList())
     val cloudBackups: StateFlow<List<com.example.util.CloudBackupRecord>> = _cloudBackups.asStateFlow()
 
+    private val _isCloudBackupsLoading = MutableStateFlow(false)
+    val isCloudBackupsLoading: StateFlow<Boolean> = _isCloudBackupsLoading.asStateFlow()
+
+    private val _cloudBackupsError = MutableStateFlow<String?>(null)
+    val cloudBackupsError: StateFlow<String?> = _cloudBackupsError.asStateFlow()
+
     fun refreshCloudBackups() {
         val user = currentUser.value ?: return
-        val list = com.example.util.SecureBackupVaultEngine.listCloudBackups(getApplication(), user.phone)
-        _cloudBackups.value = list
+        viewModelScope.launch {
+            _isCloudBackupsLoading.value = true
+            _cloudBackupsError.value = null
+            val res = SecureBackupVaultEngine.listServerCloudBackups(user.phone)
+            res.onSuccess { list ->
+                _cloudBackups.value = list
+            }.onFailure { err ->
+                _cloudBackupsError.value = err.message
+            }
+            _isCloudBackupsLoading.value = false
+        }
     }
 
     fun deleteCloudBackup(backupId: String) {
         viewModelScope.launch {
-            com.example.util.SecureBackupVaultEngine.deleteCloudBackup(getApplication(), backupId)
+            _isBackupProcessing.value = true
+            val res = SecureBackupVaultEngine.deleteServerCloudBackup(backupId)
+            res.onFailure { err ->
+                _backupStatus.value = BackupResult.Error(err.message ?: "تعذر حذف النسخة السحابية من الخادم.")
+            }
+            _isBackupProcessing.value = false
+            refreshCloudBackups()
+        }
+    }
+
+    fun downloadCloudBackupContent(
+        backupId: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isBackupProcessing.value = true
+            val res = SecureBackupVaultEngine.downloadServerCloudBackup(backupId)
+            _isBackupProcessing.value = false
+            res.onSuccess { item ->
+                val content = item.vaultContent
+                if (content.isNullOrBlank()) {
+                    onResult(Result.failure(IllegalStateException("محتوى النسخة السحابية فارغ.")))
+                } else {
+                    onResult(Result.success(content))
+                }
+            }.onFailure { err ->
+                _backupStatus.value = BackupResult.Error(err.message ?: "فشل تحميل النسخة السحابية من الخادم.")
+                onResult(Result.failure(err))
+            }
+        }
+    }
+
+    fun restoreCloudBackupById(
+        backupId: String,
+        passphrase: String,
+        onComplete: (BackupResult) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val user = currentUser.value
+            if (user == null) {
+                val err = BackupResult.Error("يجب تسجيل الدخول أولاً للتحقق من هوية رقم الهاتف.")
+                _backupStatus.value = err
+                onComplete(err)
+                return@launch
+            }
+            _isBackupProcessing.value = true
+            val dl = SecureBackupVaultEngine.downloadServerCloudBackup(backupId)
+            if (dl.isFailure) {
+                val err = BackupResult.Error(dl.exceptionOrNull()?.message ?: "تعذر تنزيل النسخة السحابية.")
+                _backupStatus.value = err
+                _isBackupProcessing.value = false
+                onComplete(err)
+                return@launch
+            }
+            val vaultContent = dl.getOrNull()?.vaultContent.orEmpty()
+            val db = com.example.data.local.AppDatabase.getInstance(getApplication())
+            val result = SecureBackupVaultEngine.restoreEncryptedBackup(
+                context = getApplication(),
+                db = db,
+                backupFileContent = vaultContent,
+                currentUserPhone = user.phone,
+                enteredPassphrase = passphrase
+            )
+            _backupStatus.value = result
+            _isBackupProcessing.value = false
+            onComplete(result)
+        }
+    }
+
+    fun refreshLocalStateAfterRestoreOrTransfer() {
+        viewModelScope.launch {
+            val restoredUser = repository.currentUser.firstOrNull()
+            if (restoredUser != null) {
+                saveRepeatUser(restoredUser)
+            }
             refreshCloudBackups()
         }
     }

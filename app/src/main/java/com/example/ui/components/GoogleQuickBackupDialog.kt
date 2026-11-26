@@ -80,13 +80,13 @@ fun GoogleQuickBackupDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "التصدير والمشاركة المشفرة (.oozox)",
+                                text = "سحابة أوزوكس الموثقة (.oozox)",
                                 fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "تشفير محلي AES-256 على الجهاز",
+                                text = "تشفير E2EE AES-256 قبل الرفع للسحابة",
                                 fontSize = 11.5.sp,
                                 color = OozoxTeal
                             )
@@ -133,7 +133,7 @@ fun GoogleQuickBackupDialog(
                             Icon(Icons.Default.Security, contentDescription = null, tint = OozoxTeal, modifier = Modifier.size(22.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "الحفظ الحالي يتم محلياً على جهازك (${currentUser.phone}) بتشفير AES-256-GCM ومربوط بكلمة مرور الخزينة، ويمكنك مشاركة ملف .oozox عبر Android Share Sheet.",
+                                text = "يتم تشفير كافة بياناتك على جهازك (${currentUser.phone}) بخوارزمية AES-256-GCM قبل رفعها إلى خادم سحابة أوزوكس الآمن (/api/backups)، ولا يستطيع الخادم فك التشفير بدون كلمة المرور الخاصة بك.",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 16.sp

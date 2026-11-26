@@ -138,6 +138,11 @@ fun MainAppNavigation(viewModel: MainViewModel) {
     var activeChatForSmartAccountant by remember { mutableStateOf<ChatEntity?>(null) }
     var isAppUnlocked by remember { mutableStateOf(false) }
     var pendingMainTabIndex by remember { mutableStateOf<Int?>(null) }
+    var incomingTransferRequest by remember { mutableStateOf<com.example.util.ApiTransferPendingItemDto?>(null) }
+    var dismissedTransferIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val activeSignalingManager by viewModel.signalingManager.collectAsStateWithLifecycle()
+    val incomingCallPayload by viewModel.incomingCallPayload.collectAsStateWithLifecycle()
+    val incomingTransferSignal by viewModel.incomingTransferSignal.collectAsStateWithLifecycle()
 
     val navigateToAppDestination: (AppNavDestination) -> Unit = { dest ->
         when (dest) {
@@ -264,21 +269,82 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         allHiddenProfiles = allHiddenProfiles,
                         onTrustedOnlineLogin = { phone -> viewModel.trustedBiometricOnlineLogin(phone) },
                         onOfflineCacheUnlock = { phone -> viewModel.unlockOfflineCacheOnly(phone) },
-                        onLoginWithPassword = { identifier, pass, channel -> viewModel.loginWithPassword(identifier, pass, channel) },
-                        onRegisterAccount = { name, email, phone, pass, role, channel -> viewModel.registerAccount(name, email, phone, pass, role, channel) },
                         onRequestOtp = { purpose, channel, phone, preAuth -> viewModel.requestServerOtp(purpose, channel, phone, null, preAuth) },
                         onVerifyOtp = { challengeId, code, phone, preAuth, trust -> viewModel.verifyServerOtp(challengeId, code, phone, preAuth, trust) },
-                        onRequestRecoveryOtp = { phone, channel -> viewModel.requestRecoveryOtp(phone, channel) },
-                        onConfirmRecovery = { challengeId, code, newPassword -> viewModel.confirmRecoveryWithOtp(challengeId, code, newPassword) },
-                        onAuthenticatedComplete = {
-                            navController.navigate(Screen.MainTabs) {
-                                popUpTo(Screen.Onboarding) { inclusive = true }
+                        onAuthenticatedComplete = { decision ->
+                            when {
+                                decision.hasOtherActiveDevice -> {
+                                    navController.navigate(
+                                        Screen.PostOtpTransferGateway(
+                                            isExistingUser = decision.isExistingUser,
+                                            backupCount = decision.backupCount,
+                                            otherDeviceSummary = decision.otherDeviceSummary
+                                        )
+                                    ) {
+                                        popUpTo(Screen.Onboarding) { inclusive = true }
+                                    }
+                                }
+                                decision.isExistingUser -> {
+                                    navController.navigate(
+                                        Screen.PostOtpRestoreChoice(backupCount = decision.backupCount)
+                                    ) {
+                                        popUpTo(Screen.Onboarding) { inclusive = true }
+                                    }
+                                }
+                                else -> {
+                                    navController.navigate(Screen.MainTabs) {
+                                        popUpTo(Screen.Onboarding) { inclusive = true }
+                                    }
+                                }
                             }
                         },
                         onSwitchProfile = { prof ->
                             viewModel.switchActiveProfile(prof)
                             navController.navigate(Screen.MainTabs) {
                                 popUpTo(Screen.Onboarding) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable<Screen.PostOtpTransferGateway> { backStackEntry ->
+                    val route: Screen.PostOtpTransferGateway = backStackEntry.toRoute()
+                    PostOtpTransferGatewayScreen(
+                        phone = currentUser?.phone.orEmpty(),
+                        isExistingUser = route.isExistingUser,
+                        otherDeviceSummary = route.otherDeviceSummary,
+                        onTransferCompleted = {
+                            viewModel.refreshLocalStateAfterRestoreOrTransfer()
+                            navController.navigate(Screen.MainTabs) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        onSkipTransfer = { existing ->
+                            if (existing) {
+                                navController.navigate(Screen.PostOtpRestoreChoice(backupCount = route.backupCount)) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            } else {
+                                navController.navigate(Screen.MainTabs) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
+                        }
+                    )
+                }
+
+                composable<Screen.PostOtpRestoreChoice> {
+                    PostOtpRestoreChoiceScreen(
+                        phone = currentUser?.phone.orEmpty(),
+                        onRestoreComplete = {
+                            viewModel.refreshLocalStateAfterRestoreOrTransfer()
+                            navController.navigate(Screen.MainTabs) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        onSkip = {
+                            navController.navigate(Screen.MainTabs) {
+                                popUpTo(0) { inclusive = true }
                             }
                         }
                     )
@@ -1069,6 +1135,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             onRestoreBackup = onRestoreBackupAction,
                                             onDeleteCloudBackup = onDeleteCloudBackupAction,
                                             onRefreshCloudBackups = onRefreshCloudBackupsAction,
+                                            onDownloadCloudBackup = { backupId, cb -> viewModel.downloadCloudBackupContent(backupId, cb) },
                                             backupStatus = backupStatus,
                                             isBackupProcessing = isBackupProcessing,
                                             onClearBackupStatus = onClearBackupStatusAction,
@@ -1083,16 +1150,6 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             isLoadingTrustedDevices = isLoadingTrustedDevices,
                                             onLoadTrustedDevices = { viewModel.loadTrustedDevices() },
                                             onRevokeTrustedDevice = { devId, onDone -> viewModel.revokeTrustedDevice(devId, onDone) },
-                                            onChangePassword = { curPass, newPass, stepChallenge, stepCode ->
-                                                viewModel.changeAccountPassword(curPass, newPass, stepChallenge, stepCode)
-                                            },
-                                            onRequestStepUpOtp = { ch ->
-                                                viewModel.requestServerOtp(
-                                                    purpose = "SENSITIVE_ACTION",
-                                                    channel = ch,
-                                                    phone = currentUser?.phone
-                                                )
-                                            },
                                             onUpdateProfileInfo = onUpdateProfileInfoAction,
                                             onSendBroadcast = onSendBroadcastAction
                                         )
@@ -1392,7 +1449,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         },
                         onRemoveProjectMember = { pId, member ->
                             viewModel.removeProjectMember(pId, member)
-                        }
+                        },
+                        signalingManager = activeSignalingManager
                     )
 
                     if (showGoldDealDialog && chat != null) {
@@ -1875,6 +1933,86 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                     navController.navigate(Screen.MainTabs)
                 },
                 onDismiss = { showEncryptedVaultSheet = false }
+            )
+        }
+
+        // Connect Go WebRTC / Realtime Signaling + poll/push for cross-device transfer requests
+        val navScope = rememberCoroutineScope()
+        LaunchedEffect(currentUser?.id, isOfflineCacheMode, incomingTransferSignal) {
+            viewModel.syncRealtimeSignalingState()
+            if (currentUser != null && !isOfflineCacheMode && com.example.util.RetrofitClient.hasActiveSession()) {
+                while (true) {
+                    try {
+                        val res = com.example.util.RetrofitClient.apiService().getPendingDeviceTransfers()
+                        if (res.isSuccessful && res.body()?.success == true) {
+                            val nextReq = res.body()?.data?.pending
+                                .orEmpty()
+                                .firstOrNull { it.transferId !in dismissedTransferIds && it.status == "PENDING_APPROVAL" }
+                            if (nextReq != null && incomingTransferRequest == null) {
+                                incomingTransferRequest = nextReq
+                            }
+                        } else if (res.code() == 401) {
+                            // Session was revoked remotely (e.g., completed transfer on new phone)
+                            viewModel.logout()
+                            break
+                        }
+                    } catch (_: Exception) {
+                    }
+                    kotlinx.coroutines.delay(10_000L)
+                }
+            }
+        }
+
+        incomingCallPayload?.let { incoming ->
+            val matchedUser = allUsers.find { it.id == incoming.senderId }
+            val matchedContact = allContacts.find { it.id == incoming.senderId }
+            val resolvedName = incoming.senderName.ifBlank {
+                matchedUser?.name ?: matchedContact?.name ?: "مستخدم OOZOX"
+            }
+            val peerAvatar = matchedUser?.avatarUri
+            val isPeerTrader = (matchedUser?.type ?: matchedContact?.type) == UserType.GOLD_TRADER.name
+
+            CallOverlayDialog(
+                callType = if (incoming.isVideo) CallType.VIDEO else CallType.AUDIO,
+                contactName = resolvedName,
+                contactAvatarUri = peerAvatar,
+                isTrader = isPeerTrader,
+                isIncoming = true,
+                calleeUserId = incoming.senderId,
+                currentUserName = currentUser?.name.orEmpty(),
+                incomingCallId = incoming.callId,
+                incomingOfferSdp = incoming.sdp,
+                signalingManager = activeSignalingManager,
+                onBudgetExceeded = { msg ->
+                    toastController.showToast(message = msg, type = AppToastType.ERROR)
+                },
+                onDismiss = { viewModel.dismissIncomingCall() }
+            )
+        }
+
+        incomingTransferRequest?.let { reqItem ->
+            IncomingTransferApprovalDialog(
+                pendingItem = reqItem,
+                ownerPhone = currentUser?.phone.orEmpty(),
+                onApprovedAndUploaded = {
+                    dismissedTransferIds = dismissedTransferIds + reqItem.transferId
+                    incomingTransferRequest = null
+                    toastController.showToast(
+                        message = "تم رفع بياناتك المشفرة للهاتف الجديد بنجاح — انتظر تأكيد إغلاق الجلسة",
+                        type = AppToastType.SUCCESS
+                    )
+                },
+                onReject = {
+                    dismissedTransferIds = dismissedTransferIds + reqItem.transferId
+                    incomingTransferRequest = null
+                    navScope.launch {
+                        runCatching { com.example.util.RetrofitClient.apiService().cancelDeviceTransfer(reqItem.transferId) }
+                    }
+                },
+                onDismiss = {
+                    dismissedTransferIds = dismissedTransferIds + reqItem.transferId
+                    incomingTransferRequest = null
+                }
             )
         }
 

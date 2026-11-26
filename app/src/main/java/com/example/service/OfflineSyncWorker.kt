@@ -52,28 +52,112 @@ class OfflineSyncWorker(
                 }
 
                 if (hasServerSession && serverReachable) {
-                    // 1. Mark pending offline messages delivered once remote session & backend are verified
+                    val api = RetrofitClient.apiService()
+                    // 1. Replay pending offline messages via /api/chats/:id/messages
                     val pendingMsgs = db.messageDao().getPendingMessagesSync()
                     if (pendingMsgs.isNotEmpty()) {
                         for (msg in pendingMsgs) {
-                            db.messageDao().updateMessageStatus(msg.id, MessageStatus.DELIVERED.name)
-                            db.chatDao().updateLastMessageStatus(msg.chatId, MessageStatus.DELIVERED.name)
+                            val sentOk = try {
+                                val plain = com.example.util.RoomLocalAES256Engine.decryptMessage(msg, null, applicationContext)
+                                api.sendChatMessage(
+                                    conversationId = plain.chatId,
+                                    request = com.example.util.ApiWorkspaceSendMessageRequest(
+                                        content = plain.content,
+                                        type = plain.type,
+                                        clientId = plain.id
+                                    )
+                                ).isSuccessful
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (sentOk) {
+                                db.messageDao().updateMessageStatus(msg.id, MessageStatus.DELIVERED.name)
+                                db.chatDao().updateLastMessageStatus(msg.chatId, MessageStatus.DELIVERED.name)
+                            }
                         }
                     }
 
-                    // 2. Mark unsynced project tasks synced
+                    // 2. Sync unsynced project tasks via /api/tasks
                     val unsyncedTasks = db.projectTaskDao().getUnsyncedTasksSync()
                     if (unsyncedTasks.isNotEmpty()) {
                         for (task in unsyncedTasks) {
-                            db.projectTaskDao().updateSyncStatus(task.id, true)
+                            val taskOk = try {
+                                api.createWorkTask(
+                                    com.example.util.ApiCreateTaskRequest(
+                                        projectId = task.projectId,
+                                        projectName = task.projectName,
+                                        workGroupId = task.workGroupId ?: "wg_company_main",
+                                        title = task.title,
+                                        description = task.description.orEmpty(),
+                                        timingMode = task.timingMode,
+                                        durationValue = task.durationValue,
+                                        assignees = listOfNotNull(task.assignedToName?.takeIf { it.isNotBlank() }),
+                                        priority = task.priority,
+                                        financialAmount = task.financialAmount
+                                    )
+                                ).isSuccessful
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (taskOk) {
+                                db.projectTaskDao().updateSyncStatus(task.id, true)
+                            }
                         }
                     }
 
-                    // 3. Process write-ahead SyncQueue items safely
+                    // 3. Process write-ahead SyncQueue items against real workspace endpoints
                     val pendingQueue = db.syncQueueDao().getPendingItemsSync()
                     if (pendingQueue.isNotEmpty()) {
                         for (item in pendingQueue) {
-                            db.syncQueueDao().updateSyncStatus(item.id, "SYNCED", null)
+                            val ok = try {
+                                val json = org.json.JSONObject(item.payloadJson)
+                                when (item.actionType) {
+                                    "SEND_MESSAGE" -> {
+                                        val cId = json.optString("chatId")
+                                        val content = json.optString("content")
+                                        if (cId.isNotBlank() && content.isNotBlank()) {
+                                            api.sendChatMessage(
+                                                conversationId = cId,
+                                                request = com.example.util.ApiWorkspaceSendMessageRequest(
+                                                    content = content,
+                                                    type = json.optString("type", "TEXT"),
+                                                    clientId = json.optString("messageId").takeIf { it.isNotBlank() }
+                                                )
+                                            ).isSuccessful
+                                        } else true
+                                    }
+                                    "CREATE_GROUP" -> {
+                                        api.createGroup(
+                                            com.example.util.ApiWorkspaceCreateGroupRequest(
+                                                name = json.optString("name", "مجموعة عمل"),
+                                                description = json.optString("description"),
+                                                isPrivate = json.optBoolean("isPrivate", true),
+                                                clientId = json.optString("groupId").takeIf { it.isNotBlank() }
+                                            )
+                                        ).isSuccessful
+                                    }
+                                    "ADD_PROJECT" -> {
+                                        api.createProject(
+                                            com.example.util.ApiWorkspaceCreateProjectRequest(
+                                                name = json.optString("name", "مشروع جديد"),
+                                                type = json.optString("type", "GOLD_TRADING"),
+                                                workGroupId = json.optString("workGroupId").takeIf { it.isNotBlank() },
+                                                estimatedCapital = json.optDouble("capital", 0.0),
+                                                location = json.optString("location"),
+                                                clientId = json.optString("projectId").takeIf { it.isNotBlank() }
+                                            )
+                                        ).isSuccessful
+                                    }
+                                    else -> true
+                                }
+                            } catch (_: Exception) {
+                                false
+                            }
+                            if (ok) {
+                                db.syncQueueDao().updateSyncStatus(item.id, "SYNCED", null)
+                            } else {
+                                shouldRetryLater = true
+                            }
                         }
                         db.syncQueueDao().clearSynced()
                     }

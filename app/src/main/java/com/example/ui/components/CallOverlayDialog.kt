@@ -35,12 +35,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.example.data.model.MessageType
+import com.example.data.repository.AuthRepository
+import com.example.service.CallForegroundService
 import com.example.ui.theme.*
+import com.example.util.ApiCallAuthorizeRequest
+import com.example.util.IceServerConfig
+import com.example.util.RetrofitClient
+import com.example.util.WebRtcPeerManager
+import com.example.util.WebRtcSignalingManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.webrtc.PeerConnection
+import org.webrtc.RendererCommon
+import org.webrtc.SurfaceViewRenderer
+import java.util.UUID
 import kotlin.math.roundToInt
 
 enum class CallType(val label: String, val icon: String) {
@@ -71,10 +84,17 @@ fun CallOverlayDialog(
     contactAvatarUri: String? = null,
     isTrader: Boolean = false,
     isIncoming: Boolean = false,
+    calleeUserId: String = "",
+    currentUserName: String = "",
+    incomingCallId: String? = null,
+    incomingOfferSdp: String? = null,
+    signalingManager: WebRtcSignalingManager? = null,
+    onBudgetExceeded: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onSendMessageNotice: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var isMinimized by remember { mutableStateOf(false) }
     var callState by remember {
         mutableStateOf(if (isIncoming) CallState.INCOMING_RINGING else CallState.OUTGOING_RINGING)
@@ -85,7 +105,9 @@ fun CallOverlayDialog(
     var isVideoEnabled by remember { mutableStateOf(callType == CallType.VIDEO) }
     var isOnHold by remember { mutableStateOf(false) }
     var callDurationSeconds by remember { mutableIntStateOf(0) }
-    var networkQuality by remember { mutableStateOf("ممتازة (HD)") }
+    var networkQuality by remember { mutableStateOf("P2P مشفر") }
+    var activeCallId by remember { mutableStateOf(incomingCallId ?: UUID.randomUUID().toString()) }
+    var peerManager by remember { mutableStateOf<WebRtcPeerManager?>(null) }
 
     val audioManager = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -119,7 +141,174 @@ fun CallOverlayDialog(
         }
     }
 
-    // Call state is driven by real WebRTC signaling / user acceptance rather than simulated auto-connect timers.
+    suspend fun fetchIceServersWithTurn(): List<IceServerConfig> {
+        val base = listOf(
+            IceServerConfig(urls = listOf("stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"))
+        )
+        return try {
+            val turnRes = RetrofitClient.apiService().fetchTurnCredentials()
+            val turnBody = turnRes.body()
+            if (turnRes.isSuccessful && turnBody != null && turnBody.urls.isNotEmpty()) {
+                val merged = base + IceServerConfig(
+                    urls = turnBody.urls,
+                    username = turnBody.username.takeIf { it.isNotBlank() },
+                    credential = turnBody.credential.takeIf { it.isNotBlank() }
+                )
+                signalingManager?.updateEphemeralIceServers(merged)
+                merged
+            } else base
+        } catch (_: Exception) {
+            base
+        }
+    }
+
+    fun buildPeerManager(iceServers: List<IceServerConfig>, resolvedCallId: String): WebRtcPeerManager {
+        return WebRtcPeerManager(
+            context = context,
+            isVideoCall = callType == CallType.VIDEO,
+            iceServers = iceServers,
+            onLocalIceCandidate = { cand ->
+                if (calleeUserId.isNotBlank()) {
+                    signalingManager?.sendIceCandidate(resolvedCallId, calleeUserId, cand)
+                }
+            },
+            onConnectionStateChanged = { state ->
+                scope.launch {
+                    when (state) {
+                        PeerConnection.PeerConnectionState.CONNECTED -> {
+                            callState = CallState.CONNECTED
+                            networkQuality = "P2P HD (DTLS-SRTP)"
+                        }
+                        PeerConnection.PeerConnectionState.DISCONNECTED -> {
+                            if (callState == CallState.CONNECTED) {
+                                callState = CallState.RECONNECTING
+                                networkQuality = "إعادة اتصال..."
+                            }
+                        }
+                        PeerConnection.PeerConnectionState.FAILED,
+                        PeerConnection.PeerConnectionState.CLOSED -> {
+                            if (callState != CallState.ENDED) {
+                                callState = CallState.ENDED
+                                onDismiss()
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+        )
+    }
+
+    // Outgoing Call: Backend Budget Check (/api/calls/authorize) -> TURN -> Foreground Service -> WebRTC Offer
+    LaunchedEffect(isIncoming, calleeUserId, callType) {
+        if (!isIncoming) {
+            var resolvedCallId = activeCallId
+            var callAuthExp = 0L
+            var callAuthSignature = ""
+
+            if (RetrofitClient.hasActiveSession() && calleeUserId.isNotBlank()) {
+                try {
+                    val authRes = RetrofitClient.apiService().authorizeCall(
+                        ApiCallAuthorizeRequest(
+                            calleeId = calleeUserId,
+                            callType = if (callType == CallType.VIDEO) "VIDEO" else "AUDIO",
+                            callId = resolvedCallId
+                        )
+                    )
+                    if (!authRes.isSuccessful) {
+                        val parsed = AuthRepository.parseErrorBody(
+                            authRes.errorBody()?.string(),
+                            "تعذر بدء المكالمة (${authRes.code()})"
+                        )
+                        if (authRes.code() == 429 || parsed.code.contains("BUDGET", true) || parsed.code.contains("LIMIT", true)) {
+                            onBudgetExceeded(parsed.message)
+                            callState = CallState.ENDED
+                            onDismiss()
+                            return@LaunchedEffect
+                        }
+                    } else {
+                        authRes.body()?.data?.let { d ->
+                            if (d.callId.isNotBlank()) {
+                                resolvedCallId = d.callId
+                                activeCallId = d.callId
+                            }
+                            callAuthExp = d.exp
+                            callAuthSignature = d.callAuthSignature
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
+            CallForegroundService.start(context, resolvedCallId, contactName, callType == CallType.VIDEO)
+            val iceServers = fetchIceServersWithTurn()
+            val pm = buildPeerManager(iceServers, resolvedCallId)
+            peerManager = pm
+            pm.setMicrophoneMuted(isMuted)
+            audioManager?.isSpeakerphoneOn = isSpeakerOn
+
+            if (calleeUserId.isNotBlank()) {
+                pm.createOffer(
+                    onOfferSdp = { sdp ->
+                        signalingManager?.sendCallOffer(
+                            callId = resolvedCallId,
+                            targetUserId = calleeUserId,
+                            sdp = sdp,
+                            isVideo = callType == CallType.VIDEO,
+                            callAuthExp = callAuthExp,
+                            callAuthSignature = callAuthSignature,
+                            senderName = currentUserName
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    // Listen to remote SDP Answer, ICE Candidates, Hangup, and Budget Blocked signaling frames
+    LaunchedEffect(signalingManager, activeCallId) {
+        val mgr = signalingManager ?: return@LaunchedEffect
+        launch {
+            mgr.remoteSdpEvents.collect { ev ->
+                if (ev.callId == activeCallId && !ev.sdp.isNullOrBlank()) {
+                    callState = CallState.CONNECTING
+                    peerManager?.handleRemoteAnswer(ev.sdp)
+                }
+            }
+        }
+        launch {
+            mgr.remoteIceCandidates.collect { (cId, cand) ->
+                if (cId == activeCallId || cId.isBlank()) {
+                    peerManager?.addRemoteIceCandidate(cand)
+                }
+            }
+        }
+        launch {
+            mgr.callEndEvents.collect { endedCallId ->
+                if (endedCallId == activeCallId && callState != CallState.ENDED) {
+                    callState = CallState.ENDED
+                    onDismiss()
+                }
+            }
+        }
+        launch {
+            mgr.budgetBlockedEvents.collect { blockedId ->
+                if (blockedId == activeCallId || blockedId.isBlank()) {
+                    onBudgetExceeded("تم إيقاف المكالمات الجديدة لبلوغ الحد الأقصى من الميزانية الشهرية.")
+                    callState = CallState.ENDED
+                    onDismiss()
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            peerManager?.dispose()
+            peerManager = null
+            CallForegroundService.stop(context)
+        }
+    }
 
     LaunchedEffect(callState) {
         if (callState == CallState.CONNECTED || callState == CallState.HOLD) {
@@ -199,7 +388,7 @@ fun CallOverlayDialog(
                         )
                     )
             ) {
-                // Fullscreen Video Stream Background (HD Feed)
+                // Fullscreen Remote Video Stream (SurfaceViewRenderer backed by WebRTC)
                 if (callType == CallType.VIDEO && isVideoEnabled) {
                     Box(
                         modifier = Modifier
@@ -207,31 +396,34 @@ fun CallOverlayDialog(
                             .background(Color(0xFF1E293B)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Videocam,
-                                contentDescription = null,
-                                tint = GoldPrimary.copy(alpha = 0.55f),
-                                modifier = Modifier.size(64.dp)
+                        val activePm = peerManager
+                        if (activePm != null) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    SurfaceViewRenderer(ctx).apply {
+                                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                                        setEnableHardwareScaler(true)
+                                        activePm.attachRenderers(localView = null, remoteView = this)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
                             )
-                            Text(
-                                text = "بث الفيديو المباشر عالي الدقة (HD)",
-                                color = Color.White.copy(alpha = 0.72f),
-                                fontSize = 13.sp
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Black.copy(alpha = 0.42f),
-                                border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.4f))
+                        }
+                        if (callState != CallState.CONNECTED) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Default.Videocam,
+                                    contentDescription = null,
+                                    tint = GoldPrimary.copy(alpha = 0.55f),
+                                    modifier = Modifier.size(64.dp)
+                                )
                                 Text(
-                                    text = "معدل الإطارات: 60fps • الجودة: 1080p",
-                                    fontSize = 10.sp,
-                                    color = GoldLight,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    text = "بث الفيديو المباشر عالي الدقة (WebRTC P2P)",
+                                    color = Color.White.copy(alpha = 0.72f),
+                                    fontSize = 13.sp
                                 )
                             }
                         }
@@ -403,12 +595,27 @@ fun CallOverlayDialog(
                                         .border(2.dp, GoldPrimary, RoundedCornerShape(16.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = if (isVideoCameraFront) Icons.Default.Person else Icons.Default.FlipCameraAndroid,
-                                        contentDescription = null,
-                                        tint = GoldAccent,
-                                        modifier = Modifier.size(36.dp)
-                                    )
+                                    val activePm = peerManager
+                                    if (activePm != null && hasCameraPermission) {
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                SurfaceViewRenderer(ctx).apply {
+                                                    setZOrderMediaOverlay(true)
+                                                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                                                    setEnableHardwareScaler(true)
+                                                    activePm.attachRenderers(localView = this, remoteView = null)
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = if (isVideoCameraFront) Icons.Default.Person else Icons.Default.FlipCameraAndroid,
+                                            contentDescription = null,
+                                            tint = GoldAccent,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                    }
                                     Surface(
                                         shape = RoundedCornerShape(4.dp),
                                         color = Color.Black.copy(alpha = 0.65f),
@@ -561,6 +768,9 @@ fun CallOverlayDialog(
                                     Button(
                                         onClick = {
                                             callState = CallState.ENDED
+                                            if (calleeUserId.isNotBlank()) {
+                                                signalingManager?.rejectCall(activeCallId, calleeUserId, callType == CallType.VIDEO)
+                                            }
                                             onSendMessageNotice("مكالمة فائتة (${callType.label})", MessageType.MISSED_CALL.name)
                                             onDismiss()
                                         },
@@ -578,7 +788,29 @@ fun CallOverlayDialog(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Button(
                                         onClick = {
-                                            callState = CallState.CONNECTED
+                                            callState = CallState.CONNECTING
+                                            scope.launch {
+                                                CallForegroundService.start(context, activeCallId, contactName, callType == CallType.VIDEO)
+                                                val iceServers = fetchIceServersWithTurn()
+                                                val pm = buildPeerManager(iceServers, activeCallId)
+                                                peerManager = pm
+                                                pm.setMicrophoneMuted(isMuted)
+                                                audioManager?.isSpeakerphoneOn = isSpeakerOn
+                                                val offerSdp = incomingOfferSdp
+                                                if (!offerSdp.isNullOrBlank()) {
+                                                    pm.handleRemoteOfferAndCreateAnswer(
+                                                        offerSdp = offerSdp,
+                                                        onAnswerSdp = { ansSdp ->
+                                                            if (calleeUserId.isNotBlank()) {
+                                                                signalingManager?.sendCallAccept(activeCallId, calleeUserId, ansSdp, callType == CallType.VIDEO)
+                                                            }
+                                                            callState = CallState.CONNECTED
+                                                        }
+                                                    )
+                                                } else {
+                                                    callState = CallState.CONNECTED
+                                                }
+                                            }
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                         shape = CircleShape,
@@ -598,7 +830,10 @@ fun CallOverlayDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 FilledIconButton(
-                                    onClick = { isMuted = !isMuted },
+                                    onClick = {
+                                        isMuted = !isMuted
+                                        peerManager?.setMicrophoneMuted(isMuted || isOnHold)
+                                    },
                                     colors = IconButtonDefaults.filledIconButtonColors(
                                         containerColor = if (isMuted) Color(0xFFEF4444) else Color.White.copy(alpha = 0.18f),
                                         contentColor = Color.White
@@ -634,6 +869,7 @@ fun CallOverlayDialog(
                                     onClick = {
                                         isOnHold = !isOnHold
                                         callState = if (isOnHold) CallState.HOLD else CallState.CONNECTED
+                                        peerManager?.setMicrophoneMuted(isMuted || isOnHold)
                                     },
                                     colors = IconButtonDefaults.filledIconButtonColors(
                                         containerColor = if (isOnHold) StatusOrange else Color.White.copy(alpha = 0.18f),
@@ -650,7 +886,10 @@ fun CallOverlayDialog(
 
                                 if (callType == CallType.VIDEO) {
                                     FilledIconButton(
-                                        onClick = { isVideoEnabled = !isVideoEnabled },
+                                        onClick = {
+                                            isVideoEnabled = !isVideoEnabled
+                                            peerManager?.setVideoEnabled(isVideoEnabled)
+                                        },
                                         colors = IconButtonDefaults.filledIconButtonColors(
                                             containerColor = if (!isVideoEnabled) Color(0xFFEF4444) else Color.White.copy(alpha = 0.18f),
                                             contentColor = Color.White
@@ -665,7 +904,10 @@ fun CallOverlayDialog(
                                     }
 
                                     FilledIconButton(
-                                        onClick = { isVideoCameraFront = !isVideoCameraFront },
+                                        onClick = {
+                                            isVideoCameraFront = !isVideoCameraFront
+                                            peerManager?.switchCamera()
+                                        },
                                         colors = IconButtonDefaults.filledIconButtonColors(
                                             containerColor = Color.White.copy(alpha = 0.18f),
                                             contentColor = GoldAccent
@@ -684,6 +926,9 @@ fun CallOverlayDialog(
                             Button(
                                 onClick = {
                                     callState = CallState.ENDED
+                                    if (calleeUserId.isNotBlank()) {
+                                        signalingManager?.endCall(activeCallId, calleeUserId, callType == CallType.VIDEO)
+                                    }
                                     if (callDurationSeconds > 0) {
                                         onSendMessageNotice("انتهت ${callType.label} (المدة: ${formatDuration(callDurationSeconds)})", MessageType.CALL.name)
                                     } else {

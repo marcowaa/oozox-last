@@ -597,7 +597,8 @@ fun UserAppPortal(
                                             PostOtpGatewayDecision(
                                                 isExistingUser = authData.isExistingUser,
                                                 hasOtherActiveDevice = authData.hasOtherActiveDevice,
-                                                backupCount = authData.backupSummary?.count ?: 0
+                                                backupCount = authData.backupSummary?.count ?: 0,
+                                                otherDeviceSummary = authData.otherActiveDevices.firstOrNull()?.deviceName.orEmpty()
                                             )
                                         )
                                         OtpVerifyUiResult.Success
