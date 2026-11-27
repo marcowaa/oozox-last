@@ -11,12 +11,14 @@ const errorHandler = (err, req, res, next) => {
   const translate = typeof req.t === 'function' ? req.t : (k, v) => t(resolveRequestedLang(req), k, v);
 
   let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  let message = err.message || translate('api.internal_server_error');
+  let message = statusCode >= 500
+    ? translate('api.internal_server_error')
+    : (err.message || translate('api.internal_server_error'));
 
   // Handle Mongoose duplicate key error (code 11000)
   if (err.code === 11000) {
     statusCode = 400;
-    const field = Object.keys(err.keyValue)[0];
+    const field = Object.keys(err.keyValue || {})[0] || 'field';
     message = translate('api.duplicate_field', { field });
   }
 
@@ -29,9 +31,7 @@ const errorHandler = (err, req, res, next) => {
   // Handle Mongoose ValidationError
   if (err.name === 'ValidationError') {
     statusCode = 400;
-    message = Object.values(err.errors)
-      .map((val) => val.message)
-      .join(', ');
+    message = translate('api.validation_error');
   }
 
   return errorResponse(

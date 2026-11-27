@@ -16,6 +16,7 @@ import com.example.util.ApiTrustedDeviceDto
 import com.example.util.ApiTrustedLoginBody
 import com.example.util.ApiUpdateProfileBody
 import com.example.util.ApiUserDto
+import com.example.util.AppErrorMapper
 import com.example.util.DeviceTrustManager
 import com.example.util.OozoxFirebaseMessagingService
 import com.example.util.RetrofitClient
@@ -96,19 +97,38 @@ data class ParsedApiError(
 
 object AuthRepository {
 
-    fun parseErrorBody(rawBody: String?, fallbackMessage: String): ParsedApiError {
+    fun parseErrorBody(
+        rawBody: String?,
+        fallbackAr: String,
+        fallbackEn: String = "Request failed. Please try again",
+        statusCode: Int? = null
+    ): ParsedApiError {
         if (rawBody.isNullOrBlank()) {
-            return ParsedApiError(code = "HTTP_ERROR", message = fallbackMessage)
+            val friendly = AppErrorMapper.fromApiError(
+                statusCode = statusCode,
+                fallbackAr = fallbackAr,
+                fallbackEn = fallbackEn
+            )
+            return ParsedApiError(code = "HTTP_ERROR", message = friendly)
         }
         return try {
             val obj = JSONObject(rawBody)
-            val msg = obj.optString("message").takeIf { it.isNotBlank() } ?: fallbackMessage
+            val rawMsg = obj.optString("message").takeIf { it.isNotBlank() }
             val code = obj.optString("code").takeIf { it.isNotBlank() } ?: "HTTP_ERROR"
             val retry = if (obj.has("retryAfterSeconds") && !obj.isNull("retryAfterSeconds")) obj.optInt("retryAfterSeconds") else null
             val remaining = if (obj.has("remainingAttempts") && !obj.isNull("remainingAttempts")) obj.optInt("remainingAttempts") else null
+            val friendlyMsg = AppErrorMapper.fromApiError(
+                code = code,
+                serverMessage = rawMsg,
+                statusCode = statusCode,
+                retryAfterSeconds = retry,
+                remainingAttempts = remaining,
+                fallbackAr = fallbackAr,
+                fallbackEn = fallbackEn
+            )
             ParsedApiError(
                 code = code,
-                message = msg,
+                message = friendlyMsg,
                 retryAfterSeconds = retry,
                 remainingAttempts = remaining,
                 requiresOtp = obj.optBoolean("requiresOtp", false),
@@ -118,7 +138,14 @@ object AuthRepository {
                 reason = obj.optString("reason").takeIf { it.isNotBlank() }
             )
         } catch (_: Exception) {
-            ParsedApiError(code = "HTTP_ERROR", message = fallbackMessage)
+            ParsedApiError(
+                code = "HTTP_ERROR",
+                message = AppErrorMapper.fromApiError(
+                    statusCode = statusCode,
+                    fallbackAr = fallbackAr,
+                    fallbackEn = fallbackEn
+                )
+            )
         }
     }
 
@@ -188,17 +215,36 @@ object AuthRepository {
                 )
             )
             if (!resp.isSuccessful) {
-                val err = parseErrorBody(resp.errorBody()?.string(), "تعذر إرسال رمز التحقق (${resp.code()})")
+                val err = parseErrorBody(
+                    rawBody = resp.errorBody()?.string(),
+                    fallbackAr = "تعذر إرسال رمز التحقق، حاول مجدداً",
+                    fallbackEn = "Couldn't send code. Please try again",
+                    statusCode = resp.code()
+                )
                 return@withContext OtpRequestOutcome.Error(err.code, err.message, err.retryAfterSeconds)
             }
             val body = resp.body()
             val data = body?.data
             if (body?.success != true || data == null) {
-                return@withContext OtpRequestOutcome.Error("OTP_REQUEST_FAILED", body?.message ?: "فشل إرسال الرمز")
+                return@withContext OtpRequestOutcome.Error(
+                    "OTP_REQUEST_FAILED",
+                    AppErrorMapper.sanitizeMessage(
+                        body?.message,
+                        fallbackAr = "تعذر إرسال رمز التحقق",
+                        fallbackEn = "Couldn't send verification code"
+                    )
+                )
             }
             OtpRequestOutcome.Sent(data = data, message = body.message)
         } catch (e: Exception) {
-            OtpRequestOutcome.Error("NETWORK_ERROR", e.message ?: "تعذر الاتصال بسيرفر التحقق")
+            OtpRequestOutcome.Error(
+                "NETWORK_ERROR",
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر الاتصال بالخادم، تحقق من الإنترنت",
+                    fallbackEn = "No connection. Check your internet"
+                )
+            )
         }
     }
 
@@ -233,7 +279,12 @@ object AuthRepository {
                 )
             )
             if (!resp.isSuccessful) {
-                val err = parseErrorBody(resp.errorBody()?.string(), "رمز التحقق غير صحيح (${resp.code()})")
+                val err = parseErrorBody(
+                    rawBody = resp.errorBody()?.string(),
+                    fallbackAr = "رمز التحقق غير صحيح",
+                    fallbackEn = "Incorrect verification code",
+                    statusCode = resp.code()
+                )
                 return@withContext OtpVerifyOutcome.Error(
                     code = err.code,
                     message = err.message,
@@ -244,7 +295,14 @@ object AuthRepository {
             val body = resp.body()
             val data = body?.data
             if (body?.success != true || data == null) {
-                return@withContext OtpVerifyOutcome.Error("OTP_VERIFY_FAILED", body?.message ?: "فشل التحقق من الرمز")
+                return@withContext OtpVerifyOutcome.Error(
+                    "OTP_VERIFY_FAILED",
+                    AppErrorMapper.sanitizeMessage(
+                        body?.message,
+                        fallbackAr = "تعذر التحقق من الرمز",
+                        fallbackEn = "Couldn't verify code"
+                    )
+                )
             }
             if (data.token.isNotBlank()) {
                 applyAuthenticatedSession(context, data)
@@ -258,7 +316,14 @@ object AuthRepository {
             }
             OtpVerifyOutcome.Verified(data = data, message = body.message)
         } catch (e: Exception) {
-            OtpVerifyOutcome.Error("NETWORK_ERROR", e.message ?: "تعذر الاتصال بالسيرفر")
+            OtpVerifyOutcome.Error(
+                "NETWORK_ERROR",
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر الاتصال بالخادم، تحقق من الإنترنت",
+                    fallbackEn = "No connection. Check your internet"
+                )
+            )
         }
     }
 
@@ -314,7 +379,12 @@ object AuthRepository {
                 )
             )
             if (!resp.isSuccessful) {
-                val err = parseErrorBody(resp.errorBody()?.string(), "تعذر تسجيل الدخول بالجهاز الموثوق (${resp.code()})")
+                val err = parseErrorBody(
+                    rawBody = resp.errorBody()?.string(),
+                    fallbackAr = "تعذر الدخول السريع، جرب رمز التحقق",
+                    fallbackEn = "Quick sign-in unavailable. Use verification code",
+                    statusCode = resp.code()
+                )
                 if (err.requiresOtp) {
                     DeviceTrustManager.clearServerDeviceTrust(context)
                     return@withContext AuthOutcome.OtpRequired(
@@ -330,7 +400,14 @@ object AuthRepository {
             val data = body?.data
             val user = data?.user
             if (body?.success != true || data == null || user == null) {
-                return@withContext AuthOutcome.Error("TRUSTED_LOGIN_FAILED", body?.message ?: "فشل تسجيل الدخول السريع")
+                return@withContext AuthOutcome.Error(
+                    "TRUSTED_LOGIN_FAILED",
+                    AppErrorMapper.sanitizeMessage(
+                        body?.message,
+                        fallbackAr = "تعذر تسجيل الدخول السريع",
+                        fallbackEn = "Quick sign-in failed"
+                    )
+                )
             }
             applyAuthenticatedSession(context, data)
             AuthOutcome.Authenticated(
@@ -344,7 +421,14 @@ object AuthRepository {
                 hasOtherActiveDevice = data.hasOtherActiveDevice
             )
         } catch (e: Exception) {
-            AuthOutcome.Error("NETWORK_ERROR", e.message ?: "تعذر الاتصال بالسيرفر")
+            AuthOutcome.Error(
+                "NETWORK_ERROR",
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر الاتصال بالخادم، تحقق من الإنترنت",
+                    fallbackEn = "No connection. Check your internet"
+                )
+            )
         }
     }
 
@@ -403,12 +487,17 @@ object AuthRepository {
             DeviceTrustManager.syncRetrofitDeviceHeaders(context)
             val resp = RetrofitClient.apiService().getTrustedDevices()
             if (!resp.isSuccessful) {
-                val err = parseErrorBody(resp.errorBody()?.string(), "تعذر تحميل قائمة الأجهزة")
+                val err = parseErrorBody(
+                    rawBody = resp.errorBody()?.string(),
+                    fallbackAr = "تعذر تحميل قائمة الأجهزة",
+                    fallbackEn = "Couldn't load devices",
+                    statusCode = resp.code()
+                )
                 return@withContext Result.failure(IllegalStateException(err.message))
             }
             Result.success(resp.body()?.data?.devices.orEmpty())
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e)))
         }
     }
 
@@ -416,7 +505,12 @@ object AuthRepository {
         try {
             val resp = RetrofitClient.apiService().revokeTrustedDevice(deviceId)
             if (!resp.isSuccessful) {
-                val err = parseErrorBody(resp.errorBody()?.string(), "تعذر إلغاء وثوق الجهاز")
+                val err = parseErrorBody(
+                    rawBody = resp.errorBody()?.string(),
+                    fallbackAr = "تعذر إلغاء وثوق الجهاز",
+                    fallbackEn = "Couldn't remove trusted device",
+                    statusCode = resp.code()
+                )
                 return@withContext Result.failure(IllegalStateException(err.message))
             }
             val currentDeviceId = SecureCredentialVault.getOrCreateDeviceId(context)
@@ -427,7 +521,7 @@ object AuthRepository {
             }
             Result.success(resp.body()?.message ?: "تم إلغاء وثوق الجهاز بنجاح")
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e)))
         }
     }
 

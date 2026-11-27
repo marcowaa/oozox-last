@@ -185,8 +185,8 @@ fun GoldQrScannerDialog(
                 sellerShopName = "فاتورة مسحوبة بالـ QR",
                 serialNumber = "QR-${System.currentTimeMillis() % 100000}"
             )
-        } catch (e: Exception) {
-            Toast.makeText(context, "تعذر قراءة كود QR: ${e.message}", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(context, "تعذر قراءة الرمز، حاول مسحه مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -321,7 +321,15 @@ fun ShiftLogoutSummaryDialog(
 
                                         onShiftClosedAndLogout(finalSummary)
                                     } catch (e: Exception) {
-                                        Toast.makeText(context, "حدث خطأ أثناء تقفيل الشفت: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            com.example.util.AppErrorMapper.fromThrowable(
+                                                e,
+                                                fallbackAr = "تعذر إغلاق الشفت حالياً، حاول مجدداً",
+                                                fallbackEn = "Couldn't close shift. Please try again"
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     } finally {
                                         isCalculating = false
                                     }

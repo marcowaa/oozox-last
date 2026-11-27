@@ -117,13 +117,21 @@ object GeminiAiService {
                     errSb.append(errLine)
                 }
                 errReader.close()
-                return@withContext "⚠️ تعذر الاتصال بـ Gemini API (كود الاستجابة: $responseCode).\nالسبب: ${errSb.take(200)}"
+                return@withContext AppErrorMapper.fromHttpStatus(
+                    responseCode,
+                    fallbackAr = "تعذر الحصول على رد المساعد الذكي، حاول مجدداً",
+                    fallbackEn = "Couldn't get a response right now"
+                )
             }
         } catch (e: Exception) {
-            return@withContext "⚠️ تعذر الوصول إلى خدمة Gemini API: ${e.localizedMessage ?: "خطأ في الاتصال"}"
+            return@withContext AppErrorMapper.fromThrowable(
+                e,
+                fallbackAr = "تعذر الاتصال بالمساعد الذكي، تحقق من الإنترنت",
+                fallbackEn = "Couldn't reach assistant. Check internet"
+            )
         }
 
-        return@withContext "⚠️ لم يرجع نموذج Gemini أي استجابة نصية. يرجى المحاولة لاحقاً."
+        return@withContext "لم يصل رد من المساعد، حاول مجدداً"
     }
 
     private fun getApiKey(adminConfig: AdminConfigEntity?): String? {

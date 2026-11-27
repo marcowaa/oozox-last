@@ -28,6 +28,7 @@ import com.example.ui.theme.OozoxTeal
 import com.example.ui.theme.StatusGreen
 import com.example.ui.theme.StatusRed
 import com.example.util.ApiTransferInitiateRequest
+import com.example.util.AppErrorMapper
 import com.example.util.CrossDeviceTransferEngine
 import com.example.util.RetrofitClient
 import com.example.util.TransferCompletionStats
@@ -80,10 +81,19 @@ fun PostOtpTransferGatewayScreen(
                 qrPayload = data.qrPayload
                 transferStatus = data.status
             } else {
-                errorMessage = res.body()?.message ?: "تعذر بدء جلسة النقل الآمن (${res.code()})"
+                errorMessage = AppErrorMapper.fromApiError(
+                    serverMessage = res.body()?.message,
+                    statusCode = res.code(),
+                    fallbackAr = "تعذر بدء جلسة النقل الآمن",
+                    fallbackEn = "Couldn't start secure transfer"
+                )
             }
         } catch (e: Exception) {
-            errorMessage = "تعذر الاتصال بالخادم لبدء النقل: ${e.message}"
+            errorMessage = AppErrorMapper.fromThrowable(
+                e,
+                fallbackAr = "تعذر الاتصال بالخادم لبدء النقل",
+                fallbackEn = "Couldn't connect to start transfer"
+            )
         } finally {
             isInitiating = false
         }
@@ -144,7 +154,11 @@ fun PostOtpTransferGatewayScreen(
                             completionStats = stats
                             transferStatus = "COMPLETED"
                         }.onFailure { err ->
-                            errorMessage = err.message ?: "فشل استلام وفك تشفير بيانات النقل"
+                            errorMessage = AppErrorMapper.fromThrowable(
+                                err,
+                                fallbackAr = "تعذر استلام وفك تشفير البيانات",
+                                fallbackEn = "Couldn't receive or decrypt transfer data"
+                            )
                             hasStartedDownload = false
                         }
                     }
@@ -387,10 +401,19 @@ fun PostOtpTransferGatewayScreen(
                                 if (res.isSuccessful && res.body()?.success == true) {
                                     revokeMessage = "تم تسجيل الخروج من جميع الأجهزة الأخرى بنجاح."
                                 } else {
-                                    errorMessage = res.body()?.message ?: "تعذر إنهاء جلسات الأجهزة الأخرى"
+                                    errorMessage = AppErrorMapper.fromApiError(
+                                        serverMessage = res.body()?.message,
+                                        statusCode = res.code(),
+                                        fallbackAr = "تعذر إنهاء جلسات الأجهزة الأخرى",
+                                        fallbackEn = "Couldn't sign out other devices"
+                                    )
                                 }
                             } catch (e: Exception) {
-                                errorMessage = e.message
+                                errorMessage = AppErrorMapper.fromThrowable(
+                                    e,
+                                    fallbackAr = "تعذر إنهاء جلسات الأجهزة الأخرى",
+                                    fallbackEn = "Couldn't sign out other devices"
+                                )
                             } finally {
                                 isBusyRevoking = false
                             }

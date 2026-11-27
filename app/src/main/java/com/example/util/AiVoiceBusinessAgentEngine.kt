@@ -457,7 +457,11 @@ object AiVoiceBusinessAgentEngine {
         } catch (e: Exception) {
             Log.e(TAG, "Error executing action: ${e.message}", e)
             ActionResult.Failure(
-                error = "حدث خطأ أثناء تنفيذ العملية: ${e.localizedMessage}"
+                error = AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر تنفيذ العملية، حاول مجدداً",
+                    fallbackEn = "Couldn't complete action"
+                )
             )
         }
     }

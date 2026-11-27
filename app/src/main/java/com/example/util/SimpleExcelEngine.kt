@@ -702,7 +702,11 @@ object SimpleExcelEngine {
             }
             context.startActivity(Intent.createChooser(intent, title))
         } catch (e: Exception) {
-            Toast.makeText(context, "تعذر مشاركة الملف: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                AppErrorMapper.fromThrowable(e, fallbackAr = "تعذر مشاركة الملف", fallbackEn = "Couldn't share file"),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 

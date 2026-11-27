@@ -265,7 +265,11 @@ object SecureBackupVaultEngine {
                 totalRecordsCount = 0,
                 profilesCount = 0,
                 recordsCount = 0,
-                errorMessage = "خطأ في قراءة ملف النسخة: ${e.localizedMessage}"
+                errorMessage = AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "ملف النسخة الاحتياطية غير صالح أو تعذر فتحه",
+                    fallbackEn = "Backup file couldn't be read"
+                )
             )
         }
     }
@@ -601,7 +605,13 @@ object SecureBackupVaultEngine {
                 backupStats = stats
             )
         } catch (e: Exception) {
-            BackupResult.Error("فشل في ترحيل الحسابات الفرعية: ${e.localizedMessage ?: e.message}")
+            BackupResult.Error(
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر ترحيل الحسابات الفرعية، حاول مجدداً",
+                    fallbackEn = "Couldn't export sub-accounts"
+                )
+            )
         }
     }
 
@@ -657,7 +667,11 @@ object SecureBackupVaultEngine {
                 )
                 if (uploadRes.isFailure) {
                     return@withContext BackupResult.Error(
-                        "تعذر رفع النسخة إلى سحابة OOZOX: ${uploadRes.exceptionOrNull()?.message ?: "خطأ في الشبكة"}"
+                        AppErrorMapper.fromThrowable(
+                            uploadRes.exceptionOrNull(),
+                            fallbackAr = "تعذر رفع النسخة إلى السحابة، تحقق من الإنترنت",
+                            fallbackEn = "Couldn't upload backup. Check internet"
+                        )
                     )
                 }
                 cloudBackupId = uploadRes.getOrNull()?.backupId
@@ -677,7 +691,13 @@ object SecureBackupVaultEngine {
                 backupStats = export.stats
             )
         } catch (e: Exception) {
-            BackupResult.Error("فشل في إنشاء النسخة الاحتياطية: ${e.localizedMessage ?: e.message}")
+            BackupResult.Error(
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر إنشاء النسخة الاحتياطية، حاول مجدداً",
+                    fallbackEn = "Couldn't create backup"
+                )
+            )
         }
     }
 
@@ -712,15 +732,21 @@ object SecureBackupVaultEngine {
             )
             val created = resp.body()?.data?.backup
             if (!resp.isSuccessful || resp.body()?.success != true || created == null) {
-                val errMsg = resp.errorBody()?.string()?.let { raw ->
+                val rawMsg = resp.errorBody()?.string()?.let { raw ->
                     try { JSONObject(raw).optString("message") } catch (_: Exception) { null }
-                } ?: "فشل الرفع (${resp.code()})"
-                Result.failure(IllegalStateException(errMsg))
+                }
+                val friendly = AppErrorMapper.fromApiError(
+                    serverMessage = rawMsg,
+                    statusCode = resp.code(),
+                    fallbackAr = "تعذر رفع النسخة الاحتياطية",
+                    fallbackEn = "Couldn't upload backup"
+                )
+                Result.failure(IllegalStateException(friendly))
             } else {
                 Result.success(created)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e)))
         }
     }
 
@@ -729,12 +755,20 @@ object SecureBackupVaultEngine {
      */
     suspend fun listServerCloudBackups(ownerPhone: String): Result<List<CloudBackupRecord>> = withContext(Dispatchers.IO) {
         if (!RetrofitClient.hasActiveSession()) {
-            return@withContext Result.failure(IllegalStateException("يرجى تسجيل الدخول أولاً لعرض النسخ السحابية."))
+            return@withContext Result.failure(IllegalStateException("سجل الدخول لعرض النسخ السحابية"))
         }
         try {
             val resp = RetrofitClient.apiService().listCloudBackups()
             if (!resp.isSuccessful || resp.body()?.success != true) {
-                return@withContext Result.failure(IllegalStateException("تعذر جلب النسخ السحابية (${resp.code()})."))
+                return@withContext Result.failure(
+                    IllegalStateException(
+                        AppErrorMapper.fromHttpStatus(
+                            resp.code(),
+                            fallbackAr = "تعذر تحميل النسخ السحابية",
+                            fallbackEn = "Couldn't load cloud backups"
+                        )
+                    )
+                )
             }
             val phoneHash = hashPhoneNumber(ownerPhone)
             val mapped = resp.body()?.data?.backups.orEmpty().map { dto ->
@@ -761,7 +795,7 @@ object SecureBackupVaultEngine {
             }
             Result.success(mapped)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e, fallbackAr = "تعذر تحميل النسخ السحابية")))
         }
     }
 
@@ -770,24 +804,32 @@ object SecureBackupVaultEngine {
 
     suspend fun downloadServerCloudBackup(backupId: String): Result<ApiCloudBackupItemDto> = withContext(Dispatchers.IO) {
         if (!RetrofitClient.hasActiveSession()) {
-            return@withContext Result.failure(IllegalStateException("يرجى تسجيل الدخول أولاً لتحميل النسخة السحابية."))
+            return@withContext Result.failure(IllegalStateException("سجل الدخول لتحميل النسخة السحابية"))
         }
         try {
             val resp = RetrofitClient.apiService().downloadCloudBackup(backupId)
             val item = resp.body()?.data
             val content = item?.vaultContent
             if (!resp.isSuccessful || resp.body()?.success != true || item == null || content.isNullOrBlank()) {
-                return@withContext Result.failure(IllegalStateException("تعذر تحميل النسخة السحابية من الخادم (${resp.code()})."))
+                return@withContext Result.failure(
+                    IllegalStateException(
+                        AppErrorMapper.fromHttpStatus(
+                            resp.code(),
+                            fallbackAr = "تعذر تحميل النسخة السحابية",
+                            fallbackEn = "Couldn't download cloud backup"
+                        )
+                    )
+                )
             }
             if (item.payloadSha256.isNotBlank()) {
                 val actualSha = sha256Hex(content.toByteArray(StandardCharsets.UTF_8))
                 if (!actualSha.equals(item.payloadSha256, ignoreCase = true)) {
-                    return@withContext Result.failure(SecurityException("❌ فشل التحقق من بصمة SHA-256 للنسخة المحمّلة من السحابة."))
+                    return@withContext Result.failure(SecurityException("الملف تالف أثناء التحميل، حاول مجدداً"))
                 }
             }
             Result.success(item)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e, fallbackAr = "تعذر تحميل النسخة السحابية")))
         }
     }
 
@@ -803,7 +845,13 @@ object SecureBackupVaultEngine {
     ): BackupResult = withContext(Dispatchers.IO) {
         val dl = downloadServerCloudBackup(backupId)
         if (dl.isFailure) {
-            return@withContext BackupResult.Error(dl.exceptionOrNull()?.message ?: "تعذر تحميل النسخة السحابية.")
+            return@withContext BackupResult.Error(
+                AppErrorMapper.fromThrowable(
+                    dl.exceptionOrNull(),
+                    fallbackAr = "تعذر تحميل النسخة السحابية",
+                    fallbackEn = "Couldn't download cloud backup"
+                )
+            )
         }
         val content = dl.getOrNull()?.vaultContent.orEmpty()
         restoreEncryptedBackup(context, db, content, currentUserPhone, enteredPassphrase)
@@ -811,14 +859,22 @@ object SecureBackupVaultEngine {
 
     suspend fun deleteServerCloudBackup(backupId: String): Result<Unit> = withContext(Dispatchers.IO) {
         if (!RetrofitClient.hasActiveSession()) {
-            return@withContext Result.failure(IllegalStateException("لا توجد جلسة نشطة."))
+            return@withContext Result.failure(IllegalStateException("انتهت الجلسة، سجل الدخول مجدداً"))
         }
         try {
             val resp = RetrofitClient.apiService().deleteCloudBackup(backupId)
             if (resp.isSuccessful) Result.success(Unit)
-            else Result.failure(IllegalStateException("فشل الحذف (${resp.code()})"))
+            else Result.failure(
+                IllegalStateException(
+                    AppErrorMapper.fromHttpStatus(
+                        resp.code(),
+                        fallbackAr = "تعذر حذف النسخة السحابية",
+                        fallbackEn = "Couldn't delete cloud backup"
+                    )
+                )
+            )
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e, fallbackAr = "تعذر حذف النسخة السحابية")))
         }
     }
 
@@ -902,7 +958,13 @@ object SecureBackupVaultEngine {
                 restoreLegacyV1V2Json(db, rootObj)
             }
         } catch (e: Exception) {
-            BackupResult.Error("فشل في استعادة النسخة الاحتياطية: ${e.localizedMessage ?: e.message}")
+            BackupResult.Error(
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر استعادة النسخة، تأكد من صحة كلمة المرور والملف",
+                    fallbackEn = "Couldn't restore backup. Check password and file"
+                )
+            )
         }
     }
 
@@ -1007,7 +1069,13 @@ object SecureBackupVaultEngine {
                 )
             )
         } catch (e: Exception) {
-            BackupResult.Error("فشلت الاستعادة الذرية للنسخة V3: ${e.localizedMessage ?: e.message}")
+            BackupResult.Error(
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر استعادة البيانات، حاول مجدداً",
+                    fallbackEn = "Couldn't restore data"
+                )
+            )
         }
     }
 

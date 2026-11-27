@@ -252,7 +252,11 @@ fun VoiceBusinessAgentDialog(
                 executeConfirmedActionNow()
             }
         } catch (e: Exception) {
-            errorMessage = e.localizedMessage ?: "تعذر التنفيذ"
+            errorMessage = com.example.util.AppErrorMapper.fromThrowable(
+                e,
+                fallbackAr = "تعذر تنفيذ العملية، حاول مجدداً",
+                fallbackEn = "Couldn't complete action"
+            )
             sessionState = AgentSessionState.IDLE
         }
     }

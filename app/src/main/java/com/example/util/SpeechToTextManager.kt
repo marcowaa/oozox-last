@@ -180,7 +180,7 @@ class SpeechToTextManager(private val context: Context) {
                 speechRecognizer?.startListening(intent)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to startListening", e)
-                _errorState.value = "تعذر تشغيل التعرف على الصوت: ${e.localizedMessage}"
+                _errorState.value = "تعذر تشغيل الميكروفون أو التعرف على الصوت، حاول مجدداً"
                 _isListening.value = false
             }
         }

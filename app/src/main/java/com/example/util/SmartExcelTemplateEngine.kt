@@ -785,7 +785,11 @@ object SmartExcelTemplateEngine {
             }
             context.startActivity(Intent.createChooser(intent, title))
         } catch (e: Exception) {
-            android.widget.Toast.makeText(context, "تعذر مشاركة الملف: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(
+                context,
+                AppErrorMapper.fromThrowable(e, fallbackAr = "تعذر مشاركة الملف", fallbackEn = "Couldn't share file"),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 }

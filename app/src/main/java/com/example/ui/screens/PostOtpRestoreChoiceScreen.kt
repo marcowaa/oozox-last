@@ -77,7 +77,11 @@ fun PostOtpRestoreChoiceScreen(
         res.onSuccess { list ->
             cloudBackups = list
         }.onFailure { err ->
-            cloudError = err.message ?: "تعذر تحميل قائمة النسخ السحابية"
+            cloudError = com.example.util.AppErrorMapper.fromThrowable(
+                err,
+                fallbackAr = "تعذر تحميل النسخ السحابية",
+                fallbackEn = "Couldn't load cloud backups"
+            )
         }
         isLoadingCloud = false
     }
@@ -103,7 +107,11 @@ fun PostOtpRestoreChoiceScreen(
                     validationError = if (!preview.isValid) preview.errorMessage else null
                 }
             } catch (e: Exception) {
-                validationError = "تعذر قراءة الملف: ${e.localizedMessage}"
+                validationError = com.example.util.AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر قراءة ملف النسخة الاحتياطية",
+                    fallbackEn = "Couldn't read backup file"
+                )
             }
         }
     }
@@ -442,7 +450,13 @@ fun PostOtpRestoreChoiceScreen(
                                     val result = if (readyCloud != null) {
                                         val dl = SecureBackupVaultEngine.downloadServerCloudBackup(readyCloud.id)
                                         if (dl.isFailure) {
-                                            BackupResult.Error(dl.exceptionOrNull()?.message ?: "تعذر تنزيل النسخة السحابية.")
+                                            BackupResult.Error(
+                                                com.example.util.AppErrorMapper.fromThrowable(
+                                                    dl.exceptionOrNull(),
+                                                    fallbackAr = "تعذر تنزيل النسخة السحابية",
+                                                    fallbackEn = "Couldn't download cloud backup"
+                                                )
+                                            )
                                         } else {
                                             SecureBackupVaultEngine.restoreEncryptedBackup(
                                                 context = context,

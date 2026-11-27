@@ -58,7 +58,11 @@ fun ExcelImportDialog(
                     }
                 }
             } catch (e: Exception) {
-                errorMessage = "خطأ أثناء قراءة الملف: ${e.localizedMessage}"
+                errorMessage = com.example.util.AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر قراءة الملف، تأكد من صيغته وأعد المحاولة",
+                    fallbackEn = "Couldn't read the selected file"
+                )
             }
         }
     }

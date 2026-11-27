@@ -295,35 +295,101 @@ export interface ApiResult<T> {
   data?: T;
 }
 
+function toFriendlyWebError(
+  status: number,
+  code?: string,
+  rawMessage?: string,
+  retryAfterSeconds?: number,
+  remainingAttempts?: number
+): string {
+  const c = (code || '').toUpperCase();
+  if (c === 'OTP_COOLDOWN') {
+    return `انتظر ${Math.max(1, retryAfterSeconds || 60)} ثانية قبل طلب رمز جديد`;
+  }
+  if (c === 'OTP_LOCKED') {
+    return `محاولات كثيرة، انتظر ${Math.max(1, retryAfterSeconds || 60)} ثانية`;
+  }
+  if (c === 'OTP_DAILY_LIMIT') return 'وصلت للحد اليومي للرموز، حاول غداً';
+  if (c === 'OTP_DELIVERY_UNAVAILABLE' || c === 'OTP_BUDGET_EXCEEDED' || c === 'OTP_ADAPTER_UNAVAILABLE') {
+    return 'تعذر الإرسال عبر هذه الوسيلة، جرب وسيلة أخرى';
+  }
+  if (c === 'OTP_CANCELLED') return 'تم إلغاء الرمز، اطلب رمزاً جديداً';
+  if (c === 'OTP_EXPIRED' || c === 'OTP_CHALLENGE_NOT_FOUND' || c === 'OTP_ALREADY_USED') {
+    return 'انتهت صلاحية الرمز، اطلب رمزاً جديداً';
+  }
+  if (c === 'OTP_INVALID_CODE' || c === 'INVALID_OTP_FORMAT') {
+    return typeof remainingAttempts === 'number'
+      ? `الرمز غير صحيح (متبقي ${remainingAttempts} محاولات)`
+      : 'رمز التحقق غير صحيح';
+  }
+  if (c === 'INVALID_PHONE') return 'تأكد من رقم الهاتف وأعد المحاولة';
+  if (c === 'COUNTRY_NOT_ALLOWED') return 'التحقق غير متاح لهذا البلد حالياً';
+
+  const trimmed = (rawMessage || '').trim();
+  const isTechnical =
+    !trimmed ||
+    /failed to fetch|networkerror|enotfound|econnrefused|etimedout|socket|syntaxerror|http \d{3}/i.test(trimmed);
+  if (!isTechnical) return trimmed;
+
+  if (status === 400) return 'تحقق من البيانات المدخلة';
+  if (status === 401) return 'انتهت الجلسة، سجل الدخول مجدداً';
+  if (status === 403) return 'غير مصرح لك بهذا الإجراء';
+  if (status === 404) return 'البيانات المطلوبة غير موجودة';
+  if (status === 429) return 'محاولات كثيرة، انتظر قليلاً ثم حاول';
+  if (status >= 500) return 'الخدمة غير متاحة مؤقتاً، حاول لاحقاً';
+  return 'تعذر الاتصال بالخادم، تحقق من الإنترنت';
+}
+
 async function callApi<T>(
   url: string,
   method: string,
   body?: Record<string, unknown>,
   token?: string | null
 ): Promise<ApiResult<T>> {
-  const headers = await webAuthHeaders(token);
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let json: Record<string, unknown> = {};
   try {
-    json = (await res.json()) as Record<string, unknown>;
+    const headers = await webAuthHeaders(token);
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let json: Record<string, unknown> = {};
+    try {
+      json = (await res.json()) as Record<string, unknown>;
+    } catch {
+      json = {};
+    }
+    const ok = res.ok && json.success !== false;
+    const code = json.code as string | undefined;
+    const retryAfterSeconds = json.retryAfterSeconds as number | undefined;
+    const remainingAttempts = json.remainingAttempts as number | undefined;
+    return {
+      ok,
+      status: res.status,
+      message: ok
+        ? (json.message as string) || 'OK'
+        : toFriendlyWebError(
+            res.status,
+            code,
+            json.message as string | undefined,
+            retryAfterSeconds,
+            remainingAttempts
+          ),
+      code,
+      retryAfterSeconds,
+      remainingAttempts,
+      requiresStepUpOtp: json.requiresStepUpOtp as boolean | undefined,
+      maskedPhone: json.maskedPhone as string | undefined,
+      data: (json.data as T | undefined) ?? (json as unknown as T),
+    };
   } catch {
-    json = {};
+    return {
+      ok: false,
+      status: 0,
+      code: 'NETWORK_ERROR',
+      message: 'تعذر الاتصال بالخادم، تحقق من الإنترنت',
+    };
   }
-  return {
-    ok: res.ok && json.success !== false,
-    status: res.status,
-    message: (json.message as string) || (res.ok ? 'OK' : `HTTP ${res.status}`),
-    code: json.code as string | undefined,
-    retryAfterSeconds: json.retryAfterSeconds as number | undefined,
-    remainingAttempts: json.remainingAttempts as number | undefined,
-    requiresStepUpOtp: json.requiresStepUpOtp as boolean | undefined,
-    maskedPhone: json.maskedPhone as string | undefined,
-    data: (json.data as T | undefined) ?? (json as unknown as T),
-  };
 }
 
 export async function apiRequestOtp(params: {

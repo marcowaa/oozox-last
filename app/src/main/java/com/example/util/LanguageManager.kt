@@ -47,6 +47,10 @@ object Translations {
     @Volatile
     private var appContext: Context? = null
 
+    @Volatile
+    var currentAppLanguage: AppLanguage = AppLanguage.ARABIC
+        private set
+
     private val assetBundles = ConcurrentHashMap<String, Map<String, String>>()
     private val serverOverrides = ConcurrentHashMap<String, Map<String, String>>()
     private val serverVersions = ConcurrentHashMap<String, String>()
@@ -58,6 +62,7 @@ object Translations {
         val ctx = context.applicationContext ?: context
         appContext = ctx
         val lang = activeLanguage(ctx)
+        currentAppLanguage = lang
         ensureLoaded(ctx, lang)
         RetrofitClient.setActiveLanguage(lang.code)
         val cachedServer = ServerLocalizationSyncManager.loadCachedBundle(ctx, lang.code)
@@ -172,10 +177,12 @@ object Translations {
     }
 
     fun activeLanguage(context: Context?): AppLanguage {
-        val ctx = context ?: appContext ?: return AppLanguage.ARABIC
+        val ctx = context ?: appContext ?: return currentAppLanguage
         val prefs = ctx.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
         val langCode = prefs.getString("app_language", "ar") ?: "ar"
-        return AppLanguage.fromCode(langCode)
+        val resolved = AppLanguage.fromCode(langCode)
+        currentAppLanguage = resolved
+        return resolved
     }
 
     fun getFromContext(context: Context?, key: String): String {
@@ -192,6 +199,7 @@ object Translations {
 
     fun applyLocale(context: Context, language: AppLanguage) {
         try {
+            currentAppLanguage = language
             ensureLoaded(context, language)
             RetrofitClient.setActiveLanguage(language.code)
             val locale = Locale(language.code)

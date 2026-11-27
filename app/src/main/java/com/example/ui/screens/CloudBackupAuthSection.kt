@@ -516,7 +516,11 @@ fun CloudBackupAuthSection(
                                             }.onFailure { err ->
                                                 Toast.makeText(
                                                     context,
-                                                    err.message ?: "تعذر تنزيل النسخة السحابية",
+                                                    com.example.util.AppErrorMapper.fromThrowable(
+                                                        err,
+                                                        fallbackAr = "تعذر تنزيل النسخة السحابية",
+                                                        fallbackEn = "Couldn't download cloud backup"
+                                                    ),
                                                     Toast.LENGTH_SHORT
                                                 ).show()
                                             }

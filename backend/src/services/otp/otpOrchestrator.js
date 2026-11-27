@@ -6,6 +6,10 @@ const User = require('../../models/User');
 const { isAllowedOtpCountry, maskPhone, normalizePhoneE164 } = require('../../utils/phoneUtils');
 const { getOtpAdapters, resolveChannelOrder } = require('./otpProviderRegistry');
 
+function pickMsg(lang, ar, en) {
+  return String(lang || 'ar').toLowerCase().startsWith('en') ? en : ar;
+}
+
 function getOtpPolicyConfig() {
   return {
     ttlSeconds: Math.max(60, Number(process.env.OTP_TTL_SECONDS) || 300),
@@ -93,14 +97,14 @@ async function requestOtpChallenge({
 }) {
   const phoneE164 = normalizePhoneE164(rawPhone);
   if (!phoneE164) {
-    const err = new Error('Invalid E.164 phone number');
+    const err = new Error(pickMsg(lang, 'رقم الهاتف غير صحيح، تأكد منه وأعد المحاولة', 'Check the phone number and try again'));
     err.statusCode = 400;
     err.code = 'INVALID_PHONE';
     throw err;
   }
 
   if (!isAllowedOtpCountry(phoneE164)) {
-    const err = new Error('OTP delivery is not enabled for this country prefix');
+    const err = new Error(pickMsg(lang, 'التحقق غير متاح لهذا البلد حالياً', 'Verification is unavailable for this country'));
     err.statusCode = 403;
     err.code = 'COUNTRY_NOT_ALLOWED';
     throw err;
@@ -115,7 +119,7 @@ async function requestOtpChallenge({
 
   if (phoneLedger.lockedUntil && phoneLedger.lockedUntil > now) {
     const waitSec = Math.ceil((phoneLedger.lockedUntil.getTime() - now.getTime()) / 1000);
-    const err = new Error(`Too many failed attempts. Retry in ${waitSec}s`);
+    const err = new Error(pickMsg(lang, `محاولات كثيرة، انتظر ${waitSec} ثانية`, `Too many attempts. Wait ${waitSec}s`));
     err.statusCode = 429;
     err.code = 'OTP_LOCKED';
     err.retryAfterSeconds = waitSec;
@@ -138,7 +142,7 @@ async function requestOtpChallenge({
 
       if (!isChannelSwitchAfterCancel) {
         const waitSec = Math.ceil(policy.resendCooldownSeconds - elapsedSec);
-        const err = new Error(`Please wait ${waitSec}s before requesting another code`);
+        const err = new Error(pickMsg(lang, `انتظر ${waitSec} ثانية قبل طلب رمز جديد`, `Wait ${waitSec}s before requesting another code`));
         err.statusCode = 429;
         err.code = 'OTP_COOLDOWN';
         err.retryAfterSeconds = waitSec;
@@ -148,7 +152,7 @@ async function requestOtpChallenge({
   }
 
   if (phoneLedger.sendCount >= policy.dailyMaxPerPhone) {
-    const err = new Error('Daily OTP limit reached for this phone number');
+    const err = new Error(pickMsg(lang, 'وصلت للحد اليومي للرموز، حاول غداً', 'Daily code limit reached. Try tomorrow'));
     err.statusCode = 429;
     err.code = 'OTP_DAILY_LIMIT';
     throw err;
@@ -156,7 +160,7 @@ async function requestOtpChallenge({
 
   const monthLedger = await findOrCreateLedger(monthKey, 'OTP_MONTH');
   if (monthLedger.estimatedCostUsd >= policy.monthlyBudgetUsd) {
-    const err = new Error('Monthly OTP delivery budget reached');
+    const err = new Error(pickMsg(lang, 'الخدمة غير متاحة مؤقتاً، حاول لاحقاً', 'Service temporarily unavailable. Try later'));
     err.statusCode = 503;
     err.code = 'OTP_BUDGET_EXCEEDED';
     throw err;
@@ -202,7 +206,7 @@ async function requestOtpChallenge({
   }
 
   if (!chosenResult || !activeChannel) {
-    const err = new Error('Unable to deliver verification code through any configured channel');
+    const err = new Error(pickMsg(lang, 'تعذر إرسال الرمز عبر هذه الوسيلة، جرب وسيلة أخرى', 'Couldn\'t send code here. Try another channel'));
     err.statusCode = 503;
     err.code = 'OTP_DELIVERY_UNAVAILABLE';
     err.attemptedChannels = attemptedChannels;
@@ -261,10 +265,10 @@ async function requestOtpChallenge({
   };
 }
 
-async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
+async function verifyOtpChallenge({ challengeId, code, phoneE164, lang = 'ar' }) {
   const cleanCode = String(code || '').replace(/\D/g, '').trim();
   if (cleanCode.length < 4 || cleanCode.length > 8) {
-    const err = new Error('Invalid OTP code format');
+    const err = new Error(pickMsg(lang, 'أدخل رمز التحقق بشكل صحيح', 'Enter a valid verification code'));
     err.statusCode = 400;
     err.code = 'INVALID_OTP_FORMAT';
     throw err;
@@ -279,35 +283,35 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
     .sort({ createdAt: -1 });
 
   if (!challenge) {
-    const err = new Error('Verification challenge not found');
+    const err = new Error(pickMsg(lang, 'انتهت صلاحية الطلب، اطلب رمزاً جديداً', 'Request expired. Request a new code'));
     err.statusCode = 404;
     err.code = 'OTP_CHALLENGE_NOT_FOUND';
     throw err;
   }
 
   if (phoneE164 && challenge.phoneE164 !== phoneE164) {
-    const err = new Error('Phone number does not match verification challenge');
+    const err = new Error(pickMsg(lang, 'رقم الهاتف لا يطابق طلب التحقق', 'Phone number does not match request'));
     err.statusCode = 400;
     err.code = 'OTP_PHONE_MISMATCH';
     throw err;
   }
 
   if (challenge.status === 'CANCELLED') {
-    const err = new Error('This verification code was cancelled. Request a new code');
+    const err = new Error(pickMsg(lang, 'تم إلغاء هذا الرمز، اطلب رمزاً جديداً', 'Code was cancelled. Request a new one'));
     err.statusCode = 400;
     err.code = 'OTP_CANCELLED';
     throw err;
   }
 
   if (challenge.status === 'SUPERSEDED') {
-    const err = new Error('This verification code was superseded by a newer request');
+    const err = new Error(pickMsg(lang, 'تم إرسال رمز أحدث، استخدم الرمز الجديد', 'Newer code sent. Use the latest one'));
     err.statusCode = 400;
     err.code = 'OTP_SUPERSEDED';
     throw err;
   }
 
   if (challenge.status === 'VERIFIED') {
-    const err = new Error('Verification challenge already used');
+    const err = new Error(pickMsg(lang, 'تم استخدام هذا الرمز مسبقاً، اطلب رمزاً جديداً', 'Code already used. Request a new one'));
     err.statusCode = 400;
     err.code = 'OTP_ALREADY_USED';
     throw err;
@@ -319,7 +323,7 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
       1,
       Math.ceil(((challenge.lockedUntil || now).getTime() - now.getTime()) / 1000)
     );
-    const err = new Error(`Too many wrong attempts. Try again in ${waitSec}s`);
+    const err = new Error(pickMsg(lang, `محاولات كثيرة، انتظر ${waitSec} ثانية`, `Too many attempts. Wait ${waitSec}s`));
     err.statusCode = 429;
     err.code = 'OTP_LOCKED';
     err.retryAfterSeconds = waitSec;
@@ -329,7 +333,7 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
   if (challenge.expiresAt <= now || challenge.status === 'EXPIRED') {
     challenge.status = 'EXPIRED';
     await challenge.save();
-    const err = new Error('Verification code expired');
+    const err = new Error(pickMsg(lang, 'انتهت صلاحية الرمز، اطلب رمزاً جديداً', 'Code expired. Request a new one'));
     err.statusCode = 400;
     err.code = 'OTP_EXPIRED';
     throw err;
@@ -338,7 +342,7 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
   const adapters = getOtpAdapters();
   const adapter = adapters[challenge.activeChannel];
   if (!adapter) {
-    const err = new Error('Verification adapter unavailable');
+    const err = new Error(pickMsg(lang, 'وسيلة التحقق غير متاحة مؤقتاً', 'Verification channel unavailable'));
     err.statusCode = 503;
     err.code = 'OTP_ADAPTER_UNAVAILABLE';
     throw err;
@@ -359,17 +363,18 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
         { $set: { lockedUntil } }
       );
 
-      const err = new Error('Maximum OTP attempts exceeded; temporarily locked');
+      const waitSec = policy.lockMinutes * 60;
+      const err = new Error(pickMsg(lang, `محاولات كثيرة، انتظر ${waitSec} ثانية`, `Too many attempts. Wait ${waitSec}s`));
       err.statusCode = 429;
       err.code = 'OTP_LOCKED';
       err.remainingAttempts = 0;
-      err.retryAfterSeconds = policy.lockMinutes * 60;
+      err.retryAfterSeconds = waitSec;
       throw err;
     }
 
     await challenge.save();
     const remaining = Math.max(0, challenge.maxAttempts - challenge.attempts);
-    const err = new Error(`Incorrect verification code (${remaining} attempts remaining)`);
+    const err = new Error(pickMsg(lang, `الرمز غير صحيح (متبقي ${remaining} محاولات)`, `Wrong code (${remaining} attempts left)`));
     err.statusCode = 401;
     err.code = 'OTP_INVALID_CODE';
     err.remainingAttempts = remaining;
@@ -395,7 +400,7 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
   return challenge;
 }
 
-async function cancelOtpChallenge({ challengeId, phoneE164, expectedUserId = null }) {
+async function cancelOtpChallenge({ challengeId, phoneE164, expectedUserId = null, lang = 'ar' }) {
   if (!challengeId && !phoneE164) {
     return { cancelled: false, status: 'NOT_FOUND' };
   }
@@ -405,13 +410,13 @@ async function cancelOtpChallenge({ challengeId, phoneE164, expectedUserId = nul
     return { cancelled: false, status: 'NOT_FOUND' };
   }
   if (phoneE164 && challenge.phoneE164 !== phoneE164) {
-    const err = new Error('Phone number does not match verification challenge');
+    const err = new Error(pickMsg(lang, 'رقم الهاتف لا يطابق طلب التحقق', 'Phone number does not match request'));
     err.statusCode = 400;
     err.code = 'OTP_PHONE_MISMATCH';
     throw err;
   }
   if (expectedUserId && challenge.userId && String(challenge.userId) !== String(expectedUserId)) {
-    const err = new Error('Challenge does not belong to authenticated user');
+    const err = new Error(pickMsg(lang, 'غير مصرح بإلغاء هذا الرمز', 'Not allowed to cancel this code'));
     err.statusCode = 403;
     err.code = 'OTP_FORBIDDEN';
     throw err;

@@ -101,7 +101,11 @@ fun DeviceTransferDialog(
                     errorMessage = res.body()?.message ?: "تعذر بدء جلسة الاستقبال"
                 }
             } catch (e: Exception) {
-                errorMessage = e.message
+                errorMessage = com.example.util.AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر بدء جلسة النقل، تحقق من الإنترنت",
+                    fallbackEn = "Couldn't start transfer session"
+                )
             }
         }
     }
@@ -143,7 +147,11 @@ fun DeviceTransferDialog(
                             UserType.entries.find { t -> t.name == currentUser?.type } ?: UserType.BUSINESSMAN
                         )
                     }.onFailure { err ->
-                        errorMessage = err.message
+                        errorMessage = com.example.util.AppErrorMapper.fromThrowable(
+                            err,
+                            fallbackAr = "تعذر إكمال نقل البيانات، حاول مجدداً",
+                            fallbackEn = "Couldn't complete transfer"
+                        )
                         hasStartedDownload = false
                     }
                     break
@@ -176,7 +184,11 @@ fun DeviceTransferDialog(
                 oldSuccessMessage = "تم إرسال كافة البيانات المشفرة (${summary.totalRecords} سجل و ${summary.mediaFilesCount} وسائط). سيتم تسجيل خروج هذا الجهاز فور تأكيد الاستلام."
                 loadPendingOnOldPhone()
             }.onFailure { err ->
-                errorMessage = err.message ?: "فشل تفويض أو رفع بيانات النقل"
+                errorMessage = com.example.util.AppErrorMapper.fromThrowable(
+                    err,
+                    fallbackAr = "تعذر تفويض أو رفع البيانات",
+                    fallbackEn = "Couldn't upload transfer data"
+                )
             }
         }
     }

@@ -94,7 +94,7 @@ object ReportExporter {
 
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "حدث خطأ أثناء إنشاء ملف Excel: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "تعذر إنشاء ملف Excel، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -253,7 +253,7 @@ object ReportExporter {
 
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "حدث خطأ أثناء إنشاء ملف PDF: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "تعذر إنشاء ملف PDF، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -693,7 +693,7 @@ object ReportExporter {
 
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, if (isEn) "Error generating CV PDF: ${e.localizedMessage}" else "خطأ أثناء تصدير السيرة الذاتية: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (isEn) "Couldn't export CV. Please try again" else "تعذر تصدير السيرة الذاتية، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -799,7 +799,7 @@ object ReportExporter {
             shareFile(context, file, "text/csv", "تصدير حقيبة الذهب والفضة (Excel)")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطأ أثناء التصدير: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "تعذر تصدير الملف، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -845,7 +845,7 @@ object ReportExporter {
             shareFile(context, file, "text/csv", "تصدير دفتر الأستاذ والقيود (Excel)")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطأ أثناء التصدير: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "تعذر تصدير الملف، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -891,7 +891,7 @@ object ReportExporter {
             shareFile(context, file, "text/csv", "تصدير مشاريع المقاولات (Excel)")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطأ أثناء التصدير: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "تعذر تصدير الملف، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1064,7 +1064,7 @@ object ReportExporter {
             shareFile(context, file, "application/pdf", "تصدير فاتورة / عرض سعر ذهب معتمد")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "خطأ أثناء إنشاء الفاتورة: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "تعذر إنشاء الفاتورة، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1267,7 +1267,7 @@ object ReportExporter {
             shareFile(context, file, "application/pdf", "تصدير تقرير القيود والحسابات (PDF)")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "حدث خطأ أثناء إنشاء ملف PDF: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "تعذر إنشاء ملف PDF، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1431,7 +1431,7 @@ object ReportExporter {
             shareFile(context, file, "application/pdf", "تصدير محادثة $safeName كـ PDF")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "حدث خطأ أثناء تصدير المحادثة: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "تعذر تصدير المحادثة، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1611,7 +1611,7 @@ object ReportExporter {
             shareFile(context, file, "application/pdf", "تصدير ملخص مشروع $safeName كـ PDF")
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "حدث خطأ أثناء تصدير ملخص المشروع: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "تعذر تصدير ملخص المشروع، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 }

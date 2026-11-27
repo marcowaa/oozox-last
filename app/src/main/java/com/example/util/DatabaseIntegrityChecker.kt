@@ -162,7 +162,7 @@ object DatabaseIntegrityChecker {
                 expectedVersion = EXPECTED_SCHEMA_VERSION,
                 isVersionValid = false,
                 isQuickCheckOk = false,
-                integrityMessage = "استثناء أثناء فحص التكامل: ${e.localizedMessage}",
+                integrityMessage = "تعذر إكمال فحص سلامة البيانات، حاول مجدداً",
                 verifiedTablesCount = verifiedTables,
                 totalRecordsCount = totalRecords,
                 status = IntegrityStatus.WARNING

@@ -296,6 +296,7 @@ const verifyOtp = async (req, res, next) => {
       challengeId,
       code,
       phoneE164: normalizedPhone || undefined,
+      lang: req.lang || 'ar',
     });
 
     const decodedPre = resolvePreAuthUserFromReq(req);
@@ -455,6 +456,7 @@ const cancelOtp = async (req, res, next) => {
       challengeId,
       phoneE164: normalizedPhone || undefined,
       expectedUserId: decodedPre?.id || null,
+      lang: req.lang || 'ar',
     });
     return successResponse(res, 200, req.t('api.otp_cancelled') || 'Verification code cancelled', result);
   } catch (err) {

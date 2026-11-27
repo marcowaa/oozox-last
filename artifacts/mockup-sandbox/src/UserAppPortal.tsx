@@ -243,7 +243,13 @@ export const UserAppPortal: React.FC<{
         }
       },
       (err) => {
-        addToast('تعذر تحديد الموقع', `فشل الحصول على إحداثيات GPS: ${err.message}`, 'error');
+        const msg =
+          err.code === 1
+            ? 'يرجى السماح بالوصول إلى الموقع من إعدادات المتصفح.'
+            : err.code === 3
+              ? 'انتهت مهلة تحديد الموقع، حاول في مكان مفتوح.'
+              : 'تأكد من تفعيل خدمة الموقع على جهازك وحاول مجدداً.';
+        addToast('تعذر تحديد الموقع', msg, 'error');
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );

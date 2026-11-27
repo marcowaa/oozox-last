@@ -1741,7 +1741,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _trustedDevices.value = list
             }.onFailure { err ->
                 com.example.ui.components.ToastNotificationBus.showToast(
-                    message = err.message ?: "تعذر تحميل قائمة الأجهزة الموثوقة",
+                    message = com.example.util.AppErrorMapper.fromThrowable(
+                        err,
+                        fallbackAr = "تعذر تحميل الأجهزة الموثوقة",
+                        fallbackEn = "Couldn't load trusted devices"
+                    ),
                     type = com.example.ui.components.AppToastType.ERROR
                 )
             }
@@ -1762,7 +1766,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 onDone(true, msg)
             }.onFailure { err ->
-                onDone(false, err.message ?: "تعذر إلغاء وثوق الجهاز")
+                onDone(
+                    false,
+                    com.example.util.AppErrorMapper.fromThrowable(
+                        err,
+                        fallbackAr = "تعذر إزالة الجهاز",
+                        fallbackEn = "Couldn't remove device"
+                    )
+                )
             }
         }
     }
@@ -2062,7 +2073,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 onSuccess(res)
             } catch (e: Exception) {
-                val err = e.message ?: "تعذر تسجيل العملية المالية للهاشتاج"
+                val err = com.example.util.AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر تسجيل العملية المالية، حاول مجدداً",
+                    fallbackEn = "Couldn't record transaction"
+                )
                 com.example.ui.components.ToastNotificationBus.showToast(
                     message = err,
                     type = com.example.ui.components.AppToastType.ERROR
@@ -2104,7 +2119,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 onComplete(updated)
             } catch (e: Exception) {
                 com.example.ui.components.ToastNotificationBus.showToast(
-                    message = e.message ?: "تعذر تسجيل سداد الفاتورة",
+                    message = com.example.util.AppErrorMapper.fromThrowable(
+                        e,
+                        fallbackAr = "تعذر تسجيل سداد الفاتورة، حاول مجدداً",
+                        fallbackEn = "Couldn't record invoice payment"
+                    ),
                     type = com.example.ui.components.AppToastType.ERROR
                 )
                 onComplete(null)
@@ -3544,7 +3563,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 _aiThinkingResponse.value = result
             } catch (e: Exception) {
-                _aiThinkingResponse.value = "حدث خطأ أثناء معالجة الاستعلام: ${e.message ?: "غير معروف"}"
+                _aiThinkingResponse.value = com.example.util.AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر معالجة طلبك حالياً، حاول مجدداً",
+                    fallbackEn = "Couldn't process request right now"
+                )
             } finally {
                 _isAiThinkingLoading.value = false
             }
@@ -3580,7 +3603,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             res.onSuccess { list ->
                 _cloudBackups.value = list
             }.onFailure { err ->
-                _cloudBackupsError.value = err.message
+                _cloudBackupsError.value = com.example.util.AppErrorMapper.fromThrowable(
+                    err,
+                    fallbackAr = "تعذر تحميل النسخ السحابية",
+                    fallbackEn = "Couldn't load cloud backups"
+                )
             }
             _isCloudBackupsLoading.value = false
         }
@@ -3591,7 +3618,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isBackupProcessing.value = true
             val res = SecureBackupVaultEngine.deleteServerCloudBackup(backupId)
             res.onFailure { err ->
-                _backupStatus.value = BackupResult.Error(err.message ?: "تعذر حذف النسخة السحابية من الخادم.")
+                _backupStatus.value = BackupResult.Error(
+                    com.example.util.AppErrorMapper.fromThrowable(
+                        err,
+                        fallbackAr = "تعذر حذف النسخة السحابية",
+                        fallbackEn = "Couldn't delete cloud backup"
+                    )
+                )
             }
             _isBackupProcessing.value = false
             refreshCloudBackups()
@@ -3614,7 +3647,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     onResult(Result.success(content))
                 }
             }.onFailure { err ->
-                _backupStatus.value = BackupResult.Error(err.message ?: "فشل تحميل النسخة السحابية من الخادم.")
+                _backupStatus.value = BackupResult.Error(
+                    com.example.util.AppErrorMapper.fromThrowable(
+                        err,
+                        fallbackAr = "تعذر تحميل النسخة السحابية",
+                        fallbackEn = "Couldn't download cloud backup"
+                    )
+                )
                 onResult(Result.failure(err))
             }
         }
@@ -3636,7 +3675,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isBackupProcessing.value = true
             val dl = SecureBackupVaultEngine.downloadServerCloudBackup(backupId)
             if (dl.isFailure) {
-                val err = BackupResult.Error(dl.exceptionOrNull()?.message ?: "تعذر تنزيل النسخة السحابية.")
+                val err = BackupResult.Error(
+                    com.example.util.AppErrorMapper.fromThrowable(
+                        dl.exceptionOrNull(),
+                        fallbackAr = "تعذر تنزيل النسخة السحابية",
+                        fallbackEn = "Couldn't download cloud backup"
+                    )
+                )
                 _backupStatus.value = err
                 _isBackupProcessing.value = false
                 onComplete(err)

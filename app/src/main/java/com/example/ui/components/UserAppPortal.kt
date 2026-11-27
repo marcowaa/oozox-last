@@ -24,10 +24,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -47,6 +49,7 @@ import com.example.data.repository.OtpRequestOutcome
 import com.example.data.repository.OtpVerifyOutcome
 import com.example.ui.navigation.PostOtpGatewayDecision
 import com.example.ui.theme.*
+import com.example.util.AppErrorMapper
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
 import com.example.util.DeviceTrustManager
@@ -188,8 +191,7 @@ fun UserAppPortal(
                         is AuthOutcome.Error -> {
                             isProcessingNetwork = false
                             if (res.code == "NETWORK_ERROR") {
-                                // Server unreachable even though network interface reported online -> allow explicit offline cache option
-                                networkFailureError = "تعذر الوصول للخادم: يمكنك الدخول لوضع الأوفلاين للبيانات المحفوظة محلياً فقط."
+                                networkFailureError = res.message
                             } else {
                                 specificErrorMessage = res.message
                             }
@@ -207,7 +209,11 @@ fun UserAppPortal(
                             )
                         )
                     } else {
-                        specificErrorMessage = "انتهت صلاحية الثقة المحلية للجهاز (30 يوماً) — يلزم الاتصال بالإنترنت وإعادة التحقق عبر OTP."
+                        specificErrorMessage = if (currentLang == com.example.util.AppLanguage.ENGLISH) {
+                            "Offline access expired. Connect to the internet to verify"
+                        } else {
+                            "انتهت صلاحية الدخول السريع، اتصل بالإنترنت للتأكيد"
+                        }
                     }
                 }
             }
@@ -232,7 +238,12 @@ fun UserAppPortal(
                     } else if (errorCode != androidx.biometric.BiometricPrompt.ERROR_USER_CANCELED &&
                         errorCode != androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON
                     ) {
-                        specificErrorMessage = errString.toString()
+                        specificErrorMessage = AppErrorMapper.sanitizeMessage(
+                            errString.toString(),
+                            language = currentLang,
+                            fallbackAr = Translations.get("portal.bio_failed", currentLang),
+                            fallbackEn = Translations.get("portal.bio_failed", currentLang)
+                        )
                     }
                 },
                 onFailed = {
@@ -259,7 +270,12 @@ fun UserAppPortal(
                     if (errorCode != androidx.biometric.BiometricPrompt.ERROR_USER_CANCELED &&
                         errorCode != androidx.biometric.BiometricPrompt.ERROR_NEGATIVE_BUTTON
                     ) {
-                        specificErrorMessage = errString.toString()
+                        specificErrorMessage = AppErrorMapper.sanitizeMessage(
+                            errString.toString(),
+                            language = currentLang,
+                            fallbackAr = Translations.get("portal.dev_lock_failed", currentLang),
+                            fallbackEn = Translations.get("portal.dev_lock_failed", currentLang)
+                        )
                     }
                 },
                 onFailed = {
@@ -333,7 +349,7 @@ fun UserAppPortal(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(
@@ -348,57 +364,62 @@ fun UserAppPortal(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .testTag("user_app_portal_screen")
     ) {
+        val viewportHeight = maxHeight
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(bottom = 6.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = viewportHeight)
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = GoldPrimary.copy(alpha = 0.12f),
-                    border = BorderStroke(1.5.dp, GoldPrimary.copy(alpha = 0.6f)),
-                    modifier = Modifier.size(86.dp)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        OozoxThumbnailImage(
-                            model = com.example.R.drawable.oozox_official_clean_icon_1786654687391,
-                            width = 72.dp,
-                            height = 72.dp,
-                            shape = RoundedCornerShape(18.dp),
-                            contentDescription = "OOZOX Official Icon"
-                        )
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.5.dp, adaptiveGoldPrimary.copy(alpha = 0.45f)),
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.size(82.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            OozoxThumbnailImage(
+                                model = com.example.R.drawable.oozox_official_clean_icon_1786654687391,
+                                width = 68.dp,
+                                height = 68.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                contentDescription = "OOZOX Official Icon"
+                            )
+                        }
                     }
                 }
-            }
 
-            Text(
-                text = "OOZOX",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Black,
-                color = OozoxPlatinum,
-                letterSpacing = 2.5.sp,
-                textAlign = TextAlign.Center
-            )
+                Text(
+                    text = "OOZOX",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    letterSpacing = 2.5.sp,
+                    textAlign = TextAlign.Center
+                )
 
-            Text(
-                text = tr("portal.subtitle"),
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+                Text(
+                    text = tr("portal.subtitle"),
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -737,13 +758,15 @@ fun UserAppPortal(
                                     ) {
                                         Text(text = selectedCountry.flag, fontSize = 20.sp)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = selectedCountry.code,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = adaptiveGoldPrimary,
-                                            fontFamily = FontFamily.Monospace
-                                        )
+                                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                            Text(
+                                                text = selectedCountry.code,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = adaptiveGoldPrimary,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Icon(
                                             Icons.Default.ArrowDropDown,
@@ -754,63 +777,65 @@ fun UserAppPortal(
                                     }
                                 }
 
-                                OutlinedTextField(
-                                    value = rawPhone,
-                                    onValueChange = { input ->
-                                        rawPhone = input.filter { it.isDigit() || it == ' ' || it == '-' }
-                                        specificErrorMessage = null
-                                        networkFailureError = null
-                                    },
-                                    placeholder = {
-                                        Text(
-                                            text = tr("portal.mobile_hint"),
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                        )
-                                    },
-                                    singleLine = true,
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.PhoneAndroid,
-                                            contentDescription = null,
-                                            tint = adaptiveGoldPrimary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (rawPhone.isNotEmpty()) {
-                                            IconButton(
-                                                onClick = { rawPhone = "" },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = tr("portal.clear_cd"),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    OutlinedTextField(
+                                        value = rawPhone,
+                                        onValueChange = { input ->
+                                            rawPhone = input.filter { it.isDigit() || it == ' ' || it == '-' }
+                                            specificErrorMessage = null
+                                            networkFailureError = null
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                text = selectedCountry.placeholder,
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                            )
+                                        },
+                                        singleLine = true,
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.PhoneAndroid,
+                                                contentDescription = null,
+                                                tint = adaptiveGoldPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            if (rawPhone.isNotEmpty()) {
+                                                IconButton(
+                                                    onClick = { rawPhone = "" },
+                                                    modifier = Modifier.size(48.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = tr("portal.clear_cd"),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                             }
-                                        }
-                                    },
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Phone,
-                                        imeAction = ImeAction.Done
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onDone = { dispatchPhoneOtp() }
-                                    ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = adaptiveGoldPrimary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(54.dp)
-                                        .testTag("input_phone_number")
-                                )
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Phone,
+                                            imeAction = ImeAction.Done
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onDone = { dispatchPhoneOtp() }
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = adaptiveGoldPrimary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(54.dp)
+                                            .testTag("input_phone_number")
+                                    )
+                                }
                             }
 
                             if (detectedCarrier != null) {
@@ -864,94 +889,105 @@ fun UserAppPortal(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                             OtpDeliveryChannel.entries.forEach { channel ->
                                 val isSelected = selectedDeliveryChannel == channel
                                 val interactionSource = remember { MutableInteractionSource() }
                                 val isPressed by interactionSource.collectIsPressedAsState()
                                 val cardScale by animateFloatAsState(
                                     targetValue = when {
-                                        isPressed -> 0.94f
-                                        isSelected -> 1.02f
+                                        isPressed -> 0.95f
+                                        isSelected -> 1.01f
                                         else -> 1f
                                     },
-                                    animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+                                    animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
                                     label = "channel_scale_${channel.name}"
                                 )
                                 val borderColor by animateColorAsState(
-                                    targetValue = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    targetValue = if (isSelected) {
+                                        channel.brandColor
+                                    } else {
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDarkSurface) 0.45f else 0.55f)
+                                    },
                                     animationSpec = tween(180),
                                     label = "channel_border_${channel.name}"
                                 )
-                                val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                                val baseSurface = if (isDarkSurface) OozoxSlateCard else MaterialTheme.colorScheme.surface
+                                val opaqueCardBg = if (isSelected) {
+                                    channel.brandColor
+                                        .copy(alpha = if (isDarkSurface) 0.16f else 0.08f)
+                                        .compositeOver(baseSurface)
+                                } else {
+                                    if (isDarkSurface) {
+                                        OozoxSlateElevated.copy(alpha = 0.55f).compositeOver(baseSurface)
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    }
+                                }
+                                val accessibleLabelColor = if (isSelected) {
+                                    if (isDarkSurface) {
+                                        Color.White
+                                    } else {
+                                        when (channel) {
+                                            OtpDeliveryChannel.TELEGRAM -> Color(0xFF0369A1)
+                                            OtpDeliveryChannel.WHATSAPP -> Color(0xFF0F766E)
+                                            OtpDeliveryChannel.SMS -> Color(0xFFB45309)
+                                        }
+                                    }
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
 
                                 Surface(
                                     onClick = { selectedDeliveryChannel = channel },
                                     interactionSource = interactionSource,
-                                    color = Color.Transparent,
+                                    color = opaqueCardBg,
                                     shape = RoundedCornerShape(16.dp),
-                                    shadowElevation = if (isSelected) 6.dp else 1.dp,
+                                    shadowElevation = if (isSelected) 2.dp else 0.dp,
                                     border = BorderStroke(
                                         width = if (isSelected) 1.8.dp else 1.dp,
                                         color = borderColor
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(92.dp)
+                                        .height(96.dp)
                                         .scale(cardScale)
                                         .testTag("channel_button_${channel.name.lowercase()}")
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .background(
-                                                brush = Brush.verticalGradient(
-                                                    colors = if (isSelected) {
-                                                        listOf(
-                                                            channel.brandColor.copy(alpha = if (isDarkSurface) 0.22f else 0.14f),
-                                                            channel.brandColor.copy(alpha = if (isDarkSurface) 0.08f else 0.05f)
-                                                        )
-                                                    } else {
-                                                        listOf(
-                                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDarkSurface) 0.42f else 0.35f),
-                                                            MaterialTheme.colorScheme.surface
-                                                        )
-                                                    }
-                                                )
-                                            )
-                                            .padding(horizontal = 6.dp, vertical = 8.dp)
+                                            .padding(horizontal = 8.dp, vertical = 10.dp)
                                     ) {
                                         if (isSelected) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = channel.brandColor,
+                                            Box(
                                                 modifier = Modifier
-                                                    .size(14.dp)
-                                                    .align(Alignment.TopEnd)
-                                            )
+                                                    .size(16.dp)
+                                                    .clip(CircleShape)
+                                                    .background(channel.brandColor)
+                                                    .align(Alignment.TopEnd),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                            }
                                         }
                                         Column(
                                             modifier = Modifier.fillMaxSize(),
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             verticalArrangement = Arrangement.Center
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(42.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        channel.brandColor.copy(alpha = if (isSelected) 0.20f else 0.10f)
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                ChannelBrandIcon(channel = channel, size = 34.dp)
-                                            }
-                                            Spacer(modifier = Modifier.height(6.dp))
+                                            ChannelBrandIcon(channel = channel, size = 38.dp)
+                                            Spacer(modifier = Modifier.height(8.dp))
                                             Text(
                                                 text = channel.localizedTitle(currentLang),
-                                                fontSize = 11.5.sp,
+                                                fontSize = 12.sp,
                                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                color = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.onSurface,
+                                                color = accessibleLabelColor,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -961,55 +997,59 @@ fun UserAppPortal(
                             }
                         }
 
-                        if (specificErrorMessage != null) {
+                        val activePortalError = networkFailureError ?: specificErrorMessage
+                        if (!activePortalError.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(12.dp))
+                            val isNetErr = networkFailureError != null
                             Surface(
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
-                                modifier = Modifier.fillMaxWidth()
+                                color = MaterialTheme.colorScheme.errorContainer
+                                    .copy(alpha = 0.22f)
+                                    .compositeOver(MaterialTheme.colorScheme.surface),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("portal_inline_error")
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                                 ) {
-                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = specificErrorMessage!!,
-                                        color = MaterialTheme.colorScheme.error,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
+                                    Icon(
+                                        imageVector = if (isNetErr) Icons.Default.WifiOff else Icons.Default.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
                                     )
-                                }
-                            }
-                        }
-
-                        if (networkFailureError != null) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.WifiOff, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(tr("portal.network_err_title"), color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(text = networkFailureError!!, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 11.sp)
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                        TextButton(
+                                    Text(
+                                        text = activePortalError,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (isNetErr) {
+                                        FilledTonalButton(
                                             onClick = { dispatchPhoneOtp() },
-                                            modifier = Modifier.heightIn(min = 48.dp)
+                                            enabled = !isProcessingNetwork,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(
+                                                containerColor = adaptiveGoldPrimary.copy(alpha = 0.14f),
+                                                contentColor = adaptiveGoldPrimary
+                                            ),
+                                            modifier = Modifier
+                                                .heightIn(min = 36.dp)
+                                                .testTag("btn_portal_retry_otp")
                                         ) {
-                                            Icon(Icons.Default.Refresh, contentDescription = null, tint = adaptiveGoldPrimary, modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(tr("common.retry"), color = adaptiveGoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                text = tr("common.retry"),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                     }
                                 }
@@ -1079,6 +1119,7 @@ fun UserAppPortal(
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
             }
         }
     }
@@ -1169,13 +1210,15 @@ fun UserAppPortal(
                                             color = if (isSelected) adaptiveGoldPrimary else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
-                                    Text(
-                                        text = country.code,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = adaptiveGoldPrimary,
-                                        fontFamily = FontFamily.Monospace
-                                    )
+                                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                        Text(
+                                            text = country.code,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = adaptiveGoldPrimary,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
                                 }
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f), thickness = 0.5.dp)

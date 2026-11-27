@@ -292,7 +292,15 @@ object CrossDeviceTransferEngine {
                 )
             )
             if (!approveResp.isSuccessful) {
-                return@withContext Result.failure(IllegalStateException("فشل تفويض النقل (${approveResp.code()})"))
+                return@withContext Result.failure(
+                    IllegalStateException(
+                        AppErrorMapper.fromHttpStatus(
+                            approveResp.code(),
+                            fallbackAr = "تعذر تفويض النقل",
+                            fallbackEn = "Couldn't approve transfer"
+                        )
+                    )
+                )
             }
 
             onProgress(TransferProgressState("EXPORTING", 35, 0, 0, "تجهيز كافة المحادثات والوسائط وسجلات الخزينة..."))
@@ -317,7 +325,15 @@ object CrossDeviceTransferEngine {
                     )
                 )
                 if (!chunkResp.isSuccessful) {
-                    return@withContext Result.failure(IllegalStateException("فشل رفع الحزمة رقم ${idx + 1} (${chunkResp.code()})"))
+                    return@withContext Result.failure(
+                        IllegalStateException(
+                            AppErrorMapper.fromHttpStatus(
+                                chunkResp.code(),
+                                fallbackAr = "تعذر رفع بيانات النقل، حاول مجدداً",
+                                fallbackEn = "Couldn't upload transfer data"
+                            )
+                        )
+                    )
                 }
                 val pct = 50 + (((idx + 1) * 40) / chunks.size.coerceAtLeast(1))
                 onProgress(
@@ -348,7 +364,15 @@ object CrossDeviceTransferEngine {
                 )
             )
             if (!finResp.isSuccessful) {
-                return@withContext Result.failure(IllegalStateException("تعذر إنهاء رفع حزمة النقل (${finResp.code()})"))
+                return@withContext Result.failure(
+                    IllegalStateException(
+                        AppErrorMapper.fromHttpStatus(
+                            finResp.code(),
+                            fallbackAr = "تعذر إتمام رفع البيانات",
+                            fallbackEn = "Couldn't finish uploading transfer"
+                        )
+                    )
+                )
             }
 
             onProgress(
@@ -467,7 +491,13 @@ object CrossDeviceTransferEngine {
                 val resp = RetrofitClient.apiService().downloadTransferChunk(transferId, i)
                 val chunk = resp.body()?.data
                 if (!resp.isSuccessful || chunk == null) {
-                    return@withContext BackupResult.Error("تعذر تنزيل الحزمة المشفرة رقم ${i + 1} (${resp.code()}).")
+                    return@withContext BackupResult.Error(
+                        AppErrorMapper.fromHttpStatus(
+                            resp.code(),
+                            fallbackAr = "تعذر تنزيل بيانات النقل، حاول مجدداً",
+                            fallbackEn = "Couldn't download transfer data"
+                        )
+                    )
                 }
                 downloaded.add(chunk)
             }
@@ -489,13 +519,19 @@ object CrossDeviceTransferEngine {
             onProgress("تأكيد النقل وإغلاق الجلسة على الهاتف القديم...", 96)
             val completeResp = RetrofitClient.apiService().completeDeviceTransfer(transferId)
             if (!completeResp.isSuccessful) {
-                return@withContext BackupResult.Error("تمت الاستعادة محلياً لكن فشل تأكيد إنهاء جلسة الهاتف القديم (${completeResp.code()}).")
+                return@withContext BackupResult.Error("تمت الاستعادة بنجاح، لكن تعذر إغلاق جلسة الهاتف القديم تلقائياً")
             }
 
             onProgress("اكتمل نقل الحساب والوسائط بالكامل!", 100)
             restoreOutcome
         } catch (e: Exception) {
-            BackupResult.Error("فشل نقل الحساب المشفر: ${e.localizedMessage ?: e.message}")
+            BackupResult.Error(
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر نقل الحساب، تحقق من الاتصال وأعد المحاولة",
+                    fallbackEn = "Account transfer failed. Check connection"
+                )
+            )
         }
     }
 }

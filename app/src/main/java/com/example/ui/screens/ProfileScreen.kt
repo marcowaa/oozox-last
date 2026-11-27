@@ -224,7 +224,11 @@ fun ProfileScreen(
                     restoreValidationError = "تعذر قراءة محتوى ملف النسخة الاحتياطية."
                 }
             } catch (e: Exception) {
-                restoreValidationError = "خطأ أثناء قراءة الملف: ${e.localizedMessage}"
+                restoreValidationError = com.example.util.AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر قراءة ملف النسخة الاحتياطية",
+                    fallbackEn = "Couldn't read backup file"
+                )
             }
         }
     }
@@ -1287,7 +1291,14 @@ fun ProfileScreen(
                             showCloudBackupsVaultModal = false
                             showRestoreModal = true
                         }.onFailure { err ->
-                            appToast.showToast(err.message ?: "تعذر تنزيل النسخة السحابية", AppToastType.ERROR)
+                            appToast.showToast(
+                                com.example.util.AppErrorMapper.fromThrowable(
+                                    err,
+                                    fallbackAr = "تعذر تنزيل النسخة السحابية",
+                                    fallbackEn = "Couldn't download cloud backup"
+                                ),
+                                AppToastType.ERROR
+                            )
                         }
                     }
                 }
@@ -1434,7 +1445,14 @@ fun ProfileScreen(
                             backupMetadataPreview = SecureBackupVaultEngine.inspectBackupMetadata(content, user.phone)
                             showRestoreModal = true
                         }.onFailure { err ->
-                            appToast.showToast(err.message ?: "تعذر تنزيل النسخة السحابية", AppToastType.ERROR)
+                            appToast.showToast(
+                                com.example.util.AppErrorMapper.fromThrowable(
+                                    err,
+                                    fallbackAr = "تعذر تنزيل النسخة السحابية",
+                                    fallbackEn = "Couldn't download cloud backup"
+                                ),
+                                AppToastType.ERROR
+                            )
                         }
                     }
                 }

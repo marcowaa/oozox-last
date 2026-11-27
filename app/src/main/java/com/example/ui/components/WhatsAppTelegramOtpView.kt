@@ -24,8 +24,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -313,14 +316,24 @@ fun WhatsAppTelegramOtpView(
                 }
             }
 
+            val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+            val channelBadgeTextColor = if (isDarkSurface) {
+                currentChannel.brandColor
+            } else {
+                when (currentChannel) {
+                    OtpDeliveryChannel.TELEGRAM -> Color(0xFF0369A1)
+                    OtpDeliveryChannel.WHATSAPP -> Color(0xFF0F766E)
+                    OtpDeliveryChannel.SMS -> Color(0xFFB45309)
+                }
+            }
             Surface(
-                color = currentChannel.brandColor.copy(alpha = 0.14f),
+                color = currentChannel.brandColor.copy(alpha = if (isDarkSurface) 0.16f else 0.10f),
                 shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, currentChannel.brandColor.copy(alpha = 0.45f)),
                 modifier = Modifier.testTag("otp_active_channel_badge")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     ChannelBrandIcon(channel = currentChannel, size = 18.dp)
@@ -328,7 +341,7 @@ fun WhatsAppTelegramOtpView(
                     Text(
                         text = trFmt("otp.sent_via_fmt", "channel" to currentChannel.localizedTitle(currentLang)),
                         fontSize = 11.sp,
-                        color = currentChannel.brandColor,
+                        color = channelBadgeTextColor,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -338,14 +351,10 @@ fun WhatsAppTelegramOtpView(
         Spacer(modifier = Modifier.height(16.dp))
 
         Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(currentChannel.brandColor.copy(alpha = 0.14f))
-                .border(1.5.dp, currentChannel.brandColor.copy(alpha = 0.8f), CircleShape),
+            modifier = Modifier.size(64.dp),
             contentAlignment = Alignment.Center
         ) {
-            ChannelBrandIcon(channel = currentChannel, size = 38.dp)
+            ChannelBrandIcon(channel = currentChannel, size = 56.dp)
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -366,14 +375,16 @@ fun WhatsAppTelegramOtpView(
             textAlign = TextAlign.Center
         )
 
-        Text(
-            text = phoneNumber,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = GoldPrimary,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.padding(top = 2.dp)
-        )
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Text(
+                text = phoneNumber,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = GoldPrimary,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
 
         if (!resendSuccessNotice.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))

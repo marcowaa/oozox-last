@@ -593,9 +593,8 @@ object FileUtils {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(Intent.createChooser(intent, "فتح المستند"))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, "تعذر فتح الملف، لا يوجد تطبيق متوافق: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(context, "لا يوجد تطبيق متوافق لفتح هذا الملف", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -612,9 +611,8 @@ object FileUtils {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(Intent.createChooser(intent, "مشاركة الملف عبر..."))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, "تعذر مشاركة الملف: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(context, "تعذر مشاركة الملف، حاول مجدداً", Toast.LENGTH_SHORT).show()
         }
     }
 }

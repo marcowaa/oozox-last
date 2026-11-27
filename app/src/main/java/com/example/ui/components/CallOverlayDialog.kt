@@ -218,7 +218,11 @@ fun CallOverlayDialog(
                     if (!authRes.isSuccessful) {
                         val parsed = AuthRepository.parseErrorBody(
                             authRes.errorBody()?.string(),
-                            "تعذر بدء المكالمة (${authRes.code()})"
+                            com.example.util.AppErrorMapper.fromHttpStatus(
+                                authRes.code(),
+                                fallbackAr = "تعذر بدء المكالمة",
+                                fallbackEn = "Couldn't start call"
+                            )
                         )
                         if (authRes.code() == 429 || parsed.code.contains("BUDGET", true) || parsed.code.contains("LIMIT", true)) {
                             onBudgetExceeded(parsed.message)

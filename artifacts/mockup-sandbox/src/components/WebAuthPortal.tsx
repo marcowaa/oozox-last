@@ -136,19 +136,20 @@ export const WebChannelSelectorGrid: React.FC<{
           type="button"
           onClick={() => onSelect(c.id)}
           title={c.desc}
-          className={`relative group flex flex-col items-center justify-center gap-2 py-3 px-2 rounded-2xl border transition-all duration-200 active:scale-[0.96] ${
+          className={`relative group flex flex-col items-center justify-center gap-2 py-3.5 px-2 rounded-2xl border transition-all duration-200 active:scale-[0.96] ${
             active
               ? `bg-gradient-to-b ${c.accentClass} ${c.activeBorderClass}`
-              : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-600 hover:bg-slate-900'
+              : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-600 hover:bg-slate-900'
           }`}
         >
           {active && (
-            <CheckCircle2 className="w-3.5 h-3.5 absolute top-2 left-2 opacity-90" />
+            <CheckCircle2 className="w-4 h-4 absolute top-2 right-2 opacity-95" />
           )}
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-200 ${active ? 'scale-105' : 'group-hover:scale-105'}`}>
-            <WebChannelBrandIcon channel={c.id} className="w-9 h-9 drop-shadow" />
-          </div>
-          <span className={`text-xs font-extrabold tracking-wide ${active ? 'text-white' : 'text-slate-300'}`}>
+          <WebChannelBrandIcon
+            channel={c.id}
+            className={`w-10 h-10 transition-transform duration-200 ${active ? 'scale-105' : 'group-hover:scale-105'}`}
+          />
+          <span className={`text-xs font-extrabold tracking-wide ${active ? 'text-white' : 'text-slate-200'}`}>
             {c.label}
           </span>
         </button>

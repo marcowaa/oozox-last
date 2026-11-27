@@ -217,7 +217,14 @@ object OfflineSyncManager {
             } catch (e: Exception) {
                 _isBackingUp.value = false
                 withContext(Dispatchers.Main) {
-                    onComplete(false, "تعذر رفع النسخة السحابية: ${e.message}")
+                    onComplete(
+                        false,
+                        AppErrorMapper.fromThrowable(
+                            e,
+                            fallbackAr = "تعذر رفع النسخة الاحتياطية، تحقق من الإنترنت",
+                            fallbackEn = "Couldn't upload backup. Check internet"
+                        )
+                    )
                 }
             }
         }
