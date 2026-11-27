@@ -3,16 +3,24 @@ const app = require('./app');
 const connectDB = require('./config/db');
 const { assertEncryptionKeyConfigured } = require('./utils/fieldCrypto');
 const { getJwtSecret } = require('./utils/jwt');
+const { assertSignalingSecretConfigured } = require('./controllers/callController');
+const { closeExpiredActiveCalls } = require('./services/callBudgetService');
 
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV === 'production') {
   assertEncryptionKeyConfigured();
   getJwtSecret();
+  assertSignalingSecretConfigured();
 }
 
 // Connect to MongoDB
 connectDB();
+
+// Periodically settle any active calls exceeding RTC_MAX_CALL_DURATION_SECONDS (5-minute cadence)
+setInterval(() => {
+  closeExpiredActiveCalls().catch(() => {});
+}, 5 * 60 * 1000).unref();
 
 const server = app.listen(PORT, () => {
   console.log(

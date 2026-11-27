@@ -30,14 +30,13 @@ OOZOX Production Deployment CLI (100% Dockerized Stack)
 Commands:
   check-prereqs                  Verify Docker, Compose v2, OpenSSL, and host port readiness
   init-env [--force]             Generate .env.production and /opt/oozox/.backup.key with random secrets
-  validate-env                   Verify .env.production has no CHANGE_ME placeholders and passes Compose validation
+  validate-env                   Verify .env.production secrets, OTP provider readiness, and Compose validation
   issue-ssl [email]              Issue Let's Encrypt TLS certs via containerized certbot (before starting nginx)
-  test                           Run Express Jest + Go Signaling race tests inside ephemeral Docker containers
+  test                           Run Express Jest (bookworm-slim) + Go Signaling race tests in Docker
   up                             Validate env/certs and start all 7 production containers (mongo, redis, api, signaling, web, nginx, coturn)
   ensure-mongo-user              Idempotently create least-privilege MONGO_APP_USER on existing Mongo volumes
-  create-admin <email> <phone> <password> [name]
-                                 Create or promote an ADMIN account via oozox_api_prod container
-  smoke                          Run all post-deployment health, TLS, auth-guard, and DB isolation checks
+  create-admin <phone> [name]    Create or promote an OTP-only ADMIN account via oozox_api_prod container
+  smoke                          Run all post-deployment health, TLS, auth-guard, Prometheus firewall & DB isolation checks
   backup                         Run AES-256-CBC PBKDF2 encrypted mongodump immediately
   install-backup-script          Install /opt/oozox/backup_mongo.sh and show Docker cron entries
   renew-ssl                      Renew TLS certificates via Dockerized certbot and reload Nginx
@@ -79,13 +78,14 @@ cmd_init_env() {
   fi
   [[ -n "$public_ip" ]] || die "Could not detect SERVER_PUBLIC_IP. Export SERVER_PUBLIC_IP=<YOUR_VPS_IP> and retry."
 
-  local mongo_root_pass mongo_app_pass db_enc_key redis_pass jwt_key coturn_key backup_pass
+  local mongo_root_pass mongo_app_pass db_enc_key redis_pass jwt_key coturn_key signaling_hmac_key backup_pass
   mongo_root_pass="$(openssl rand -hex 24)"
   mongo_app_pass="$(openssl rand -hex 24)"
   db_enc_key="$(openssl rand -hex 32)"
   redis_pass="$(openssl rand -hex 24)"
   jwt_key="$(openssl rand -hex 48)"
   coturn_key="$(openssl rand -hex 32)"
+  signaling_hmac_key="$(openssl rand -hex 32)"
   backup_pass="$(openssl rand -hex 32)"
 
   umask 077
@@ -111,14 +111,52 @@ CLIENT_ORIGIN=https://oozox.com,https://www.oozox.com,https://admin.oozox.com
 ALLOWED_ORIGINS=https://oozox.com,https://www.oozox.com,https://admin.oozox.com
 API_RATE_LIMIT_MAX=500
 
+# Mandatory: configure at least one OTP provider (TELEGRAM_GATEWAY_TOKEN OR all 3 TWILIO_* keys)
+OTP_CHANNEL_ORDER=TELEGRAM,WHATSAPP,SMS
+TELEGRAM_GATEWAY_TOKEN=CHANGE_ME_TELEGRAM_GATEWAY_TOKEN
+TELEGRAM_GATEWAY_CALLBACK_URL=https://api.oozox.com/api/auth/webhooks/telegram-gateway
+TWILIO_ACCOUNT_SID=CHANGE_ME_TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN=CHANGE_ME_TWILIO_AUTH_TOKEN
+TWILIO_VERIFY_SERVICE_SID=CHANGE_ME_TWILIO_VERIFY_SERVICE_SID
+OTP_ALLOWED_COUNTRIES=+20,+966,+971,+965,+974,+973,+968,+962
+OTP_COOLDOWN_SECONDS=60
+OTP_DAILY_LIMIT_PER_PHONE=5
+OTP_EXPIRES_SECONDS=300
+OTP_MAX_VERIFY_ATTEMPTS=5
+OTP_MONTHLY_BUDGET_USD=150
+
 COTURN_SECRET=${coturn_key}
 TURN_URLS=turn:turn.oozox.com:3478?transport=udp,turn:turn.oozox.com:3478?transport=tcp,turns:turn.oozox.com:5349?transport=tcp
 TURN_TTL=3600
+COTURN_METRICS_URL=http://host.docker.internal:9641/metrics
+INTERNAL_SIGNALING_HMAC_SECRET=${signaling_hmac_key}
+REQUIRE_CALL_AUTH_SIGNATURE=true
+RTC_MONTHLY_BUDGET_USD=100
+RTC_ALERT_THRESHOLD_1_PCT=50
+RTC_ALERT_THRESHOLD_2_PCT=80
+RTC_COST_PER_MINUTE_USD=0.004
+RTC_TURN_COST_PER_GB_USD=0.09
+RTC_DAILY_USER_LIMIT_MINUTES=0
+RTC_MAX_CALL_DURATION_SECONDS=14400
+
+# Recommended: Server-side Gemini AI proxy & Firebase Cloud Messaging
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_USER_DAILY_LIMIT=30
+GEMINI_USER_MONTHLY_LIMIT=300
+GEMINI_MONTHLY_BUDGET_USD=50
+FIREBASE_SERVICE_ACCOUNT_JSON=
+
+MAX_CLOUD_BACKUPS_PER_USER=10
+TRANSFER_TTL_MINUTES=15
 
 VITE_API_BASE_URL=https://api.oozox.com
+WEB_PORTAL_DIR=artifacts/mockup-sandbox
+WEB_WORKSPACE_FILTER=@workspace/mockup-sandbox
 EOF
   chmod 600 "$ENV_FILE"
   log "Wrote $ENV_FILE (chmod 600) for SERVER_PUBLIC_IP=${public_ip}"
+  warn "ACTION REQUIRED: Edit $ENV_FILE and configure TELEGRAM_GATEWAY_TOKEN or TWILIO_* credentials before running validate-env/up."
 
   local key_dir
   key_dir="$(dirname "$BACKUP_KEY_FILE")"
@@ -139,12 +177,57 @@ EOF
 
 cmd_validate_env() {
   [[ -f "$ENV_FILE" ]] || die "Missing $ENV_FILE. Run: ./scripts/deploy-prod.sh init-env"
-  if grep -q "CHANGE_ME" "$ENV_FILE"; then
-    grep -n "CHANGE_ME" "$ENV_FILE" >&2
-    die "Unreplaced CHANGE_ME placeholder(s) found in $ENV_FILE."
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+
+  local telegram_ok=0 twilio_ok=0
+  if [[ -n "${TELEGRAM_GATEWAY_TOKEN:-}" && "${TELEGRAM_GATEWAY_TOKEN}" != *"CHANGE_ME"* ]]; then
+    telegram_ok=1
   fi
+  if [[ -n "${TWILIO_ACCOUNT_SID:-}" && "${TWILIO_ACCOUNT_SID}" != *"CHANGE_ME"* && \
+        -n "${TWILIO_AUTH_TOKEN:-}" && "${TWILIO_AUTH_TOKEN}" != *"CHANGE_ME"* && \
+        -n "${TWILIO_VERIFY_SERVICE_SID:-}" && "${TWILIO_VERIFY_SERVICE_SID}" != *"CHANGE_ME"* ]]; then
+    twilio_ok=1
+  fi
+
+  if [[ "$telegram_ok" -eq 0 && "$twilio_ok" -eq 0 ]]; then
+    die "No OTP provider configured in $ENV_FILE! Set TELEGRAM_GATEWAY_TOKEN or ALL THREE TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_VERIFY_SERVICE_SID."
+  fi
+
+  # Check remaining CHANGE_ME placeholders (ignore inactive optional OTP provider keys if the other provider is active)
+  local unresolved_lines
+  unresolved_lines="$(grep -n "CHANGE_ME" "$ENV_FILE" || true)"
+  if [[ -n "$unresolved_lines" ]]; then
+    local filtered=""
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      if [[ "$telegram_ok" -eq 1 && "$line" =~ ^[0-9]+:(TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN|TWILIO_VERIFY_SERVICE_SID)= ]]; then
+        continue
+      fi
+      if [[ "$twilio_ok" -eq 1 && "$line" =~ ^[0-9]+:(TELEGRAM_GATEWAY_TOKEN|TELEGRAM_GATEWAY_CALLBACK_URL)= ]]; then
+        continue
+      fi
+      filtered+="$line"$'\n'
+    done <<< "$unresolved_lines"
+
+    if [[ -n "$filtered" ]]; then
+      printf '%s' "$filtered" >&2
+      die "Unreplaced CHANGE_ME placeholder(s) found in $ENV_FILE."
+    fi
+  fi
+
+  if [[ -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]]; then
+    warn "FIREBASE_SERVICE_ACCOUNT_JSON is empty: FCM push notifications and incoming-call wakeups will be disabled."
+  fi
+  if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+    warn "GEMINI_API_KEY is empty: Server-side AI assistant and contextual translation endpoints will be unavailable."
+  fi
+
   dc config --quiet
-  log "Environment & docker-compose.prod.yml validated OK."
+  log "Environment & docker-compose.prod.yml validated OK (OTP: telegram=${telegram_ok}, twilio=${twilio_ok})."
 }
 
 cmd_issue_ssl() {
@@ -177,13 +260,15 @@ cmd_issue_ssl() {
 
 cmd_test() {
   cmd_check_prereqs
-  log "Running Express Backend Jest + Security tests inside node:20-alpine container..."
-  docker run --rm -v "$REPO_DIR/backend:/app" -w /app node:20-alpine \
+  # Note: mongodb-memory-server does not run reliably on Alpine/musl and requires outbound
+  # internet access on first run to download the mongod binary inside Debian bookworm-slim.
+  log "Running Express Backend Jest + Security tests inside node:20-bookworm-slim container (requires internet for mongod binary download)..."
+  docker run --rm -v "$REPO_DIR/backend:/app" -w /app node:20-bookworm-slim \
     sh -c "npm ci && npm test"
 
-  log "Running Go WebRTC Signaling race tests inside golang:1.22-alpine container..."
-  docker run --rm -v "$REPO_DIR/backend-signaling:/app" -w /app golang:1.22-alpine \
-    sh -c "go mod tidy && go test -race -v ./..."
+  log "Running Go WebRTC Signaling race tests inside golang:1.22 container..."
+  docker run --rm -v "$REPO_DIR/backend-signaling:/app" -w /app golang:1.22 \
+    sh -c "go mod tidy && go vet ./... && go test -race -v ./..."
 
   log "All containerized backend & signaling tests PASSED."
 }
@@ -241,59 +326,77 @@ EOF
 }
 
 cmd_create_admin() {
-  local email="${1:-}"
-  local phone="${2:-}"
-  local password="${3:-}"
-  local name="${4:-System Administrator}"
+  local phone="${1:-}"
+  local name="${2:-System Administrator}"
 
-  [[ -n "$email" && -n "$phone" && "${#password}" -ge 10 ]] || \
-    die "Usage: ./scripts/deploy-prod.sh create-admin <email> <phone> <password(10+ chars)> [name]"
+  [[ -n "$phone" ]] || \
+    die "Usage: ./scripts/deploy-prod.sh create-admin <phone_e164> [name] (OTP-only authentication)"
 
   cmd_validate_env
   dc exec -T api node -e '
 const mongoose = require("mongoose");
 const User = require("./src/models/User");
+const { normalizePhoneE164 } = require("./src/utils/phoneUtils");
 (async () => {
   await mongoose.connect(process.env.MONGO_URI);
-  const [email, phone, password, name] = process.argv.slice(1);
-  const existing = await User.findOne({ $or: [{ email }, { phone }] });
+  const [rawPhone, name] = process.argv.slice(1);
+  const phoneE164 = normalizePhoneE164(rawPhone);
+  if (!phoneE164) {
+    console.error("Invalid E.164 phone number:", rawPhone);
+    process.exit(1);
+  }
+  const existing = await User.findOne({ $or: [{ phoneE164 }, { phone: phoneE164 }, { phone: rawPhone }] });
   if (existing) {
     existing.role = "ADMIN";
-    existing.password = password;
     existing.isVerified = true;
+    existing.phone = phoneE164;
+    existing.phoneE164 = phoneE164;
+    if (name) existing.name = name;
     await existing.save();
-    console.log("Promoted user to ADMIN:", existing._id.toString());
+    console.log("Promoted OTP-only user to ADMIN:", existing._id.toString(), phoneE164);
   } else {
-    const created = await User.create({ name, email, phone, password, role: "ADMIN", isVerified: true });
-    console.log("Created ADMIN:", created._id.toString());
+    const created = await User.create({
+      name: name || "System Administrator",
+      phone: phoneE164,
+      phoneE164,
+      role: "ADMIN",
+      isVerified: true,
+      phoneVerifiedAt: new Date()
+    });
+    console.log("Created OTP-only ADMIN:", created._id.toString(), phoneE164);
   }
   await mongoose.disconnect();
 })();
-' "$email" "$phone" "$password" "$name"
+' "$phone" "$name"
 }
 
 cmd_smoke() {
   require_cmd curl
+  cmd_validate_env
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
 
-  log "1/6 Checking Web Portal HTTPS (https://oozox.com)..."
+  log "1/7 Checking Web Portal HTTPS (https://oozox.com)..."
   curl -fsSI https://oozox.com >/dev/null
   log "    Web Portal HTTPS OK"
 
-  log "2/6 Checking Core API & MongoDB health (https://api.oozox.com/api/health)..."
+  log "2/7 Checking Core API & MongoDB health (https://api.oozox.com/api/health)..."
   curl -fsS https://api.oozox.com/api/health
   printf '\n'
 
-  log "3/6 Checking Signaling & Redis health (https://signaling.oozox.com/health)..."
+  log "3/7 Checking Signaling & Redis health (https://signaling.oozox.com/health)..."
   curl -fsS https://signaling.oozox.com/health
   printf '\n'
 
-  log "4/6 Verifying dev /auth/token endpoint is disabled (expects HTTP 403)..."
+  log "4/7 Verifying dev /auth/token endpoint is disabled (expects HTTP 404 or 403)..."
   local code
   code="$(curl -s -o /dev/null -w '%{http_code}' -X POST https://signaling.oozox.com/auth/token -d '{"user_id":"test"}')"
-  [[ "$code" == "403" ]] || die "Expected HTTP 403 from /auth/token in production, got HTTP $code"
-  log "    Dev /auth/token blocked (HTTP 403) OK"
+  [[ "$code" == "403" || "$code" == "404" ]] || die "Expected HTTP 403/404 from /auth/token in production, got HTTP $code"
+  log "    Dev /auth/token blocked (HTTP $code) OK"
 
-  log "5/6 Verifying MongoDB (27017) and Redis (6379) are NOT bound on public host ports..."
+  log "5/7 Verifying MongoDB (27017) and Redis (6379) are NOT bound on public host ports..."
   if command -v ss >/dev/null 2>&1; then
     if ss -tulpn | grep -E ':(27017|6379)\s' >/dev/null 2>&1; then
       die "FAIL: Database port 27017 or 6379 is exposed on the host!"
@@ -301,12 +404,18 @@ cmd_smoke() {
   fi
   log "    Database network isolation OK"
 
-  log "6/6 Verifying Redis requires authentication..."
+  log "6/7 Verifying Redis requires authentication..."
   if docker exec oozox_redis_prod redis-cli ping 2>&1 | grep -q "NOAUTH"; then
     log "    Redis NOAUTH enforcement OK"
   else
     die "FAIL: Redis responded without authentication!"
   fi
+
+  log "7/7 Verifying Coturn Prometheus port 9641 is NOT reachable from public IP (${SERVER_PUBLIC_IP})..."
+  if curl -s --max-time 3 "http://${SERVER_PUBLIC_IP}:9641/metrics" >/dev/null 2>&1; then
+    die "FAIL: Coturn Prometheus exporter port 9641 is exposed on ${SERVER_PUBLIC_IP}! Firewall TCP 9641 immediately."
+  fi
+  log "    Coturn Prometheus port 9641 blocked from public IP OK"
 
   log "All smoke checks PASSED."
 }

@@ -13,7 +13,7 @@ const ChatConversation = require('../src/models/ChatConversation');
 const ChatMessage = require('../src/models/ChatMessage');
 const CmsContent = require('../src/models/CmsContent');
 const OtpAbuseLedger = require('../src/models/OtpAbuseLedger');
-const { setCoturnMetricsFetcher } = require('../src/services/callBudgetService');
+const { setCoturnMetricsFetcher, closeExpiredActiveCalls } = require('../src/services/callBudgetService');
 const { ensureSafeUserEmailPartialIndex } = require('../src/services/migrationService');
 const { installMockOtpAdapters, resetOtpAdapters } = require('./helpers/otpTestHarness');
 
@@ -47,13 +47,14 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  process.env.INTERNAL_SIGNALING_HMAC_SECRET = 'test_signaling_hmac_secret';
+  process.env.INTERNAL_SIGNALING_HMAC_SECRET = 'test_signaling_hmac_secret_32chars_min';
   process.env.RTC_MONTHLY_BUDGET_USD = '10';
   process.env.RTC_ALERT_THRESHOLD_1_PCT = '50';
   process.env.RTC_ALERT_THRESHOLD_2_PCT = '80';
   process.env.RTC_COST_PER_MINUTE_USD = '1.0'; // High per-min rate for deterministic threshold testing
   process.env.RTC_TURN_COST_PER_GB_USD = '1.0';
   process.env.RTC_DAILY_USER_LIMIT_MINUTES = '0';
+  process.env.RTC_MAX_CALL_DURATION_SECONDS = '14400';
   setCoturnMetricsFetcher(null);
 
   await Promise.all([
@@ -303,5 +304,92 @@ describe('Calls Budget Enforcement (50/80/100), Coturn Deltas, Workspace Sync & 
       .send({ heroTitleAr: 'منصة أوزوكس الموحدة للإنتاج' });
     expect(adminPutCms.statusCode).toBe(200);
     expect(adminPutCms.body.data.content.heroTitleAr).toBe('منصة أوزوكس الموحدة للإنتاج');
+  });
+
+  it('4. Rejects un-authorized call webhook events with 404 in NODE_ENV=production', async () => {
+    const caller = await otpLogin({ phone: '+201077771111', deviceId: 'prod_u1' });
+    const callee = await otpLogin({ phone: '+201077772222', deviceId: 'prod_u2' });
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const spoofEvent = {
+        callId: 'unauth_call_prod_1',
+        eventId: 'ev_unauth_1',
+        eventType: 'ACCEPTED',
+        callerId: caller.user.id,
+        calleeId: callee.user.id,
+        callType: 'AUDIO',
+        timestamp: new Date().toISOString(),
+      };
+      const signed = signSignalingEvent(spoofEvent, process.env.INTERNAL_SIGNALING_HMAC_SECRET);
+      const res = await request(app)
+        .post('/api/calls/events')
+        .set('X-Signaling-Timestamp', signed.ts)
+        .set('X-Signaling-Signature', signed.sig)
+        .set('Content-Type', 'application/json')
+        .send(signed.raw);
+      expect(res.statusCode).toBe(404);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+  });
+
+  it('5. Caps billed duration at RTC_MAX_CALL_DURATION_SECONDS and auto-closes stuck active calls with MAX_DURATION', async () => {
+    process.env.RTC_MONTHLY_BUDGET_USD = '1000';
+    process.env.RTC_COST_PER_MINUTE_USD = '0.01';
+    process.env.RTC_MAX_CALL_DURATION_SECONDS = '600'; // 10 min cap for test
+
+    const caller = await otpLogin({ phone: '+201088881111', deviceId: 'dur_u1' });
+    const callee = await otpLogin({ phone: '+201088882222', deviceId: 'dur_u2' });
+
+    // A) Explicit ENDED webhook past cap (25m -> capped to 10m = 600s)
+    const authRes = await request(app)
+      .post('/api/calls/authorize')
+      .set('Authorization', `Bearer ${caller.token}`)
+      .send({ calleeId: callee.user.id, callType: 'AUDIO', callId: 'call_capped_1' });
+    expect(authRes.statusCode).toBe(200);
+
+    for (const ev of [
+      { callId: 'call_capped_1', eventId: 'ev_cap_acc', eventType: 'ACCEPTED', timestamp: '2026-11-01T10:00:00Z' },
+      { callId: 'call_capped_1', eventId: 'ev_cap_end', eventType: 'ENDED', timestamp: '2026-11-01T10:25:00Z' },
+    ]) {
+      const signed = signSignalingEvent(ev, process.env.INTERNAL_SIGNALING_HMAC_SECRET);
+      const r = await request(app)
+        .post('/api/calls/events')
+        .set('X-Signaling-Timestamp', signed.ts)
+        .set('X-Signaling-Signature', signed.sig)
+        .set('Content-Type', 'application/json')
+        .send(signed.raw);
+      expect(r.statusCode).toBe(200);
+    }
+    const cappedRec = await CallRecord.findOne({ callId: 'call_capped_1' });
+    expect(cappedRec.billedDurationSeconds).toBe(600);
+    expect(cappedRec.billedMinutes).toBe(10);
+    expect(cappedRec.endReason).toBe('MAX_DURATION');
+
+    // B) Stuck ACTIVE call swept by closeExpiredActiveCalls()
+    const startedAt = new Date('2026-11-01T08:00:00Z');
+    await CallRecord.create({
+      callId: 'call_stuck_1',
+      callerId: caller.user.id,
+      calleeId: callee.user.id,
+      callType: 'VIDEO',
+      status: 'ACTIVE',
+      billingMonthKey: '2026-11',
+      authorizedAt: startedAt,
+      acceptedAt: startedAt,
+    });
+
+    const sweepResult = await closeExpiredActiveCalls({
+      now: new Date('2026-11-01T09:00:00Z'), // 1h elapsed > 10m cap
+      ignoreUpdatedAt: true,
+    });
+    expect(sweepResult.closedActive).toBe(1);
+
+    const sweptRec = await CallRecord.findOne({ callId: 'call_stuck_1' });
+    expect(sweptRec.status).toBe('ENDED');
+    expect(sweptRec.endReason).toBe('MAX_DURATION');
+    expect(sweptRec.billedDurationSeconds).toBe(600);
+    expect(sweptRec.billedMinutes).toBe(10);
   });
 });

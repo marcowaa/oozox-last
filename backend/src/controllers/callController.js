@@ -14,33 +14,45 @@ const {
 } = require('../services/callBudgetService');
 const { sendDataPushToUser } = require('../services/fcmPushService');
 
+function getSignalingHmacSecret() {
+  const configured = (process.env.INTERNAL_SIGNALING_HMAC_SECRET || '').trim();
+  if (process.env.NODE_ENV === 'production') {
+    if (!configured || configured.length < 32) {
+      throw new Error('FATAL: INTERNAL_SIGNALING_HMAC_SECRET must be set (>= 32 chars) in production.');
+    }
+    return configured;
+  }
+  if (configured) return configured;
+  const jwtFallback = (process.env.JWT_SECRET || '').trim();
+  if (jwtFallback) return jwtFallback;
+  throw new Error('INTERNAL_SIGNALING_HMAC_SECRET or JWT_SECRET must be configured.');
+}
+
+function assertSignalingSecretConfigured() {
+  return getSignalingHmacSecret();
+}
+
 function signCallAuthToken({ callId, callerId, calleeId, callType, exp }) {
-  const secret =
-    process.env.INTERNAL_SIGNALING_HMAC_SECRET ||
-    process.env.JWT_SECRET ||
-    'oozox_dev_signaling_hmac_secret';
+  const secret = getSignalingHmacSecret();
   const canonical = `${callId}:${callerId}:${calleeId}:${callType}:${exp}`;
   return crypto.createHmac('sha256', secret).update(canonical).digest('hex');
 }
 
 function verifyInternalSignalingHmac(req) {
-  const secret = (process.env.INTERNAL_SIGNALING_HMAC_SECRET || '').trim();
-  const timestamp = String(req.headers['x-signaling-timestamp'] || '').trim();
-  const signature = String(req.headers['x-signaling-signature'] || '').trim();
-
-  if (!secret) {
-    // Require explicit internal secret in production; in non-prod test mode verify if header provided
-    if (process.env.NODE_ENV === 'production') {
-      return false;
-    }
-    if (!signature) return true;
-    const devSecret = process.env.JWT_SECRET || 'oozox_dev_signaling_hmac_secret';
-    const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
-    const expected = crypto.createHmac('sha256', devSecret).update(`${timestamp}.${raw}`).digest('hex');
-    return signature === expected;
+  let secret;
+  try {
+    secret = getSignalingHmacSecret();
+  } catch {
+    return false;
+  }
+  if (process.env.NODE_ENV === 'production' && secret.length < 32) {
+    return false;
   }
 
+  const timestamp = String(req.headers['x-signaling-timestamp'] || '').trim();
+  const signature = String(req.headers['x-signaling-signature'] || '').trim();
   if (!timestamp || !signature) return false;
+
   const tsNum = Number(timestamp);
   if (!Number.isFinite(tsNum) || Math.abs(Math.floor(Date.now() / 1000) - tsNum) > 300) {
     return false;
@@ -198,6 +210,9 @@ const recordCallLifecycleEvent = async (req, res, next) => {
 
     let record = await CallRecord.findOne({ callId });
     if (!record) {
+      if (process.env.NODE_ENV === 'production') {
+        return errorResponse(res, 404, 'CallRecord not found (must be pre-authorized via /api/calls/authorize)');
+      }
       if (!callerId || !calleeId) {
         return errorResponse(res, 404, 'CallRecord not found and callerId/calleeId missing');
       }
@@ -238,14 +253,17 @@ const recordCallLifecycleEvent = async (req, res, next) => {
     } else if (normalizedEvent === 'ENDED' || normalizedEvent === 'CALL_ENDED') {
       record.endedAt = evTime;
       record.status = 'ENDED';
-      record.endReason = String(endReason || 'COMPLETED').slice(0, 80);
       record.turnUsed = Boolean(turnUsed || record.turnUsed);
 
       if (record.acceptedAt) {
-        const durSec = Math.max(0, Math.round((evTime.getTime() - record.acceptedAt.getTime()) / 1000));
+        const rawDurSec = Math.max(0, Math.round((evTime.getTime() - record.acceptedAt.getTime()) / 1000));
+        const maxDurSec = cfg.maxCallDurationSeconds || 14400;
+        const capped = rawDurSec > maxDurSec;
+        const durSec = capped ? maxDurSec : rawDurSec;
         const billedMinutes = durSec > 0 ? Math.ceil(durSec / 60) : 0;
         record.billedDurationSeconds = durSec;
         record.billedMinutes = billedMinutes;
+        record.endReason = capped ? 'MAX_DURATION' : String(endReason || 'COMPLETED').slice(0, 80);
         record.estimatedRelayMb = Number(estimatedRelayMb) || 0;
         record.estimatedCostUsd = Number((billedMinutes * cfg.costPerMinuteUsd).toFixed(6));
 
@@ -256,6 +274,7 @@ const recordCallLifecycleEvent = async (req, res, next) => {
         await evaluateBudgetThresholds(ledger, cfg);
       } else {
         // Call was never accepted (hung up during ringing) -> 0 billed duration
+        record.endReason = String(endReason || 'COMPLETED').slice(0, 80);
         record.billedDurationSeconds = 0;
         record.billedMinutes = 0;
         record.estimatedCostUsd = 0;
@@ -411,4 +430,5 @@ module.exports = {
   getUserCallAvailability,
   getAdminCallBudget,
   getCallHistory,
+  assertSignalingSecretConfigured,
 };

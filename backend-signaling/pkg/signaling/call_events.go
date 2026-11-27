@@ -8,11 +8,21 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+const (
+	defaultMaxCallDurationSeconds = 14400 // 4 hours
+	callSessionTTLBuffer          = 1 * time.Hour
+	endedCallGraceTTL             = 60 * time.Second
+	callSessionRedisPrefix        = "oozox:call:session:"
 )
 
 // CallEventPayload mirrors Backend POST /api/calls/events contract.
@@ -25,6 +35,60 @@ type CallEventPayload struct {
 	CallType  string `json:"callType"`
 	Timestamp string `json:"timestamp"`
 	EndReason string `json:"endReason,omitempty"`
+}
+
+// CallSessionRecord tracks server-verified participants for an authorized active call in Redis.
+type CallSessionRecord struct {
+	CallID    string `json:"callId"`
+	CallerID  string `json:"callerId"`
+	CalleeID  string `json:"calleeId"`
+	CallType  string `json:"callType"`
+	Ended     bool   `json:"ended"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+func isProductionEnv() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production")
+}
+
+// GetMaxCallDuration returns the configured maximum call duration (default 4h).
+func GetMaxCallDuration() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("RTC_MAX_CALL_DURATION_SECONDS")); raw != "" {
+		if secs, err := strconv.Atoi(raw); err == nil && secs >= 60 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultMaxCallDurationSeconds * time.Second
+}
+
+// GetCallSessionTTL returns a Redis TTL strictly exceeding max call duration (max + 1h, default 5h)
+// so calls approaching max duration never lose their Redis authorization state.
+func GetCallSessionTTL() time.Duration {
+	return GetMaxCallDuration() + callSessionTTLBuffer
+}
+
+func resolveSignalingHMACSecret() string {
+	secret := strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
+	if isProductionEnv() {
+		return secret
+	}
+	if secret != "" {
+		return secret
+	}
+	return strings.TrimSpace(os.Getenv("JWT_SECRET"))
+}
+
+// ValidateSignalingHMACSecret verifies that INTERNAL_SIGNALING_HMAC_SECRET meets production rules.
+func ValidateSignalingHMACSecret() error {
+	secret := strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
+	if isProductionEnv() {
+		if len(secret) < 32 {
+			return fmt.Errorf("INTERNAL_SIGNALING_HMAC_SECRET must be set and at least 32 chars in production")
+		}
+	} else if resolveSignalingHMACSecret() == "" {
+		return fmt.Errorf("INTERNAL_SIGNALING_HMAC_SECRET (or JWT_SECRET in dev) must be configured")
+	}
+	return nil
 }
 
 // ComputeCallAuthSignature verifies client pre-call authorization signed by Backend /api/calls/authorize.
@@ -43,12 +107,9 @@ func VerifyCallAuthToken(callID, callerID, calleeID, callType string, exp int64,
 	if time.Now().Unix() > exp {
 		return false
 	}
-	secret := strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
-	if secret == "" {
-		secret = strings.TrimSpace(os.Getenv("JWT_SECRET"))
-	}
-	if secret == "" {
-		secret = "oozox_dev_signaling_hmac_secret"
+	secret := resolveSignalingHMACSecret()
+	if secret == "" || (isProductionEnv() && len(secret) < 32) {
+		return false
 	}
 	normalizedType := "AUDIO"
 	if strings.EqualFold(strings.TrimSpace(callType), "VIDEO") {
@@ -76,10 +137,7 @@ type CallEventReporter struct {
 // NewCallEventReporterFromEnv creates a reporter using BACKEND_INTERNAL_URL and INTERNAL_SIGNALING_HMAC_SECRET.
 func NewCallEventReporterFromEnv() *CallEventReporter {
 	backendURL := strings.TrimRight(strings.TrimSpace(os.Getenv("BACKEND_INTERNAL_URL")), "/")
-	secret := strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
-	if secret == "" {
-		secret = strings.TrimSpace(os.Getenv("JWT_SECRET"))
-	}
+	secret := resolveSignalingHMACSecret()
 	return &CallEventReporter{
 		BackendURL: backendURL,
 		HMACSecret: secret,
@@ -135,10 +193,38 @@ type IncomingSignalEnvelope struct {
 	Reason            string `json:"reason"`
 }
 
-// InspectAndReportCallSignal enforces call budget signature when required and emits lifecycle webhooks.
-// Returns false if a new call offer should be rejected back to the caller.
+func saveCallSession(ctx context.Context, rdb *redis.Client, rec CallSessionRecord, ttl time.Duration) error {
+	if rdb == nil {
+		return fmt.Errorf("redis client is nil")
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	return rdb.Set(ctx, callSessionRedisPrefix+rec.CallID, raw, ttl).Err()
+}
+
+func loadCallSession(ctx context.Context, rdb *redis.Client, callID string) (*CallSessionRecord, error) {
+	if rdb == nil {
+		return nil, fmt.Errorf("redis client is nil")
+	}
+	raw, err := rdb.Get(ctx, callSessionRedisPrefix+callID).Bytes()
+	if err != nil {
+		return nil, err
+	}
+	var rec CallSessionRecord
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
+// InspectAndReportCallSignal enforces call budget signature when required, tracks call participants in Redis,
+// verifies sender role for call lifecycle events, and emits lifecycle webhooks derived strictly from Redis.
+// Returns false if the signal must be dropped / rejected.
 func InspectAndReportCallSignal(
 	ctx context.Context,
+	rdb *redis.Client,
 	reporter *CallEventReporter,
 	hub *Hub,
 	senderUserID string,
@@ -151,16 +237,21 @@ func InspectAndReportCallSignal(
 
 	normType := strings.ToUpper(strings.TrimSpace(env.Type))
 	callID := strings.TrimSpace(env.CallID)
+	targetID := strings.TrimSpace(env.Target)
 	callKind := "AUDIO"
 	if strings.EqualFold(strings.TrimSpace(env.CallType), "VIDEO") {
 		callKind = "VIDEO"
 	}
+	sessionTTL := GetCallSessionTTL()
 
 	switch normType {
 	case "CALL_OFFER":
-		// If signature provided or strict mode enabled in production, enforce Backend 100% budget authorization
-		if env.CallAuthSignature != "" || strings.EqualFold(os.Getenv("REQUIRE_CALL_AUTH_SIGNATURE"), "true") {
-			if !VerifyCallAuthToken(callID, senderUserID, env.Target, callKind, env.CallAuthExp, env.CallAuthSignature) {
+		requireSig := isProductionEnv() ||
+			env.CallAuthSignature != "" ||
+			strings.EqualFold(os.Getenv("REQUIRE_CALL_AUTH_SIGNATURE"), "true")
+
+		if requireSig {
+			if !VerifyCallAuthToken(callID, senderUserID, targetID, callKind, env.CallAuthExp, env.CallAuthSignature) {
 				if hub != nil {
 					blockedPayload, _ := json.Marshal(map[string]interface{}{
 						"type":   "CALL_BUDGET_BLOCKED",
@@ -172,62 +263,155 @@ func InspectAndReportCallSignal(
 				return false
 			}
 		}
-		if reporter != nil && callID != "" {
+		if callID == "" || targetID == "" || targetID == senderUserID {
+			log.Printf("[Signaling] Dropping malformed CALL_OFFER from %s (callId=%q, target=%q)", senderUserID, callID, targetID)
+			return false
+		}
+		if rdb == nil {
+			if isProductionEnv() {
+				log.Printf("[Signaling] Dropping CALL_OFFER in production because Redis is unavailable")
+				return false
+			}
+		} else {
+			rec := CallSessionRecord{
+				CallID:    callID,
+				CallerID:  senderUserID,
+				CalleeID:  targetID,
+				CallType:  callKind,
+				Ended:     false,
+				CreatedAt: time.Now().Unix(),
+			}
+			if err := saveCallSession(ctx, rdb, rec, sessionTTL); err != nil {
+				log.Printf("[Signaling] Failed saving call session %s to Redis: %v", callID, err)
+				return false
+			}
+		}
+		if reporter != nil {
 			go func() {
 				_ = reporter.Report(context.Background(), CallEventPayload{
 					CallID:    callID,
 					EventID:   callID + ":RINGING",
 					EventType: "RINGING",
 					CallerID:  senderUserID,
-					CalleeID:  env.Target,
+					CalleeID:  targetID,
 					CallType:  callKind,
 				})
 			}()
 		}
+
 	case "CALL_ACCEPT", "CALL_ACCEPTED":
-		if reporter != nil && callID != "" {
+		if callID == "" || rdb == nil {
+			log.Printf("[Signaling] Dropping %s without active callId/Redis (sender=%s)", normType, senderUserID)
+			return false
+		}
+		rec, err := loadCallSession(ctx, rdb, callID)
+		if err != nil {
+			log.Printf("[Signaling] Dropping %s for unknown/expired callId %s (sender=%s): %v", normType, callID, senderUserID, err)
+			return false
+		}
+		if rec.Ended {
+			log.Printf("[Signaling] Dropping %s for already-ended callId %s (sender=%s)", normType, callID, senderUserID)
+			return false
+		}
+		if senderUserID != rec.CalleeID {
+			log.Printf("[Signaling] SECURITY: Rejecting spoofed %s for call %s from %s (expected callee %s)", normType, callID, senderUserID, rec.CalleeID)
+			return false
+		}
+		// Refresh TTL on active acceptance so long calls stay valid beyond max duration
+		_ = rdb.Expire(ctx, callSessionRedisPrefix+callID, sessionTTL).Err()
+
+		if reporter != nil {
+			caller, callee, cType := rec.CallerID, rec.CalleeID, rec.CallType
 			go func() {
 				_ = reporter.Report(context.Background(), CallEventPayload{
 					CallID:    callID,
 					EventID:   callID + ":ACCEPTED",
 					EventType: "ACCEPTED",
-					CallerID:  env.Target,
-					CalleeID:  senderUserID,
-					CallType:  callKind,
+					CallerID:  caller,
+					CalleeID:  callee,
+					CallType:  cType,
 				})
 			}()
 		}
-	case "CALL_END", "CALL_ENDED":
-		if reporter != nil && callID != "" {
-			go func() {
-				_ = reporter.Report(context.Background(), CallEventPayload{
-					CallID:    callID,
-					EventID:   callID + ":ENDED",
-					EventType: "ENDED",
-					CallerID:  senderUserID,
-					CalleeID:  env.Target,
-					CallType:  callKind,
-					EndReason: env.Reason,
-				})
-			}()
+
+	case "CALL_END", "CALL_ENDED", "CALL_MISSED":
+		if callID == "" || rdb == nil {
+			log.Printf("[Signaling] Dropping %s without active callId/Redis (sender=%s)", normType, senderUserID)
+			return false
 		}
-	case "CALL_REJECT", "CALL_MISSED":
-		if reporter != nil && callID != "" {
-			evName := "REJECTED"
-			if normType == "CALL_MISSED" {
-				evName = "MISSED"
-			}
+		rec, err := loadCallSession(ctx, rdb, callID)
+		if err != nil {
+			log.Printf("[Signaling] Dropping %s for unknown/expired callId %s (sender=%s): %v", normType, callID, senderUserID, err)
+			return false
+		}
+		if senderUserID != rec.CallerID && senderUserID != rec.CalleeID {
+			log.Printf("[Signaling] SECURITY: Rejecting spoofed %s for call %s from non-participant %s", normType, callID, senderUserID)
+			return false
+		}
+		evName := "ENDED"
+		if normType == "CALL_MISSED" {
+			evName = "MISSED"
+		}
+		rec.Ended = true
+		_ = saveCallSession(ctx, rdb, *rec, endedCallGraceTTL)
+
+		if reporter != nil {
+			caller, callee, cType := rec.CallerID, rec.CalleeID, rec.CallType
+			reason := env.Reason
 			go func() {
 				_ = reporter.Report(context.Background(), CallEventPayload{
 					CallID:    callID,
 					EventID:   callID + ":" + evName,
 					EventType: evName,
-					CallerID:  env.Target,
-					CalleeID:  senderUserID,
-					CallType:  callKind,
-					EndReason: env.Reason,
+					CallerID:  caller,
+					CalleeID:  callee,
+					CallType:  cType,
+					EndReason: reason,
 				})
 			}()
+		}
+
+	case "CALL_REJECT":
+		if callID == "" || rdb == nil {
+			log.Printf("[Signaling] Dropping CALL_REJECT without active callId/Redis (sender=%s)", senderUserID)
+			return false
+		}
+		rec, err := loadCallSession(ctx, rdb, callID)
+		if err != nil {
+			log.Printf("[Signaling] Dropping CALL_REJECT for unknown/expired callId %s (sender=%s): %v", callID, senderUserID, err)
+			return false
+		}
+		if senderUserID != rec.CalleeID {
+			log.Printf("[Signaling] SECURITY: Rejecting spoofed CALL_REJECT for call %s from %s (expected callee %s)", callID, senderUserID, rec.CalleeID)
+			return false
+		}
+		rec.Ended = true
+		_ = saveCallSession(ctx, rdb, *rec, endedCallGraceTTL)
+
+		if reporter != nil {
+			caller, callee, cType := rec.CallerID, rec.CalleeID, rec.CallType
+			reason := env.Reason
+			go func() {
+				_ = reporter.Report(context.Background(), CallEventPayload{
+					CallID:    callID,
+					EventID:   callID + ":REJECTED",
+					EventType: "REJECTED",
+					CallerID:  caller,
+					CalleeID:  callee,
+					CallType:  cType,
+					EndReason: reason,
+				})
+			}()
+		}
+
+	case "CALL_ANSWER", "ICE_CANDIDATE", "CALL_HEARTBEAT", "HEARTBEAT":
+		// Refresh Redis call session TTL on legitimate ongoing call traffic / heartbeats
+		if callID != "" && rdb != nil {
+			if rec, err := loadCallSession(ctx, rdb, callID); err == nil && !rec.Ended {
+				if senderUserID == rec.CallerID || senderUserID == rec.CalleeID {
+					_ = rdb.Expire(ctx, callSessionRedisPrefix+callID, sessionTTL).Err()
+				}
+			}
 		}
 	}
 

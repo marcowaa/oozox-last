@@ -48,6 +48,17 @@ Thumbs.db
 .cache/
 .local/
 
+# Secrets, Environment & Signing Credentials
+.env
+.env.*
+!.env*.example
+*.keystore
+*.jks
+google-services.json
+app/google-services.json
+google-play-key.json
+local.properties
+
 # Android / Gradle
 .gradle/
 build/

@@ -1,4 +1,5 @@
 const CallBudgetLedger = require('../models/CallBudgetLedger');
+const CallRecord = require('../models/CallRecord');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { sendDataPushToUser } = require('./fcmPushService');
@@ -11,6 +12,7 @@ function getRtcConfig() {
     costPerMinuteUsd: Math.max(0, Number(process.env.RTC_COST_PER_MINUTE_USD) || 0.004),
     turnCostPerGbUsd: Math.max(0, Number(process.env.RTC_TURN_COST_PER_GB_USD) || 0.09),
     dailyUserLimitMinutes: Math.max(0, Number(process.env.RTC_DAILY_USER_LIMIT_MINUTES) || 0),
+    maxCallDurationSeconds: Math.max(60, Number(process.env.RTC_MAX_CALL_DURATION_SECONDS) || 14400),
     coturnMetricsUrl: (process.env.COTURN_METRICS_URL || '').trim(),
   };
 }
@@ -214,6 +216,84 @@ async function checkCanAuthorizeNewCall(user) {
   };
 }
 
+async function closeExpiredActiveCalls(options = {}) {
+  const cfg = getRtcConfig();
+  const maxDurSec = Math.max(60, Number(options.maxDurationSeconds) || cfg.maxCallDurationSeconds);
+  const nowDate = options.now instanceof Date ? options.now : new Date();
+  const cutoff = new Date(nowDate.getTime() - maxDurSec * 1000);
+
+  const activeFilter = {
+    status: { $in: ['ACCEPTED', 'ACTIVE'] },
+    acceptedAt: { $ne: null, $lte: cutoff },
+  };
+  if (!options.ignoreUpdatedAt) {
+    activeFilter.updatedAt = { $lte: cutoff };
+  }
+
+  const expiredActive = await CallRecord.find(activeFilter).limit(100);
+  let closedCount = 0;
+
+  for (const record of expiredActive) {
+    const endTime = new Date(record.acceptedAt.getTime() + maxDurSec * 1000);
+    const billedMinutes = Math.ceil(maxDurSec / 60);
+    record.status = 'ENDED';
+    record.endedAt = endTime;
+    record.endReason = 'MAX_DURATION';
+    record.billedDurationSeconds = maxDurSec;
+    record.billedMinutes = billedMinutes;
+    record.estimatedCostUsd = Number((billedMinutes * cfg.costPerMinuteUsd).toFixed(6));
+    if (!record.processedEventIds.includes(`${record.callId}:MAX_DURATION`)) {
+      record.processedEventIds.push(`${record.callId}:MAX_DURATION`);
+    }
+    await record.save();
+
+    const ledger = await getOrCreateMonthLedger(record.billingMonthKey);
+    ledger.totalBilledMinutes += billedMinutes;
+    recomputeLedgerCost(ledger, cfg);
+    await ledger.save();
+    await evaluateBudgetThresholds(ledger, cfg);
+
+    await Promise.all([
+      sendDataPushToUser({
+        userId: record.callerId,
+        highPriority: true,
+        data: { type: 'call_ended', callId: record.callId, reason: 'MAX_DURATION' },
+      }),
+      sendDataPushToUser({
+        userId: record.calleeId,
+        highPriority: true,
+        data: { type: 'call_ended', callId: record.callId, reason: 'MAX_DURATION' },
+      }),
+    ]).catch(() => {});
+
+    closedCount += 1;
+  }
+
+  // Also sweep abandoned AUTHORIZED/RINGING records older than maxDurSec (0 billed minutes)
+  const stalePreFilter = {
+    status: { $in: ['AUTHORIZED', 'RINGING'] },
+    authorizedAt: { $lte: cutoff },
+  };
+  if (!options.ignoreUpdatedAt) {
+    stalePreFilter.updatedAt = { $lte: cutoff };
+  }
+  const staleRes = await CallRecord.updateMany(stalePreFilter, {
+    $set: {
+      status: 'MISSED',
+      endedAt: nowDate,
+      endReason: 'MAX_DURATION',
+      billedDurationSeconds: 0,
+      billedMinutes: 0,
+      estimatedCostUsd: 0,
+    },
+  });
+
+  return {
+    closedActive: closedCount,
+    closedPreAnswer: staleRes?.modifiedCount || 0,
+  };
+}
+
 module.exports = {
   getRtcConfig,
   getMonthKey,
@@ -224,4 +304,5 @@ module.exports = {
   recomputeLedgerCost,
   evaluateBudgetThresholds,
   checkCanAuthorizeNewCall,
+  closeExpiredActiveCalls,
 };

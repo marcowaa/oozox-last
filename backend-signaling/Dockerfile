@@ -1,13 +1,11 @@
 # Multi-stage production Dockerfile for OOZOX WebRTC Signaling Server
-FROM golang:1.22-alpine AS builder
+FROM golang:1.22 AS builder
 
 WORKDIR /src
 
-RUN apk add --no-cache ca-certificates git
-
 COPY go.mod ./
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/signaling ./cmd/server
+RUN go mod tidy && go mod download && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/signaling ./cmd/server
 
 FROM alpine:3.20
 

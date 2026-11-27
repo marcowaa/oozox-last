@@ -391,7 +391,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 		s.hub.RefreshUserHeartbeat(context.Background(), client)
 
-		if !signaling.InspectAndReportCallSignal(context.Background(), s.callReporter, s.hub, userID, rawMsg) {
+		if !signaling.InspectAndReportCallSignal(context.Background(), s.rdb, s.callReporter, s.hub, userID, rawMsg) {
 			continue
 		}
 
@@ -481,6 +481,10 @@ func main() {
 	}
 	if len(coturnSecret) < 16 {
 		log.Fatal("FATAL: COTURN_SECRET environment variable is too short (must be >= 16 chars). Server will not start without a secure secret.")
+	}
+
+	if err := signaling.ValidateSignalingHMACSecret(); err != nil {
+		log.Fatalf("FATAL: %v", err)
 	}
 
 	rdb := redis.NewClient(&redis.Options{
