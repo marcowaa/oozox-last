@@ -8,7 +8,11 @@ const { verifyToken, generatePreAuthToken } = require('../utils/jwt');
 const { successResponse, errorResponse } = require('../utils/response');
 const { normalizePhoneE164, maskPhone } = require('../utils/phoneUtils');
 const { normalizeLang } = require('../i18n');
-const { requestOtpChallenge, verifyOtpChallenge } = require('../services/otp/otpOrchestrator');
+const {
+  requestOtpChallenge,
+  verifyOtpChallenge,
+  cancelOtpChallenge,
+} = require('../services/otp/otpOrchestrator');
 const { verifyWebhookSignature } = require('../services/otp/telegramGatewayAdapter');
 const {
   issueTrustedDevice,
@@ -439,6 +443,32 @@ const verifyOtp = async (req, res, next) => {
   }
 };
 
+// @desc    Cancel an active PENDING OTP challenge (invoked when user goes back to pick another channel/phone)
+// @route   POST /api/auth/otp/cancel
+// @access  Public (with challengeId) or Pre-Auth / Private
+const cancelOtp = async (req, res, next) => {
+  try {
+    const { challengeId, phone } = req.body;
+    const decodedPre = resolvePreAuthUserFromReq(req);
+    const normalizedPhone = phone ? normalizePhoneE164(phone) : undefined;
+    const result = await cancelOtpChallenge({
+      challengeId,
+      phoneE164: normalizedPhone || undefined,
+      expectedUserId: decodedPre?.id || null,
+    });
+    return successResponse(res, 200, req.t('api.otp_cancelled') || 'Verification code cancelled', result);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        code: err.code || 'OTP_CANCEL_ERROR',
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+};
+
 // @desc    Biometric / PIN login on a server-verified Trusted Device (30-day window)
 // @route   POST /api/auth/trusted-login
 // @access  Public (requires valid server-issued deviceTrustToken)
@@ -783,6 +813,7 @@ module.exports = {
   resolveClientMeta,
   requestOtp,
   verifyOtp,
+  cancelOtp,
   trustedDeviceLogin,
   refreshSession,
   logoutSession,

@@ -8,18 +8,16 @@ import {
   getStoredWebTrust,
   saveWebAuthSession,
 } from './lib/webAuthClient';
-import { WebOtpVerificationCard, formatPhoneToE164 } from './components/WebAuthPortal';
+import {
+  WebOtpVerificationCard,
+  WebChannelSelectorGrid,
+  formatPhoneToE164,
+} from './components/WebAuthPortal';
 
 interface AdminLoginProps {
   onLoginSuccess: (admin: AdminUser) => void;
   onNavigateHome: () => void;
 }
-
-const ADMIN_CHANNELS: Array<{ id: WebOtpChannel; label: string }> = [
-  { id: 'TELEGRAM', label: 'تليجرام' },
-  { id: 'WHATSAPP', label: 'واتساب' },
-  { id: 'SMS', label: 'SMS' },
-];
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNavigateHome }) => {
   const [countryCode, setCountryCode] = useState('+20');
@@ -185,25 +183,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onNaviga
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-1.5 tracking-wide">
+                  <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2 tracking-wide">
                     قناة إرسال رمز التحقق الإداري
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {ADMIN_CHANNELS.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setChannel(c.id)}
-                        className={`py-2 rounded-xl border text-xs font-bold transition-all ${
-                          channel === c.id
-                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                            : 'bg-slate-950 border-slate-800 text-slate-400'
-                        }`}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
+                  <WebChannelSelectorGrid selected={channel} onSelect={setChannel} />
                 </div>
 
                 <div>

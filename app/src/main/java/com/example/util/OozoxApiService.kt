@@ -96,6 +96,20 @@ data class ApiOtpVerifyBody(
 )
 
 @Serializable
+data class ApiOtpCancelBody(
+    val challengeId: String,
+    val phone: String? = null,
+    val preAuthToken: String? = null
+)
+
+@Serializable
+data class ApiOtpCancelData(
+    val cancelled: Boolean = false,
+    val challengeId: String = "",
+    val status: String = ""
+)
+
+@Serializable
 data class ApiTrustedLoginBody(
     val phone: String? = null,
     val emailOrPhone: String? = null,
@@ -706,6 +720,9 @@ interface OozoxApiService {
 
     @POST("auth/otp/verify")
     suspend fun postOtpVerify(@Body request: ApiOtpVerifyBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @POST("auth/otp/cancel")
+    suspend fun postOtpCancel(@Body request: ApiOtpCancelBody): Response<ApiEnvelope<ApiOtpCancelData>>
 
     @POST("auth/session/refresh")
     suspend fun postRefreshSession(@Body request: ApiRefreshSessionBody): Response<ApiEnvelope<ApiAuthData>>

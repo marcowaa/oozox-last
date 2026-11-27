@@ -1679,6 +1679,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return outcome
     }
 
+    suspend fun cancelServerOtp(
+        challengeId: String,
+        phone: String? = null,
+        preAuthToken: String? = null
+    ): Boolean {
+        return com.example.data.repository.AuthRepository.cancelOtp(
+            context = getApplication(),
+            challengeId = challengeId,
+            phone = phone,
+            preAuthToken = preAuthToken
+        )
+    }
+
     suspend fun trustedBiometricOnlineLogin(phone: String): com.example.data.repository.AuthOutcome {
         val outcome = com.example.data.repository.AuthRepository.trustedDeviceLogin(
             context = getApplication(),

@@ -9,6 +9,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -18,8 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.LayoutDirection
+import kotlin.math.abs
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -270,10 +274,12 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         onTrustedOnlineLogin = { phone -> viewModel.trustedBiometricOnlineLogin(phone) },
                         onOfflineCacheUnlock = { phone -> viewModel.unlockOfflineCacheOnly(phone) },
                         onRequestOtp = { purpose, channel, phone, preAuth -> viewModel.requestServerOtp(purpose, channel, phone, null, preAuth) },
+                        onCancelOtp = { challengeId, phone, preAuth -> viewModel.cancelServerOtp(challengeId, phone, preAuth) },
                         onVerifyOtp = { challengeId, code, phone, preAuth, trust -> viewModel.verifyServerOtp(challengeId, code, phone, preAuth, trust) },
                         onAuthenticatedComplete = { decision ->
                             when {
-                                decision.hasOtherActiveDevice -> {
+                                // Show "New Device Detected" gateway ONLY when an existing account logs in on a new/other device
+                                decision.isExistingUser && decision.hasOtherActiveDevice -> {
                                     navController.navigate(
                                         Screen.PostOtpTransferGateway(
                                             isExistingUser = decision.isExistingUser,
@@ -893,7 +899,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                         state = pagerState,
                                         modifier = Modifier.fillMaxSize(),
                                         key = { BottomTab.entries[it].name },
-                                        userScrollEnabled = true
+                                        userScrollEnabled = !drawerState.isOpen && !drawerState.isAnimationRunning && drawerState.targetValue == DrawerValue.Closed
                                     ) { page ->
                                     when (BottomTab.entries[page]) {
                                         BottomTab.CHATS -> ChatListScreen(
@@ -1156,7 +1162,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                     }
                                 }
 
-                                // Edge-only Side Drawer Swipe Zone (28dp outer edge) — leaves center body 100% free for HorizontalPager section swipes
+                                // Edge-only Side Drawer Swipe Zone (28dp outer edge) — consumes inward horizontal drags on Initial pass so HorizontalPager cannot fire simultaneously
                                 if (!isDesktop && !isFocusMode && !drawerState.isOpen) {
                                     val isRtlLayout = LocalLayoutDirection.current == LayoutDirection.Rtl
                                     Box(
@@ -1165,24 +1171,42 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             .width(28.dp)
                                             .fillMaxHeight()
                                             .pointerInput(isRtlLayout) {
-                                                var totalEdgeDrag = 0f
-                                                var opened = false
-                                                detectHorizontalDragGestures(
-                                                    onDragStart = {
-                                                        totalEdgeDrag = 0f
-                                                        opened = false
-                                                    },
-                                                    onHorizontalDrag = { _, dragAmount ->
-                                                        if (!opened) {
-                                                            totalEdgeDrag += dragAmount
-                                                            val inwardDelta = if (isRtlLayout) -totalEdgeDrag else totalEdgeDrag
-                                                            if (inwardDelta > 22f) {
+                                                val touchSlop = viewConfiguration.touchSlop
+                                                awaitEachGesture {
+                                                    val down = awaitFirstDown(
+                                                        requireUnconsumed = false,
+                                                        pass = PointerEventPass.Initial
+                                                    )
+                                                    val pointerId = down.id
+                                                    var totalDx = 0f
+                                                    var totalDy = 0f
+                                                    var opened = false
+                                                    var abortedVertical = false
+
+                                                    while (!opened && !abortedVertical) {
+                                                        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                                                        val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                                        if (!change.pressed) break
+
+                                                        val stepDx = change.position.x - change.previousPosition.x
+                                                        val stepDy = change.position.y - change.previousPosition.y
+                                                        totalDx += stepDx
+                                                        totalDy += stepDy
+
+                                                        val inwardDelta = if (isRtlLayout) -totalDx else totalDx
+                                                        if (abs(totalDy) > touchSlop && abs(inwardDelta) < touchSlop * 0.5f) {
+                                                            // Vertical scrolling near edge — yield immediately
+                                                            abortedVertical = true
+                                                        } else if (inwardDelta > touchSlop * 0.45f) {
+                                                            // Consume inward drag early so HorizontalPager sees zero horizontal movement
+                                                            change.consume()
+                                                            if (inwardDelta > touchSlop) {
                                                                 opened = true
                                                                 coroutineScope.launch { drawerState.open() }
                                                             }
                                                         }
                                                     }
-                                                )
+                                                }
                                             }
                                             .testTag("drawer_edge_swipe_zone")
                                     )

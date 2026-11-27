@@ -4,8 +4,11 @@ import android.content.Context
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -70,6 +74,7 @@ fun UserAppPortal(
     onOfflineCacheUnlock: suspend (phone: String) -> Boolean,
     onRequestOtp: suspend (purpose: String, channel: String, phone: String?, preAuthToken: String?) -> OtpRequestOutcome,
     onVerifyOtp: suspend (challengeId: String, code: String, phone: String?, preAuthToken: String?, trustDevice: Boolean) -> OtpVerifyOutcome,
+    onCancelOtp: suspend (challengeId: String, phone: String?, preAuthToken: String?) -> Boolean = { _, _, _ -> true },
     onAuthenticatedComplete: (PostOtpGatewayDecision) -> Unit,
     onSwitchProfile: ((HiddenProfileEntity) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -613,6 +618,15 @@ fun UserAppPortal(
                                 }
                             },
                             onBackClick = {
+                                if (otpChallengeId.isNotBlank()) {
+                                    onCancelOtp(
+                                        otpChallengeId,
+                                        if (otpPreAuthToken == null) fullPhoneTarget else null,
+                                        otpPreAuthToken
+                                    )
+                                }
+                                otpChallengeId = ""
+                                otpFallbackNotice = null
                                 authStep = 0
                                 specificErrorMessage = null
                                 networkFailureError = null
@@ -673,37 +687,7 @@ fun UserAppPortal(
                         }
 
                     } else {
-                        // --- STEP 1: PHONE OTP / PASSWORD LOGIN / REGISTER ---
-                        if (repeatUser != null && !isTrustedDevice) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PhonelinkLock,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = tr("portal.new_device_notice"),
-                                        fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        lineHeight = 16.sp
-                                    )
-                                }
-                            }
-                        }
-
+                        // --- STEP 1: PHONE OTP LOGIN / AUTO-ONBOARDING ---
                         Text(
                             text = tr("portal.login_title"),
                             fontSize = 18.sp,
@@ -882,34 +866,96 @@ fun UserAppPortal(
                         ) {
                             OtpDeliveryChannel.entries.forEach { channel ->
                                 val isSelected = selectedDeliveryChannel == channel
+                                val interactionSource = remember { MutableInteractionSource() }
+                                val isPressed by interactionSource.collectIsPressedAsState()
+                                val cardScale by animateFloatAsState(
+                                    targetValue = when {
+                                        isPressed -> 0.94f
+                                        isSelected -> 1.02f
+                                        else -> 1f
+                                    },
+                                    animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium),
+                                    label = "channel_scale_${channel.name}"
+                                )
+                                val borderColor by animateColorAsState(
+                                    targetValue = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    animationSpec = tween(180),
+                                    label = "channel_border_${channel.name}"
+                                )
+                                val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
                                 Surface(
                                     onClick = { selectedDeliveryChannel = channel },
-                                    color = if (isSelected) channel.brandColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
-                                    shape = RoundedCornerShape(14.dp),
+                                    interactionSource = interactionSource,
+                                    color = Color.Transparent,
+                                    shape = RoundedCornerShape(16.dp),
+                                    shadowElevation = if (isSelected) 6.dp else 1.dp,
                                     border = BorderStroke(
-                                        if (isSelected) 2.dp else 1.dp,
-                                        if (isSelected) channel.brandColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                        width = if (isSelected) 1.8.dp else 1.dp,
+                                        color = borderColor
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(72.dp)
+                                        .height(92.dp)
+                                        .scale(cardScale)
                                         .testTag("channel_button_${channel.name.lowercase()}")
                                 ) {
-                                    Column(
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(vertical = 8.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
+                                            .background(
+                                                brush = Brush.verticalGradient(
+                                                    colors = if (isSelected) {
+                                                        listOf(
+                                                            channel.brandColor.copy(alpha = if (isDarkSurface) 0.22f else 0.14f),
+                                                            channel.brandColor.copy(alpha = if (isDarkSurface) 0.08f else 0.05f)
+                                                        )
+                                                    } else {
+                                                        listOf(
+                                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDarkSurface) 0.42f else 0.35f),
+                                                            MaterialTheme.colorScheme.surface
+                                                        )
+                                                    }
+                                                )
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 8.dp)
                                     ) {
-                                        ChannelBrandIcon(channel = channel, size = 30.dp)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = channel.localizedTitle(currentLang),
-                                            fontSize = 11.5.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.onSurface
-                                        )
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = channel.brandColor,
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .align(Alignment.TopEnd)
+                                            )
+                                        }
+                                        Column(
+                                            modifier = Modifier.fillMaxSize(),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(42.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        channel.brandColor.copy(alpha = if (isSelected) 0.20f else 0.10f)
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                ChannelBrandIcon(channel = channel, size = 34.dp)
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = channel.localizedTitle(currentLang),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                color = if (isSelected) channel.brandColor else MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
                             }

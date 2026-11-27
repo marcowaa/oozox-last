@@ -331,4 +331,52 @@ describe('Phone-Only OTP Auth, Provider Fallback, Email Preservation, Admin Gate
     const secondRun = await migrateLegacyUsers({ markExistingAsVerified: true });
     expect(secondRun.updatedCount).toBe(0);
   });
+
+  it('8. Cancels active OTP challenge on Back step, rejects verify with OTP_CANCELLED, and allows switching channel cleanly', async () => {
+    const firstReq = await request(app).post('/api/auth/otp/request').send({
+      phone: '+201077778888',
+      channel: 'TELEGRAM',
+      deviceId: 'dev_cancel_1',
+    });
+    expect(firstReq.statusCode).toBe(200);
+    const challengeId1 = firstReq.body.data.challengeId;
+
+    // Simulate 3s elapsed so burst guard passes while still well inside 15s-60s cooldown window
+    await OtpAbuseLedger.updateMany({}, { $set: { lastSentAt: new Date(Date.now() - 3500) } });
+
+    const cancelRes = await request(app).post('/api/auth/otp/cancel').send({
+      challengeId: challengeId1,
+      phone: '+201077778888',
+    });
+    expect(cancelRes.statusCode).toBe(200);
+    expect(cancelRes.body.data.cancelled).toBe(true);
+    expect(cancelRes.body.data.status).toBe('CANCELLED');
+    expect(otpState.revoked.length).toBe(1);
+
+    // Attempting to use the cancelled OTP code MUST fail with OTP_CANCELLED
+    const verifyCancelled = await request(app).post('/api/auth/otp/verify').send({
+      challengeId: challengeId1,
+      code: '246810',
+      phone: '+201077778888',
+    });
+    expect(verifyCancelled.statusCode).toBe(400);
+    expect(verifyCancelled.body.code).toBe('OTP_CANCELLED');
+
+    // User can now go back and select another channel (WHATSAPP) immediately after cancelling
+    const secondReq = await request(app).post('/api/auth/otp/request').send({
+      phone: '+201077778888',
+      channel: 'WHATSAPP',
+      deviceId: 'dev_cancel_1',
+    });
+    expect(secondReq.statusCode).toBe(200);
+    expect(secondReq.body.data.activeChannel).toBe('WHATSAPP');
+
+    const okVerify = await request(app).post('/api/auth/otp/verify').send({
+      challengeId: secondReq.body.data.challengeId,
+      code: '246810',
+      deviceId: 'dev_cancel_1',
+    });
+    expect(okVerify.statusCode).toBe(200);
+    expect(okVerify.body.data.token).toBeDefined();
+  });
 });

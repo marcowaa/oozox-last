@@ -67,7 +67,7 @@ const otpChallengeSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'VERIFIED', 'FAILED', 'EXPIRED', 'LOCKED', 'SUPERSEDED'],
+      enum: ['PENDING', 'VERIFIED', 'FAILED', 'EXPIRED', 'LOCKED', 'SUPERSEDED', 'CANCELLED'],
       default: 'PENDING',
       index: true,
     },

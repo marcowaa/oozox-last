@@ -10,6 +10,7 @@ const {
 const {
   requestOtp,
   verifyOtp,
+  cancelOtp,
   trustedDeviceLogin,
   refreshSession,
   logoutSession,
@@ -53,6 +54,7 @@ const otpIpLimiter = rateLimit({
 // Unified Phone-Only OTP Authentication Routes
 router.post('/otp/request', otpIpLimiter, validate(schemas.otpRequest), requestOtp);
 router.post('/otp/verify', loginLimiter, validate(schemas.otpVerify), verifyOtp);
+router.post('/otp/cancel', otpIpLimiter, validate(schemas.otpCancel), cancelOtp);
 router.post('/trusted-login', loginLimiter, validate(schemas.trustedLogin), trustedDeviceLogin);
 router.post('/session/refresh', validate(schemas.refreshSession), refreshSession);
 router.post('/webhooks/telegram-gateway', telegramGatewayWebhook);

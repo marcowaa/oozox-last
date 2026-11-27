@@ -214,7 +214,7 @@ fun ProjectDetailScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = true,
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             ProjectDetailSideDrawerContent(
                 project = project,

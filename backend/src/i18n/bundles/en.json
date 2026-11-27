@@ -266,6 +266,7 @@
   "api.device_trust_otp_required": "Device trust expired or revoked; server OTP verification is required",
   "api.devices_fetched": "Trusted devices loaded",
   "api.login_otp_required": "Server OTP verification is required to complete login",
+  "api.otp_cancelled": "Previous verification code invalidated successfully",
   "api.otp_invalid_phone": "Invalid international E.164 phone number",
   "api.otp_invalid_purpose": "OTP challenge purpose mismatch",
   "api.otp_phone_updated": "Phone number verified and updated successfully",

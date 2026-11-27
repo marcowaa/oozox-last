@@ -369,6 +369,25 @@ export async function apiVerifyOtp(params: {
   });
 }
 
+export async function apiCancelOtp(params: {
+  challengeId: string;
+  phone?: string;
+  preAuthToken?: string;
+}) {
+  if (!params.challengeId) {
+    return { ok: false, status: 400, message: 'Missing challengeId' } as ApiResult<{ cancelled: boolean }>;
+  }
+  return callApi<{ cancelled: boolean; challengeId?: string; status?: string }>(
+    `${getApiBase()}/api/auth/otp/cancel`,
+    'POST',
+    {
+      challengeId: params.challengeId,
+      phone: params.phone?.trim(),
+      preAuthToken: params.preAuthToken,
+    }
+  );
+}
+
 export async function apiTrustedDeviceLogin(portalScope: WebPortalScope = 'USER') {
   const trust = getStoredWebTrust();
   if (!trust) {

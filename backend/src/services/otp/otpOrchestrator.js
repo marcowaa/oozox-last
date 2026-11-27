@@ -125,12 +125,25 @@ async function requestOtpChallenge({
   if (phoneLedger.lastSentAt) {
     const elapsedSec = (now.getTime() - phoneLedger.lastSentAt.getTime()) / 1000;
     if (elapsedSec < policy.resendCooldownSeconds) {
-      const waitSec = Math.ceil(policy.resendCooldownSeconds - elapsedSec);
-      const err = new Error(`Please wait ${waitSec}s before requesting another code`);
-      err.statusCode = 429;
-      err.code = 'OTP_COOLDOWN';
-      err.retryAfterSeconds = waitSec;
-      throw err;
+      const normalizedPref = String(preferredChannel || 'AUTO').toUpperCase();
+      const latestChallenge = await OtpChallenge.findOne({ phoneE164, purpose })
+        .sort({ createdAt: -1 })
+        .select('status activeChannel');
+      const isChannelSwitchAfterCancel =
+        latestChallenge &&
+        latestChallenge.status === 'CANCELLED' &&
+        normalizedPref !== 'AUTO' &&
+        normalizedPref !== latestChallenge.activeChannel &&
+        elapsedSec >= 2;
+
+      if (!isChannelSwitchAfterCancel) {
+        const waitSec = Math.ceil(policy.resendCooldownSeconds - elapsedSec);
+        const err = new Error(`Please wait ${waitSec}s before requesting another code`);
+        err.statusCode = 429;
+        err.code = 'OTP_COOLDOWN';
+        err.retryAfterSeconds = waitSec;
+        throw err;
+      }
     }
   }
 
@@ -279,6 +292,13 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
     throw err;
   }
 
+  if (challenge.status === 'CANCELLED') {
+    const err = new Error('This verification code was cancelled. Request a new code');
+    err.statusCode = 400;
+    err.code = 'OTP_CANCELLED';
+    throw err;
+  }
+
   if (challenge.status === 'SUPERSEDED') {
     const err = new Error('This verification code was superseded by a newer request');
     err.statusCode = 400;
@@ -375,8 +395,46 @@ async function verifyOtpChallenge({ challengeId, code, phoneE164 }) {
   return challenge;
 }
 
+async function cancelOtpChallenge({ challengeId, phoneE164, expectedUserId = null }) {
+  if (!challengeId && !phoneE164) {
+    return { cancelled: false, status: 'NOT_FOUND' };
+  }
+  const query = challengeId ? { challengeId } : { phoneE164, status: 'PENDING' };
+  const challenge = await OtpChallenge.findOne(query).sort({ createdAt: -1 });
+  if (!challenge) {
+    return { cancelled: false, status: 'NOT_FOUND' };
+  }
+  if (phoneE164 && challenge.phoneE164 !== phoneE164) {
+    const err = new Error('Phone number does not match verification challenge');
+    err.statusCode = 400;
+    err.code = 'OTP_PHONE_MISMATCH';
+    throw err;
+  }
+  if (expectedUserId && challenge.userId && String(challenge.userId) !== String(expectedUserId)) {
+    const err = new Error('Challenge does not belong to authenticated user');
+    err.statusCode = 403;
+    err.code = 'OTP_FORBIDDEN';
+    throw err;
+  }
+  if (challenge.status === 'PENDING') {
+    challenge.status = 'CANCELLED';
+    challenge.deliveryStatus = 'CANCELLED_BY_USER';
+    await challenge.save();
+    const adapters = getOtpAdapters();
+    if (challenge.providerType === 'TELEGRAM_GATEWAY' && adapters?.TELEGRAM?.revokeChallenge) {
+      await adapters.TELEGRAM.revokeChallenge({ challenge }).catch(() => {});
+    }
+    return { cancelled: true, challengeId: challenge.challengeId, status: 'CANCELLED' };
+  }
+  if (challenge.status === 'CANCELLED' || challenge.status === 'SUPERSEDED') {
+    return { cancelled: true, challengeId: challenge.challengeId, status: challenge.status };
+  }
+  return { cancelled: false, challengeId: challenge.challengeId, status: challenge.status };
+}
+
 module.exports = {
   getOtpPolicyConfig,
   requestOtpChallenge,
   verifyOtpChallenge,
+  cancelOtpChallenge,
 };

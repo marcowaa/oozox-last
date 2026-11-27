@@ -7,12 +7,15 @@ import {
   X,
   Laptop,
   ArrowRight,
+  Lock,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   WebOtpChannel,
   WebPortalScope,
   WebTrustedDeviceInfo,
   WebUserDto,
+  apiCancelOtp,
   apiListTrustedDevices,
   apiRequestOtp,
   apiRevokeTrustedDevice,
@@ -24,11 +27,135 @@ import {
   saveWebAuthSession,
 } from '../lib/webAuthClient';
 
-const CHANNELS: Array<{ id: WebOtpChannel; label: string; desc: string }> = [
-  { id: 'TELEGRAM', label: 'تليجرام', desc: 'Telegram Gateway — تحقق رسمي فوري' },
-  { id: 'WHATSAPP', label: 'واتساب', desc: 'Twilio Verify WhatsApp' },
-  { id: 'SMS', label: 'SMS', desc: 'رسالة نصية مباشرة عبر الجوال' },
+const CHANNELS: Array<{
+  id: WebOtpChannel;
+  label: string;
+  desc: string;
+  accentClass: string;
+  activeBorderClass: string;
+}> = [
+  {
+    id: 'TELEGRAM',
+    label: 'تليجرام',
+    desc: 'Telegram Gateway — تحقق رسمي فوري',
+    accentClass: 'from-sky-500/20 to-sky-600/5 text-sky-300',
+    activeBorderClass: 'border-sky-400 ring-2 ring-sky-400/25 shadow-lg shadow-sky-500/15',
+  },
+  {
+    id: 'WHATSAPP',
+    label: 'واتساب',
+    desc: 'Twilio Verify WhatsApp',
+    accentClass: 'from-emerald-500/20 to-emerald-600/5 text-emerald-300',
+    activeBorderClass: 'border-emerald-400 ring-2 ring-emerald-400/25 shadow-lg shadow-emerald-500/15',
+  },
+  {
+    id: 'SMS',
+    label: 'SMS',
+    desc: 'رسالة نصية مباشرة عبر الجوال',
+    accentClass: 'from-amber-500/20 to-amber-600/5 text-amber-300',
+    activeBorderClass: 'border-amber-400 ring-2 ring-amber-400/25 shadow-lg shadow-amber-500/15',
+  },
 ];
+
+export const WebChannelBrandIcon: React.FC<{ channel: WebOtpChannel; className?: string }> = ({
+  channel,
+  className = 'w-7 h-7',
+}) => {
+  if (channel === 'TELEGRAM') {
+    return (
+      <svg viewBox="0 0 96 96" className={className} aria-hidden="true">
+        <defs>
+          <linearGradient id="oozoxTgGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#37AEE2" />
+            <stop offset="100%" stopColor="#1E96C8" />
+          </linearGradient>
+        </defs>
+        <circle cx="48" cy="48" r="44" fill="url(#oozoxTgGrad)" />
+        <path
+          fill="#FFFFFF"
+          d="M21.4 47.2C35.3 41.1 44.6 37.1 49.2 35.2C62.5 29.7 65.2 28.7 67 28.7C67.4 28.7 68.3 28.8 68.9 29.3C69.4 29.7 69.5 30.2 69.6 30.6C69.7 31 69.7 31.9 69.6 32.6C68.9 40 65.8 58.1 64.2 66.4C63.5 69.9 62.2 71.1 60.9 71.2C58.1 71.5 56 69.4 53.3 67.6C49.1 64.8 46.7 63.1 42.6 60.4C37.9 57.3 40.9 55.6 43.6 52.8C44.3 52.1 56.7 40.8 56.9 39.8C56.9 39.7 57 39.2 56.7 39C56.4 38.7 56 38.8 55.6 38.9C55.2 39 48.3 43.6 34.9 52.6C32.9 53.9 31.1 54.6 29.6 54.6C27.8 54.5 24.4 53.6 21.9 52.7C18.8 51.7 16.4 51.2 16.6 49.5C16.7 48.6 18 47.7 21.4 47.2Z"
+        />
+        <path fill="#C8DAEA" d="M39.9 66.5C38.5 66.5 38.7 66 38.2 64.7L34 51L56.8 38.9Z" />
+        <path fill="#A9C9DD" d="M39.9 66.5C41 66.5 41.5 66 42.1 65.4L47.9 59.7L40.6 55.3Z" />
+      </svg>
+    );
+  }
+  if (channel === 'WHATSAPP') {
+    return (
+      <svg viewBox="0 0 96 96" className={className} aria-hidden="true">
+        <defs>
+          <linearGradient id="oozoxWaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#25D366" />
+            <stop offset="100%" stopColor="#128C7E" />
+          </linearGradient>
+        </defs>
+        <circle cx="48" cy="48" r="44" fill="url(#oozoxWaGrad)" />
+        <path
+          fill="#FFFFFF"
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M48.5 20C33.3 20 21 32.2 21 47.3C21 52.5 22.5 57.4 25 61.6L21.4 74.8L35 71.2C39 73.4 43.6 74.7 48.5 74.7C63.7 74.7 76 62.4 76 47.3C76 32.2 63.7 20 48.5 20ZM48.5 24.8C61 24.8 71.1 34.9 71.1 47.3C71.1 59.7 61 69.8 48.5 69.8C44.1 69.8 39.9 68.6 36.4 66.4L35.5 65.9L27.5 68L29.6 60.2L29 59.3C26.7 55.7 25.8 51.6 25.8 47.3C25.8 34.9 36 24.8 48.5 24.8Z"
+        />
+        <path
+          fill="#FFFFFF"
+          d="M41.7 35.4C41.2 34.2 40.7 34.2 40.2 34.2C39.8 34.2 39.3 34.2 38.8 34.2C38.3 34.2 37.5 34.4 36.9 35.1C36.2 35.8 34.4 37.5 34.4 41C34.4 44.5 36.9 47.9 37.3 48.4C37.6 48.9 42.2 56.3 49.4 59.1C55.4 61.5 56.6 61 57.9 60.9C59.2 60.8 62.1 59.2 62.7 57.5C63.3 55.8 63.3 54.4 63.1 54.1C62.9 53.8 62.5 53.6 61.7 53.2C61 52.8 57.5 51.1 56.8 50.9C56.2 50.6 55.7 50.5 55.2 51.2C54.7 51.9 53.4 53.5 53 54C52.6 54.5 52.1 54.5 51.4 54.2C50.7 53.8 48.4 53.1 45.7 50.6C43.6 48.7 42.1 46.4 41.7 45.7C41.3 45 41.7 44.6 42 44.2C42.4 43.9 42.8 43.4 43.1 42.9C43.5 42.5 43.6 42.2 43.9 41.7C44.1 41.2 44 40.8 43.8 40.4C43.6 40.1 42.2 36.5 41.7 35.4Z"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 96 96" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="oozoxSmsGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FBBF24" />
+          <stop offset="100%" stopColor="#D97706" />
+        </linearGradient>
+      </defs>
+      <circle cx="48" cy="48" r="44" fill="url(#oozoxSmsGrad)" />
+      <path
+        fill="#FFFFFF"
+        d="M29 27H67C71.97 27 76 31.03 76 36V56.5C76 61.47 71.97 65.5 67 65.5H42.5L29.2 74.8C28.1 75.5 26.6 74.7 26.7 73.4L27.6 65.5C23.3 64.8 20 61 20 56.5V36C20 31.03 24.03 27 29 27Z"
+      />
+      <circle cx="35.5" cy="46.25" r="4" fill="#D97706" />
+      <circle cx="48" cy="46.25" r="4" fill="#D97706" />
+      <circle cx="60.5" cy="46.25" r="4" fill="#D97706" />
+    </svg>
+  );
+};
+
+export const WebChannelSelectorGrid: React.FC<{
+  selected: WebOtpChannel;
+  onSelect: (ch: WebOtpChannel) => void;
+}> = ({ selected, onSelect }) => (
+  <div className="grid grid-cols-3 gap-2.5">
+    {CHANNELS.map((c) => {
+      const active = selected === c.id;
+      return (
+        <button
+          key={c.id}
+          type="button"
+          onClick={() => onSelect(c.id)}
+          title={c.desc}
+          className={`relative group flex flex-col items-center justify-center gap-2 py-3 px-2 rounded-2xl border transition-all duration-200 active:scale-[0.96] ${
+            active
+              ? `bg-gradient-to-b ${c.accentClass} ${c.activeBorderClass}`
+              : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-600 hover:bg-slate-900'
+          }`}
+        >
+          {active && (
+            <CheckCircle2 className="w-3.5 h-3.5 absolute top-2 left-2 opacity-90" />
+          )}
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-200 ${active ? 'scale-105' : 'group-hover:scale-105'}`}>
+            <WebChannelBrandIcon channel={c.id} className="w-9 h-9 drop-shadow" />
+          </div>
+          <span className={`text-xs font-extrabold tracking-wide ${active ? 'text-white' : 'text-slate-300'}`}>
+            {c.label}
+          </span>
+        </button>
+      );
+    })}
+  </div>
+);
 
 const COUNTRY_CODES = [
   { code: '+20', label: '🇪🇬 مصر (+20)' },
@@ -122,14 +249,30 @@ export const WebOtpVerificationCard: React.FC<{
     onVerified(res.data);
   };
 
-  const handleSwitchOrResend = async (targetChannel: WebOtpChannel) => {
-    if (isBusy) return;
-    if (targetChannel === channel && cooldown > 0) return;
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const handleBackAndCancel = async () => {
+    if (isBusy || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      await apiCancelOtp({
+        challengeId,
+        phone: preAuthToken ? undefined : phoneDisplay,
+        preAuthToken,
+      });
+    } finally {
+      setIsCancelling(false);
+      onBack();
+    }
+  };
+
+  const handleResendSameChannel = async () => {
+    if (isBusy || isCancelling || cooldown > 0) return;
     setIsBusy(true);
     setError(null);
     const res = await apiRequestOtp({
       purpose,
-      channel: targetChannel,
+      channel,
       phone: preAuthToken ? undefined : phoneDisplay,
       preAuthToken,
       portalScope,
@@ -141,7 +284,7 @@ export const WebOtpVerificationCard: React.FC<{
       setError(res.message || 'تعذر إعادة إرسال رمز التحقق.');
       return;
     }
-    const nextChannel = (String(res.data.activeChannel || targetChannel).toUpperCase() as WebOtpChannel) || targetChannel;
+    const nextChannel = (String(res.data.activeChannel || channel).toUpperCase() as WebOtpChannel) || channel;
     setChallengeId(res.data.challengeId);
     setChannel(nextChannel);
     setCode('');
@@ -159,13 +302,15 @@ export const WebOtpVerificationCard: React.FC<{
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300"
+          disabled={isBusy || isCancelling}
+          onClick={handleBackAndCancel}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 disabled:opacity-50"
         >
           <ArrowRight className="w-4 h-4" />
-          تغيير رقم الهاتف
+          {isCancelling ? 'جاري إلغاء الرمز...' : 'رجوع وإلغاء الرمز'}
         </button>
-        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">
+          <WebChannelBrandIcon channel={channel} className="w-4 h-4" />
           عبر {CHANNELS.find((c) => c.id === channel)?.label || channel}
         </span>
       </div>
@@ -213,38 +358,29 @@ export const WebOtpVerificationCard: React.FC<{
         <span>الوثوق بهذا المتصفح لمدة 30 يوماً</span>
       </label>
 
-      <div className="grid grid-cols-3 gap-2">
-        {CHANNELS.map((ch) => {
-          const active = ch.id === channel;
-          const disabled = isBusy || (active && cooldown > 0);
-          return (
-            <button
-              key={ch.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => handleSwitchOrResend(ch.id)}
-              className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all ${
-                active
-                  ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                  : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600'
-              } disabled:opacity-45`}
-              title={ch.desc}
-            >
-              {ch.label}
-            </button>
-          );
-        })}
+      <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center gap-2 text-[11px] text-slate-300">
+        <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+        <span>لتغيير وسيلة الاستلام، اضغط "رجوع وإلغاء الرمز" لإبطال صلاحية الكود الحالي أولاً.</span>
       </div>
 
-      {cooldown > 0 && (
+      {cooldown > 0 ? (
         <p className="text-center text-[11px] text-slate-400">
-          إعادة الإرسال على نفس القناة متاحة بعد {cooldown} ثانية (أو بدّل القناة الآن)
+          إعادة الإرسال على نفس الوسيلة متاحة بعد {cooldown} ثانية
         </p>
+      ) : (
+        <button
+          type="button"
+          disabled={isBusy || isCancelling}
+          onClick={handleResendSameChannel}
+          className="w-full py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-xs font-bold transition-all disabled:opacity-50"
+        >
+          إعادة إرسال الرمز عبر {CHANNELS.find((c) => c.id === channel)?.label || channel}
+        </button>
       )}
 
       <button
         type="submit"
-        disabled={isBusy || code.length !== 6}
+        disabled={isBusy || isCancelling || code.length !== 6}
         className="w-full py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm transition-all disabled:opacity-50"
       >
         {isBusy ? 'جاري التحقق من الخادم...' : 'تأكيد الرمز والدخول'}
@@ -386,25 +522,10 @@ export const WebAuthModal: React.FC<{
             )}
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-400 mb-1.5">
+              <label className="block text-[11px] font-bold text-slate-400 mb-2">
                 قناة التحقق المفضلة (Fallback: Telegram ← WhatsApp ← SMS)
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {CHANNELS.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setChannel(c.id)}
-                    className={`py-2 rounded-xl border text-xs font-bold transition-all ${
-                      channel === c.id
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
+              <WebChannelSelectorGrid selected={channel} onSelect={setChannel} />
             </div>
 
             <form onSubmit={handlePhoneOtpStart} className="space-y-3">

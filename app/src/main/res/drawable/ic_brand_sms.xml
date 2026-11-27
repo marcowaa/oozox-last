@@ -1,0 +1,50 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Circular brand backdrop with OOZOX metallic gold gradient -->
+    <path android:pathData="M48,4 A44,44 0 1,1 47.99,4 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="48"
+                android:endY="92"
+                android:startX="48"
+                android:startY="4"
+                android:type="linear">
+                <item
+                    android:color="#FFFBBF24"
+                    android:offset="0.0" />
+                <item
+                    android:color="#FFD97706"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle top highlight rim -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M48,5.2 A42.8,42.8 0 1,1 47.99,5.2 Z"
+        android:strokeAlpha="0.28"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.2" />
+
+    <!-- Crisp high-contrast white SMS dialogue bubble -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M29.0,27.0 L67.0,27.0 C71.97,27.0 76.0,31.03 76.0,36.0 L76.0,56.5 C76.0,61.47 71.97,65.5 67.0,65.5 L42.5,65.5 L29.2,74.8 C28.1,75.5 26.6,74.7 26.7,73.4 L27.6,65.5 C23.3,64.8 20.0,61.0 20.0,56.5 L20.0,36.0 C20.0,31.03 24.03,27.0 29.0,27.0 Z" />
+
+    <!-- Three clean carved SMS dots inside bubble -->
+    <path
+        android:fillColor="#FFD97706"
+        android:pathData="M35.5,46.25 m-4.0,0 a4.0,4.0 0 1,0 8.0,0 a4.0,4.0 0 1,0 -8.0,0" />
+    <path
+        android:fillColor="#FFD97706"
+        android:pathData="M48.0,46.25 m-4.0,0 a4.0,4.0 0 1,0 8.0,0 a4.0,4.0 0 1,0 -8.0,0" />
+    <path
+        android:fillColor="#FFD97706"
+        android:pathData="M60.5,46.25 m-4.0,0 a4.0,4.0 0 1,0 8.0,0 a4.0,4.0 0 1,0 -8.0,0" />
+</vector>

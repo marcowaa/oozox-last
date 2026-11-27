@@ -23,6 +23,7 @@ fun OnboardingScreen(
     onOfflineCacheUnlock: suspend (phone: String) -> Boolean,
     onRequestOtp: suspend (purpose: String, channel: String, phone: String?, preAuthToken: String?) -> OtpRequestOutcome,
     onVerifyOtp: suspend (challengeId: String, code: String, phone: String?, preAuthToken: String?, trustDevice: Boolean) -> OtpVerifyOutcome,
+    onCancelOtp: suspend (challengeId: String, phone: String?, preAuthToken: String?) -> Boolean = { _, _, _ -> true },
     onAuthenticatedComplete: (PostOtpGatewayDecision) -> Unit,
     onSwitchProfile: ((HiddenProfileEntity) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -34,6 +35,7 @@ fun OnboardingScreen(
         onOfflineCacheUnlock = onOfflineCacheUnlock,
         onRequestOtp = onRequestOtp,
         onVerifyOtp = onVerifyOtp,
+        onCancelOtp = onCancelOtp,
         onAuthenticatedComplete = onAuthenticatedComplete,
         onSwitchProfile = onSwitchProfile,
         modifier = modifier

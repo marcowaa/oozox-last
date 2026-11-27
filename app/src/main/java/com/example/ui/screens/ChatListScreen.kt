@@ -36,6 +36,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -43,8 +44,8 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -179,7 +180,7 @@ fun ChatListScreen(
     var anchoredChatMenu by remember { mutableStateOf<AnchoredChatMenuState?>(null) }
     var chatToAssignWorkGroup by remember { mutableStateOf<ChatEntity?>(null) }
     var rootHeightPx by remember { mutableFloatStateOf(0f) }
-    var rootTopYInWindow by remember { mutableFloatStateOf(0f) }
+    var rootTopYInScreen by remember { mutableFloatStateOf(0f) }
     var chatToDeleteConfirm by remember { mutableStateOf<ChatEntity?>(null) }
     var chatToBlockConfirm by remember { mutableStateOf<ChatEntity?>(null) }
     var pendingDeleteChatIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -307,7 +308,7 @@ fun ChatListScreen(
             .spatialAmbientBackground()
             .onGloballyPositioned { coords ->
                 rootHeightPx = coords.size.height.toFloat()
-                rootTopYInWindow = coords.positionInWindow().y
+                rootTopYInScreen = coords.localToScreen(Offset.Zero).y
             }
             .then(combinedScrollModifier)
     ) {
@@ -1378,7 +1379,7 @@ fun ChatListScreen(
     if (anchoredChatMenu != null) {
         val menuState = anchoredChatMenu!!
         val chat = menuState.chat
-        val screenCenterY = rootTopYInWindow + (rootHeightPx / 2f)
+        val screenCenterY = rootTopYInScreen + (rootHeightPx / 2f)
         val rowCenterY = menuState.anchorTopPx + (menuState.anchorHeightPx / 2f)
         val openUpward = rowCenterY >= screenCenterY
 
@@ -2580,6 +2581,7 @@ fun SwipeableChatItemRow(
     var triggeredHaptic by remember { mutableStateOf(false) }
     var rowTopYPx by remember { mutableFloatStateOf(0f) }
     var rowHeightPx by remember { mutableFloatStateOf(0f) }
+    var rowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     val colors = MaterialTheme.colorScheme
     val isSwipingRight = offsetX.value > 4f
@@ -2591,7 +2593,8 @@ fun SwipeableChatItemRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .onGloballyPositioned { coords ->
-                rowTopYPx = coords.positionInWindow().y
+                rowCoords = coords
+                rowTopYPx = coords.localToScreen(Offset.Zero).y
                 rowHeightPx = coords.size.height.toFloat()
             }
     ) {
@@ -2686,7 +2689,8 @@ fun SwipeableChatItemRow(
                                 }
                             }
                         },
-                        onHorizontalDrag = { _, dragAmount ->
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
                             coroutineScope.launch {
                                 val newVal = (offsetX.value + dragAmount).coerceIn(-maxSwipePx * 1.15f, maxSwipePx * 1.15f)
                                 offsetX.snapTo(newVal)
@@ -2706,7 +2710,12 @@ fun SwipeableChatItemRow(
                 chat = chat,
                 currentUserId = currentUserId,
                 onClick = onClick,
-                onLongClick = { onLongClickWithAnchor(rowTopYPx, rowHeightPx) }
+                onLongClick = {
+                    val liveCoords = rowCoords?.takeIf { it.isAttached }
+                    val liveTop = liveCoords?.localToScreen(Offset.Zero)?.y ?: rowTopYPx
+                    val liveHeight = liveCoords?.size?.height?.toFloat() ?: rowHeightPx
+                    onLongClickWithAnchor(liveTop, liveHeight)
+                }
             )
         }
     }
@@ -3059,16 +3068,46 @@ private fun AnchoredChatActionPopover(
     onMarkAsReadClick: () -> Unit
 ) {
     val density = LocalDensity.current
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var menuHeightPx by remember { mutableIntStateOf(0) }
+    var dialogOriginScreenY by remember { mutableFloatStateOf(0f) }
+    var hasDialogLayout by remember { mutableStateOf(false) }
+
+    val isReady = hasDialogLayout && menuHeightPx > 0
+    val backdropAlpha by animateFloatAsState(
+        targetValue = if (isReady) 0.28f else 0f,
+        animationSpec = tween(durationMillis = 160),
+        label = "popoverBackdropAlpha"
+    )
+    val menuScale by animateFloatAsState(
+        targetValue = if (isReady) 1f else 0.90f,
+        animationSpec = spring(
+            dampingRatio = 0.80f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "popoverMenuScale"
+    )
+    val menuAlpha by animateFloatAsState(
+        targetValue = if (isReady) 1f else 0f,
+        animationSpec = tween(durationMillis = 140),
+        label = "popoverMenuAlpha"
+    )
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
+        val statusTopPx = WindowInsets.statusBars.getTop(density).toFloat()
+        val navBottomPx = WindowInsets.navigationBars.getBottom(density).toFloat()
+
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.24f))
+                .onGloballyPositioned { coords ->
+                    dialogOriginScreenY = coords.localToScreen(Offset.Zero).y
+                    hasDialogLayout = true
+                }
+                .background(Color.Black.copy(alpha = backdropAlpha))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -3076,18 +3115,30 @@ private fun AnchoredChatActionPopover(
                 )
         ) {
             val containerHeightPx = with(density) { maxHeight.toPx() }
-            val safeTopPx = with(density) { 48.dp.toPx() }
-            val safeBottomPx = containerHeightPx - with(density) { 40.dp.toPx() }
+            val safeMarginPx = with(density) { 12.dp.toPx() }
+            val safeTopPx = statusTopPx + safeMarginPx
+            val safeBottomPx = (containerHeightPx - navBottomPx - safeMarginPx).coerceAtLeast(safeTopPx + 120f)
             val gapPx = with(density) { 6.dp.toPx() }
 
-            val rawY = if (openUpward) {
-                anchorTopPx - gapPx - menuHeightPx
-            } else {
-                anchorTopPx + anchorHeightPx + gapPx
+            val relativeAnchorTopY = anchorTopPx - dialogOriginScreenY
+            val relativeAnchorBottomY = relativeAnchorTopY + anchorHeightPx
+            val spaceAbove = (relativeAnchorTopY - safeTopPx - gapPx).coerceAtLeast(0f)
+            val spaceBelow = (safeBottomPx - relativeAnchorBottomY - gapPx).coerceAtLeast(0f)
+
+            val effectiveOpenUpward = when {
+                menuHeightPx <= 0 -> openUpward
+                openUpward && spaceAbove >= menuHeightPx -> true
+                !openUpward && spaceBelow >= menuHeightPx -> false
+                else -> spaceAbove > spaceBelow
             }
-            val clampedY = rawY
-                .coerceIn(safeTopPx, (safeBottomPx - menuHeightPx).coerceAtLeast(safeTopPx))
-                .roundToInt()
+
+            val rawY = if (effectiveOpenUpward) {
+                relativeAnchorTopY - gapPx - menuHeightPx
+            } else {
+                relativeAnchorBottomY + gapPx
+            }
+            val maxMenuTopY = (safeBottomPx - menuHeightPx).coerceAtLeast(safeTopPx)
+            val clampedY = rawY.coerceIn(safeTopPx, maxMenuTopY).roundToInt()
 
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -3099,6 +3150,15 @@ private fun AnchoredChatActionPopover(
                     .align(Alignment.TopEnd)
                     .padding(end = 16.dp, start = 16.dp)
                     .offset { IntOffset(x = 0, y = clampedY) }
+                    .graphicsLayer {
+                        scaleX = menuScale
+                        scaleY = menuScale
+                        alpha = menuAlpha
+                        transformOrigin = TransformOrigin(
+                            pivotFractionX = if (isRtl) 0.15f else 0.85f,
+                            pivotFractionY = if (effectiveOpenUpward) 1f else 0f
+                        )
+                    }
                     .widthIn(min = 248.dp, max = 304.dp)
                     .onGloballyPositioned { coords -> menuHeightPx = coords.size.height }
                     .clickable(

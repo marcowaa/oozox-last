@@ -1,0 +1,49 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Circular brand backdrop with official Telegram blue gradient -->
+    <path android:pathData="M48,4 A44,44 0 1,1 47.99,4 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="48"
+                android:endY="92"
+                android:startX="48"
+                android:startY="4"
+                android:type="linear">
+                <item
+                    android:color="#FF37AEE2"
+                    android:offset="0.0" />
+                <item
+                    android:color="#FF1E96C8"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle top highlight rim for glass depth -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M48,5.2 A42.8,42.8 0 1,1 47.99,5.2 Z"
+        android:strokeAlpha="0.22"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.2" />
+
+    <!-- Authentic Telegram paper-plane main silhouette -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21.4,47.2 C35.3,41.1 44.6,37.1 49.2,35.2 C62.5,29.7 65.2,28.7 67.0,28.7 C67.4,28.7 68.3,28.8 68.9,29.3 C69.4,29.7 69.5,30.2 69.6,30.6 C69.7,31.0 69.7,31.9 69.6,32.6 C68.9,40.0 65.8,58.1 64.2,66.4 C63.5,69.9 62.2,71.1 60.9,71.2 C58.1,71.5 56.0,69.4 53.3,67.6 C49.1,64.8 46.7,63.1 42.6,60.4 C37.9,57.3 40.9,55.6 43.6,52.8 C44.3,52.1 56.7,40.8 56.9,39.8 C56.9,39.7 57.0,39.2 56.7,39.0 C56.4,38.7 56.0,38.8 55.6,38.9 C55.2,39.0 48.3,43.6 34.9,52.6 C32.9,53.9 31.1,54.6 29.6,54.6 C27.8,54.5 24.4,53.6 21.9,52.7 C18.8,51.7 16.4,51.2 16.6,49.5 C16.7,48.6 18.0,47.7 21.4,47.2 Z" />
+
+    <!-- Inner wing fold shadow for crisp 3D paper-plane fidelity -->
+    <path
+        android:fillColor="#FFC8DAEA"
+        android:pathData="M39.9,66.5 C38.5,66.5 38.7,66.0 38.2,64.7 L34.0,51.0 L56.8,38.9 Z" />
+
+    <!-- Deep inner tail fold -->
+    <path
+        android:fillColor="#FFA9C9DD"
+        android:pathData="M39.9,66.5 C41.0,66.5 41.5,66.0 42.1,65.4 L47.9,59.7 L40.6,55.3 Z" />
+</vector>

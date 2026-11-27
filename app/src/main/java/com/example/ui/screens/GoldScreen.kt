@@ -177,6 +177,7 @@ fun GoldScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             GoldSideDrawerContent(
                 currentUser = currentUser,

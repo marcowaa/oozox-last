@@ -71,6 +71,12 @@ const schemas = {
     portalScope: z.enum(['USER', 'ADMIN']).optional().default('USER'),
   }),
 
+  otpCancel: z.object({
+    challengeId: z.string().trim().min(4).max(128),
+    phone: z.string().trim().max(25).optional(),
+    preAuthToken: z.string().trim().max(2048).optional(),
+  }),
+
   trustedLogin: z.object({
     phone: z.string().trim().max(25).optional(),
     userId: z.string().regex(OBJECT_ID_REGEX, 'api.val_invalid_object_id').optional(),

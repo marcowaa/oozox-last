@@ -5,6 +5,7 @@ import com.example.util.ApiAuthData
 import com.example.util.ApiDeviceTrustDto
 import com.example.util.ApiFcmTokenBody
 import com.example.util.ApiLogoutBody
+import com.example.util.ApiOtpCancelBody
 import com.example.util.ApiOtpChallengeDto
 import com.example.util.ApiOtpDeliveryErrorDto
 import com.example.util.ApiOtpRequestBody
@@ -258,6 +259,28 @@ object AuthRepository {
             OtpVerifyOutcome.Verified(data = data, message = body.message)
         } catch (e: Exception) {
             OtpVerifyOutcome.Error("NETWORK_ERROR", e.message ?: "تعذر الاتصال بالسيرفر")
+        }
+    }
+
+    suspend fun cancelOtp(
+        context: Context,
+        challengeId: String,
+        phone: String? = null,
+        preAuthToken: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (challengeId.isBlank()) return@withContext false
+        try {
+            DeviceTrustManager.syncRetrofitDeviceHeaders(context)
+            val resp = RetrofitClient.apiService().postOtpCancel(
+                ApiOtpCancelBody(
+                    challengeId = challengeId,
+                    phone = phone?.trim()?.takeIf { it.isNotEmpty() },
+                    preAuthToken = preAuthToken?.takeIf { it.isNotBlank() }
+                )
+            )
+            resp.isSuccessful && resp.body()?.success == true
+        } catch (_: Exception) {
+            false
         }
     }
 
