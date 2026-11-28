@@ -68,25 +68,18 @@ func GetCallSessionTTL() time.Duration {
 }
 
 func resolveSignalingHMACSecret() string {
-	secret := strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
-	if isProductionEnv() {
-		return secret
-	}
-	if secret != "" {
-		return secret
-	}
-	return strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	return strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
 }
 
-// ValidateSignalingHMACSecret verifies that INTERNAL_SIGNALING_HMAC_SECRET meets production rules.
+// ValidateSignalingHMACSecret verifies that INTERNAL_SIGNALING_HMAC_SECRET is explicitly configured.
 func ValidateSignalingHMACSecret() error {
-	secret := strings.TrimSpace(os.Getenv("INTERNAL_SIGNALING_HMAC_SECRET"))
+	secret := resolveSignalingHMACSecret()
 	if isProductionEnv() {
 		if len(secret) < 32 {
 			return fmt.Errorf("INTERNAL_SIGNALING_HMAC_SECRET must be set and at least 32 chars in production")
 		}
-	} else if resolveSignalingHMACSecret() == "" {
-		return fmt.Errorf("INTERNAL_SIGNALING_HMAC_SECRET (or JWT_SECRET in dev) must be configured")
+	} else if secret == "" {
+		return fmt.Errorf("INTERNAL_SIGNALING_HMAC_SECRET must be configured")
 	}
 	return nil
 }

@@ -177,11 +177,22 @@ class OozoxFirebaseMessagingService : FirebaseMessagingService() {
                         )
                     )
                 }
-                NotificationHelper.showSystemNotification(
+                NotificationHelper.showIncomingCallNotification(
                     context = applicationContext,
-                    title = notification?.title ?: if (isVid) "مكالمة فيديو واردة" else "مكالمة صوتية واردة",
-                    message = notification?.body ?: "مكالمة من $callerName"
+                    callId = callId.ifBlank { "fcm_${System.currentTimeMillis()}" },
+                    callerId = callerId,
+                    callerName = callerName,
+                    isVideo = isVid
                 )
+            }
+
+            "call_ended", "CALL_ENDED", "call_missed", "CALL_MISSED", "call_rejected", "CALL_REJECTED" -> {
+                val callId = data["callId"] ?: data["call_id"] ?: ""
+                if (callId.isNotBlank()) {
+                    NotificationHelper.cancelIncomingCallNotification(applicationContext, callId)
+                    com.example.activity.IncomingCallActivity.dismissIfActive(callId)
+                    FcmNotificationManager.notifyCallEnded(callId)
+                }
             }
 
             else -> {

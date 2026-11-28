@@ -99,6 +99,14 @@ const employeeSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    passwordChangedAt: {
+      type: Date,
+      default: null,
+    },
+    tokenRevokedBefore: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -119,6 +127,9 @@ employeeSchema.pre('save', async function (next) {
   }
   const salt = await bcrypt.genSalt(12);
   this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+  if (!this.isNew) {
+    this.passwordChangedAt = new Date();
+  }
   next();
 });
 

@@ -34,10 +34,10 @@ class BackendSyncAndIntegrityTest {
     @Test
     fun databaseV26_opensCleanly_andIntegrityCheckHealthy() = runBlocking {
         val version = db.openHelper.readableDatabase.version
-        assertEquals(27, version)
+        assertEquals(28, version)
 
         val report = DatabaseIntegrityChecker.performIntegrityCheck(context)
-        assertEquals(27, report.currentVersion)
+        assertEquals(28, report.currentVersion)
         assertTrue(report.isVersionValid)
         assertTrue(report.isQuickCheckOk)
         assertEquals(IntegrityStatus.HEALTHY, report.status)

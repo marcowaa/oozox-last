@@ -6,7 +6,7 @@ merges Parts 1..4 from scripts/i18n_data/, validates 100% key parity & non-empty
 and writes identical canonical JSON bundles to:
   1) backend/src/i18n/bundles/{lang}.json
   2) app/src/main/assets/i18n/{lang}.json
-  3) artifacts/mockup-sandbox/src/i18n/bundles/{lang}.json
+  3) web-portal/src/i18n/bundles/{lang}.json
 """
 
 import json
@@ -112,7 +112,7 @@ def build_all_bundles():
     targets = [
         os.path.join(ROOT, "backend", "src", "i18n", "bundles"),
         os.path.join(ROOT, "app", "src", "main", "assets", "i18n"),
-        os.path.join(ROOT, "artifacts", "mockup-sandbox", "src", "i18n", "bundles"),
+        os.path.join(ROOT, "web-portal", "src", "i18n", "bundles"),
     ]
     for d in targets:
         os.makedirs(d, exist_ok=True)

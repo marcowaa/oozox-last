@@ -54,7 +54,7 @@ import com.example.data.model.*
         EmployeeLeaveEntity::class
     ],
     version = 28,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao

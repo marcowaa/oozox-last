@@ -54,6 +54,26 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        dispatchIncomingIntent(intent)
+    }
+
+    private fun dispatchIncomingIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        val callAction = intent.getStringExtra(NotificationHelper.EXTRA_INCOMING_CALL_ACTION)
+        if (!callAction.isNullOrBlank()) {
+            val callId = intent.getStringExtra(NotificationHelper.EXTRA_CALL_ID).orEmpty()
+            val callerId = intent.getStringExtra(NotificationHelper.EXTRA_CALLER_ID).orEmpty()
+            val callerName = intent.getStringExtra(NotificationHelper.EXTRA_CALLER_NAME).orEmpty()
+            val isVideo = intent.getBooleanExtra(NotificationHelper.EXTRA_IS_VIDEO, false)
+            viewModel.handleIncomingCallNotificationAction(
+                action = callAction,
+                callId = callId,
+                callerId = callerId,
+                callerName = callerName,
+                isVideo = isVideo
+            )
+            intent.removeExtra(NotificationHelper.EXTRA_INCOMING_CALL_ACTION)
+        }
         val chatId = intent.getStringExtra("OPEN_CHAT_ID")
             ?: intent.getStringExtra(NotificationHelper.EXTRA_CHAT_ID)
         if (!chatId.isNullOrBlank()) {
@@ -87,12 +107,7 @@ class MainActivity : FragmentActivity() {
         com.example.util.FcmNotificationManager.initialize(applicationContext)
         com.example.util.MessengerBubbleManager.initialize(applicationContext)
 
-        val startChatId = intent?.getStringExtra("OPEN_CHAT_ID")
-            ?: intent?.getStringExtra(NotificationHelper.EXTRA_CHAT_ID)
-        if (!startChatId.isNullOrBlank()) {
-            com.example.util.MessengerBubbleManager.navigateToChatInApp(startChatId)
-        }
-        com.example.util.ClientCardDeepLinkRouter.handleIncomingUri(intent?.data)
+        dispatchIncomingIntent(intent)
 
         // Log uncaught exceptions and delegate to system handler
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()

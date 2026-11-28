@@ -458,6 +458,9 @@ interface AdminConfigDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveConfig(config: AdminConfigEntity)
+
+    @Query("UPDATE admin_config SET geminiApiKey = NULL WHERE geminiApiKey IS NOT NULL")
+    suspend fun clearLegacyGeminiApiKey()
 }
 
 @Dao

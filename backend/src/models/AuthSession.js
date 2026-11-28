@@ -9,10 +9,25 @@ const authSessionSchema = new mongoose.Schema(
       unique: true,
       default: () => crypto.randomUUID(),
     },
+    principalType: {
+      type: String,
+      enum: ['USER', 'EMPLOYEE'],
+      default: 'USER',
+      index: true,
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: function requiredUserId() {
+        return this.principalType !== 'EMPLOYEE';
+      },
+      default: null,
+      index: true,
+    },
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
       index: true,
     },
     deviceId: {
@@ -27,7 +42,7 @@ const authSessionSchema = new mongoose.Schema(
     },
     authMethod: {
       type: String,
-      enum: ['OTP', 'PASSWORD_OTP', 'TRUSTED_DEVICE', 'LEGACY_PASSWORD'],
+      enum: ['OTP', 'PASSWORD_OTP', 'TRUSTED_DEVICE', 'LEGACY_PASSWORD', 'EMPLOYEE_PASSWORD'],
       default: 'OTP',
     },
     otpVerifiedAt: {

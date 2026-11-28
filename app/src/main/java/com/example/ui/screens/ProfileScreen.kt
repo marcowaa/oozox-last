@@ -139,7 +139,10 @@ fun ProfileScreen(
     backupStatus: BackupResult? = null,
     isBackupProcessing: Boolean = false,
     onClearBackupStatus: () -> Unit = {},
-    onDeleteAccount: () -> Unit = {},
+    deleteAccountState: com.example.ui.viewmodel.DeleteAccountUiState = com.example.ui.viewmodel.DeleteAccountUiState.Idle,
+    onRequestDeleteAccountOtp: () -> Unit = {},
+    onConfirmDeleteAccountOtp: (String) -> Unit = {},
+    onResetDeleteAccountState: () -> Unit = {},
     onLogout: () -> Unit = {},
     trustedDevices: List<com.example.util.ApiTrustedDeviceDto> = emptyList(),
     isLoadingTrustedDevices: Boolean = false,
@@ -1332,11 +1335,21 @@ fun ProfileScreen(
         onClearBackupStatus = onClearBackupStatus
     )
 
-    // Modal 5: Account Deletion (Google Play / App Store Compliance)
+    // Modal 5: Account Deletion (Google Play / App Store Compliance + OTP Step-Up)
+    LaunchedEffect(deleteAccountState) {
+        if (deleteAccountState is com.example.ui.viewmodel.DeleteAccountUiState.Deleted) {
+            showDeleteAccountDialog = false
+        }
+    }
     if (showDeleteAccountDialog) {
         ProfileDeleteAccountDialog(
-            onConfirmDelete = onDeleteAccount,
-            onDismiss = { showDeleteAccountDialog = false }
+            deleteState = deleteAccountState,
+            onRequestOtp = onRequestDeleteAccountOtp,
+            onConfirmDeleteWithOtp = onConfirmDeleteAccountOtp,
+            onDismiss = {
+                onResetDeleteAccountState()
+                showDeleteAccountDialog = false
+            }
         )
     }
 
@@ -1689,7 +1702,10 @@ fun ProfileScreen(
             storeName = user.traderShopName,
             onOpenBroadcast = if (isZoxAdmin) { { showBroadcastModal = true } } else null,
             onOpenAdmin = if (isZoxAdmin) onOpenAdminClick else null,
-            onDeleteAccount = { showDeleteAccountDialog = true },
+            onDeleteAccount = {
+                onResetDeleteAccountState()
+                showDeleteAccountDialog = true
+            },
             onLogout = { showLogoutDialog = true }
         )
     }

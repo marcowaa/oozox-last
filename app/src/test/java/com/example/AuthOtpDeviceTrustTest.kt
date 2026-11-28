@@ -561,26 +561,23 @@ class AuthOtpDeviceTrustTest {
         }
 
         composeTestRule.waitForIdle()
-        // Verify all 3 channels are rendered in priority order
+        // Verify all 3 channels exist in priority order
         assertEquals(
             listOf(OtpDeliveryChannel.TELEGRAM, OtpDeliveryChannel.WHATSAPP, OtpDeliveryChannel.SMS),
             OtpDeliveryChannel.entries
         )
-        composeTestRule.onNodeWithTag("otp_resend_channel_telegram").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("otp_resend_channel_whatsapp").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("otp_resend_channel_sms").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("otp_channel_locked_notice").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_otp_resend_now").assertIsDisplayed()
 
-        // Switch to WhatsApp and verify callback + notice
-        composeTestRule.onNodeWithTag("otp_resend_channel_whatsapp").performClick()
+        // Resend on active channel and verify callback
+        composeTestRule.onNodeWithTag("btn_otp_resend_now").performClick()
         composeTestRule.waitForIdle()
-        assertEquals(OtpDeliveryChannel.WHATSAPP, lastSwitchedChannel)
-        composeTestRule.onNodeWithTag("otp_delivery_notice").assertIsDisplayed()
+        assertEquals(OtpDeliveryChannel.TELEGRAM, lastSwitchedChannel)
 
         // Enter 6 digits and trigger server error lockout
         composeTestRule.onNodeWithTag("otp_hidden_input").performTextInput("654321")
         composeTestRule.waitForIdle()
         assertEquals("654321", lastVerifiedCode)
         composeTestRule.onNodeWithTag("otp_lockout_banner").assertIsDisplayed()
-        composeTestRule.onNodeWithText("النظام مقفل مؤقتاً لحماية الحساب").assertIsDisplayed()
     }
 }

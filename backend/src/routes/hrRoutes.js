@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   loginEmployee,
+  logoutEmployee,
   listEmployees,
   createEmployee,
   updateEmployee,
@@ -25,6 +26,7 @@ router.post('/employee-login', validate(schemas.employeeLogin), loginEmployee);
 // Protected enterprise HR & attendance endpoints
 router.use(protectEnterprise);
 
+router.post('/employee-logout', logoutEmployee);
 router.get('/employees', listEmployees);
 router.post(
   '/employees',

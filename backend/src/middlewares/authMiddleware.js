@@ -102,7 +102,36 @@ const protectEnterprise = async (req, res, next) => {
       if (!employee || !employee.isActive) {
         return errorResponse(res, 401, translate('api.auth_user_not_found'));
       }
+      const owner = await User.findById(employee.owner).select('isVerified');
+      if (!owner || owner.isVerified !== true) {
+        return errorResponse(res, 401, translate('api.auth_token_invalid'));
+      }
+      if (decoded.iat) {
+        const tokenIssuedMs = decoded.iat * 1000;
+        if (
+          (employee.passwordChangedAt && tokenIssuedMs < employee.passwordChangedAt.getTime() - 1000) ||
+          (employee.tokenRevokedBefore && tokenIssuedMs < employee.tokenRevokedBefore.getTime() - 1000)
+        ) {
+          return errorResponse(res, 401, translate('api.auth_token_invalid'));
+        }
+      }
+      if (!decoded.sid) {
+        return errorResponse(res, 401, translate('api.auth_token_invalid'));
+      }
+      const empSession = await AuthSession.findOne({
+        sessionId: decoded.sid,
+        employeeId: employee._id,
+      });
+      if (
+        !empSession ||
+        empSession.revokedAt ||
+        !empSession.expiresAt ||
+        empSession.expiresAt <= new Date()
+      ) {
+        return errorResponse(res, 401, translate('api.auth_token_invalid'));
+      }
       req.employee = employee;
+      req.authSessionId = decoded.sid;
       req.actorOwnerId = employee.owner;
       req.actorBusinessId = employee.business;
       req.isEmployeeActor = true;

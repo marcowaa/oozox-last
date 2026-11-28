@@ -146,6 +146,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
     var dismissedTransferIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val activeSignalingManager by viewModel.signalingManager.collectAsStateWithLifecycle()
     val incomingCallPayload by viewModel.incomingCallPayload.collectAsStateWithLifecycle()
+    val autoAcceptIncomingCall by viewModel.autoAcceptIncomingCall.collectAsStateWithLifecycle()
+    val deleteAccountState by viewModel.deleteAccountState.collectAsStateWithLifecycle()
     val incomingTransferSignal by viewModel.incomingTransferSignal.collectAsStateWithLifecycle()
 
     val navigateToAppDestination: (AppNavDestination) -> Unit = { dest ->
@@ -569,9 +571,6 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                     }
                     val onClearBackupStatusAction = remember(viewModel) {
                         { viewModel.clearBackupStatus() }
-                    }
-                    val onDeleteAccountAction = remember(viewModel) {
-                        { viewModel.deleteCurrentUserAccount() }
                     }
                     val onCreateSubAccountAction = remember(viewModel) {
                         { sName: String, sPin: String, sComp: String, sRole: String, sCap: Double, sSilent: Boolean ->
@@ -1145,7 +1144,10 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                                             backupStatus = backupStatus,
                                             isBackupProcessing = isBackupProcessing,
                                             onClearBackupStatus = onClearBackupStatusAction,
-                                            onDeleteAccount = onDeleteAccountAction,
+                                            deleteAccountState = deleteAccountState,
+                                            onRequestDeleteAccountOtp = { viewModel.startDeleteAccountOtpStep() },
+                                            onConfirmDeleteAccountOtp = { otp -> viewModel.confirmDeleteAccountWithOtp(otp) },
+                                            onResetDeleteAccountState = { viewModel.resetDeleteAccountState() },
                                             onCreateSubAccount = onCreateSubAccountAction,
                                             onCreateParallelSubAccount = onCreateParallelSubAccountAction,
                                             onAddDailyRecord = onAddDailyRecordAction,
@@ -1672,8 +1674,8 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                         onRejectTrader = { reqId ->
                             viewModel.updateTraderRequestStatus(reqId, TraderStatus.REJECTED, Translations.get("drawer.admin_rejected_note", currentLanguage))
                         },
-                        onSaveConfig = { appName, appLogoUri, adminPin, geminiKey, geminiModel, aiPrompt, notifUrl, notifKey, news, goldUrl, goldKey, intervalSec, enc, voice, prompt, bio ->
-                            viewModel.updateAdminConfig(appName, appLogoUri, adminPin, geminiKey, geminiModel, aiPrompt, notifUrl, notifKey, news, goldUrl, goldKey, intervalSec, enc, voice, prompt, bio)
+                        onSaveConfig = { appName, appLogoUri, adminPin, geminiModel, aiPrompt, notifUrl, notifKey, news, goldUrl, goldKey, intervalSec, enc, voice, prompt, bio ->
+                            viewModel.updateAdminConfig(appName, appLogoUri, adminPin, geminiModel, aiPrompt, notifUrl, notifKey, news, goldUrl, goldKey, intervalSec, enc, voice, prompt, bio)
                         },
                         onUpdatePrices = { k21 ->
                             viewModel.updateGoldPrices(k21)
@@ -1987,6 +1989,19 @@ fun MainAppNavigation(viewModel: MainViewModel) {
             }
         }
 
+        LaunchedEffect(deleteAccountState) {
+            if (deleteAccountState is com.example.ui.viewmodel.DeleteAccountUiState.Deleted) {
+                toastController.showToast(
+                    message = "تم حذف حسابك وإزالة بياناتك الشخصية بنجاح",
+                    type = AppToastType.SUCCESS
+                )
+                viewModel.resetDeleteAccountState()
+                navController.navigate(Screen.Onboarding) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+
         incomingCallPayload?.let { incoming ->
             val matchedUser = allUsers.find { it.id == incoming.senderId }
             val matchedContact = allContacts.find { it.id == incoming.senderId }
@@ -2006,6 +2021,7 @@ fun MainAppNavigation(viewModel: MainViewModel) {
                 currentUserName = currentUser?.name.orEmpty(),
                 incomingCallId = incoming.callId,
                 incomingOfferSdp = incoming.sdp,
+                autoAcceptIncoming = autoAcceptIncomingCall,
                 signalingManager = activeSignalingManager,
                 onBudgetExceeded = { msg ->
                     toastController.showToast(message = msg, type = AppToastType.ERROR)

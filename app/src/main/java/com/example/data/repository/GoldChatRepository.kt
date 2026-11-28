@@ -215,6 +215,10 @@ class GoldChatRepository(context: Context) {
         db.userDao().clearUsers()
     }
 
+    suspend fun clearAllLocalData() = withContext(Dispatchers.IO) {
+        db.clearAllTables()
+    }
+
     suspend fun createChat(contact: ContactEntity): ChatEntity = withContext(Dispatchers.IO) {
         val existing = db.chatDao().getAllChats().first().find { it.contactId == contact.id }
         if (existing != null) return@withContext existing

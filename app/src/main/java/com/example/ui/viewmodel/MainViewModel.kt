@@ -22,6 +22,19 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+sealed class DeleteAccountUiState {
+    object Idle : DeleteAccountUiState()
+    object RequestingOtp : DeleteAccountUiState()
+    data class AwaitingOtp(
+        val challengeId: String,
+        val maskedPhone: String,
+        val isSubmitting: Boolean = false,
+        val errorMessage: String? = null
+    ) : DeleteAccountUiState()
+    data class Error(val message: String) : DeleteAccountUiState()
+    object Deleted : DeleteAccountUiState()
+}
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     val repository = GoldChatRepository(application)
 
@@ -44,6 +57,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _incomingCallPayload = MutableStateFlow<com.example.util.SignalingPayload?>(null)
     val incomingCallPayload: StateFlow<com.example.util.SignalingPayload?> = _incomingCallPayload.asStateFlow()
+
+    private val _autoAcceptIncomingCall = MutableStateFlow(false)
+    val autoAcceptIncomingCall: StateFlow<Boolean> = _autoAcceptIncomingCall.asStateFlow()
+
+    private val _deleteAccountState = MutableStateFlow<DeleteAccountUiState>(DeleteAccountUiState.Idle)
+    val deleteAccountState: StateFlow<DeleteAccountUiState> = _deleteAccountState.asStateFlow()
 
     private val _incomingTransferSignal = MutableStateFlow(0L)
     val incomingTransferSignal: StateFlow<Long> = _incomingTransferSignal.asStateFlow()
@@ -68,7 +87,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             launch {
                 com.example.util.FcmNotificationManager.incomingCallPushEvents.collect { payload ->
+                    _autoAcceptIncomingCall.value = false
                     _incomingCallPayload.value = payload
+                }
+            }
+            launch {
+                com.example.util.FcmNotificationManager.callEndedPushEvents.collect { endedCallId ->
+                    val current = _incomingCallPayload.value
+                    if (current != null && (endedCallId.isBlank() || current.callId == endedCallId)) {
+                        _incomingCallPayload.value = null
+                        _autoAcceptIncomingCall.value = false
+                    }
                 }
             }
         }
@@ -1786,10 +1815,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             signalingCollectorJob = null
             _signalingManager.value?.disconnect()
             _signalingManager.value = null
+            com.example.service.CallForegroundService.activeSignalingManager = null
             return
         }
         val existing = _signalingManager.value
-        if (existing != null && existing.isConnected.value) return
+        if (existing != null && existing.isConnected.value) {
+            com.example.service.CallForegroundService.activeSignalingManager = existing
+            return
+        }
 
         existing?.disconnect()
         val devId = com.example.util.SecureCredentialVault.getOrCreateDeviceId(getApplication())
@@ -1799,10 +1832,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             coroutineScope = viewModelScope
         )
         _signalingManager.value = mgr
+        com.example.service.CallForegroundService.activeSignalingManager = mgr
         signalingCollectorJob?.cancel()
         signalingCollectorJob = viewModelScope.launch {
             launch {
                 mgr.incomingCalls.collect { payload ->
+                    _autoAcceptIncomingCall.value = false
                     _incomingCallPayload.value = payload
                 }
             }
@@ -1831,8 +1866,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mgr.connect()
     }
 
+    fun handleIncomingCallNotificationAction(
+        action: String,
+        callId: String,
+        callerId: String,
+        callerName: String,
+        isVideo: Boolean
+    ) {
+        if (action == NotificationHelper.CALL_ACTION_DECLINE) {
+            if (callId.isNotBlank() && callerId.isNotBlank()) {
+                _signalingManager.value?.rejectCall(callId, callerId, isVideo)
+            }
+            NotificationHelper.cancelIncomingCallNotification(getApplication(), callId)
+            com.example.util.FcmNotificationManager.notifyCallEnded(callId)
+            if (callId.isBlank() || _incomingCallPayload.value?.callId == callId) {
+                _incomingCallPayload.value = null
+                _autoAcceptIncomingCall.value = false
+            }
+            return
+        }
+        if (action == NotificationHelper.CALL_ACTION_ACCEPT) {
+            NotificationHelper.cancelIncomingCallNotification(getApplication(), callId)
+            val existing = _incomingCallPayload.value
+            val mergedPayload = if (existing != null && existing.callId == callId) {
+                existing
+            } else {
+                com.example.util.SignalingPayload(
+                    type = com.example.util.SignalingMessageType.CALL_OFFER,
+                    callId = callId,
+                    senderId = callerId,
+                    senderName = callerName,
+                    isVideo = isVideo
+                )
+            }
+            _autoAcceptIncomingCall.value = true
+            _incomingCallPayload.value = mergedPayload
+        }
+    }
+
     fun dismissIncomingCall() {
+        val currentId = _incomingCallPayload.value?.callId.orEmpty()
+        if (currentId.isNotBlank()) {
+            NotificationHelper.cancelIncomingCallNotification(getApplication(), currentId)
+            com.example.activity.IncomingCallActivity.dismissIfActive(currentId)
+        }
         _incomingCallPayload.value = null
+        _autoAcceptIncomingCall.value = false
     }
 
     fun logout() {
@@ -1841,7 +1920,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             signalingCollectorJob = null
             _signalingManager.value?.disconnect()
             _signalingManager.value = null
+            com.example.service.CallForegroundService.activeSignalingManager = null
             _incomingCallPayload.value = null
+            _autoAcceptIncomingCall.value = false
             com.example.data.repository.AuthRepository.logout(getApplication(), clearDeviceTrust = false)
             _isOfflineCacheMode.value = false
             _trustedDevices.value = emptyList()
@@ -2727,7 +2808,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         appName: String? = null,
         appLogoUri: String? = null,
         adminPin: String? = null,
-        geminiApiKey: String? = null,
         geminiModelName: String? = null,
         aiSystemPrompt: String? = null,
         notificationUrl: String? = null,
@@ -2747,7 +2827,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appName = if (!appName.isNullOrBlank()) appName else current.appName,
                 appLogoUri = appLogoUri ?: current.appLogoUri,
                 adminPin = if (!adminPin.isNullOrBlank()) adminPin else current.adminPin,
-                geminiApiKey = geminiApiKey ?: current.geminiApiKey,
+                geminiApiKey = null,
                 geminiModelName = if (!geminiModelName.isNullOrBlank()) geminiModelName else current.geminiModelName,
                 aiSystemPrompt = if (!aiSystemPrompt.isNullOrBlank()) aiSystemPrompt else current.aiSystemPrompt,
                 voiceSelection = if (!voiceSelection.isNullOrBlank()) voiceSelection else current.voiceSelection,
@@ -2765,10 +2845,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deleteCurrentUserAccount() {
-        viewModelScope.launch {
-            val user = currentUser.value ?: return@launch
-            repository.saveUser(user.copy(name = "حساب محذوف", phone = "00000000000", isVerified = false, subscriptionStatus = "EXPIRED"))
+    fun resetDeleteAccountState() {
+        _deleteAccountState.value = DeleteAccountUiState.Idle
+    }
+
+    fun startDeleteAccountOtpStep() {
+        viewModelScope.launch(safeExceptionHandler) {
+            val phone = currentUser.value?.phone?.trim().orEmpty()
+            if (phone.isBlank() || !com.example.util.RetrofitClient.hasActiveSession()) {
+                _deleteAccountState.value = DeleteAccountUiState.Error(
+                    "يجب تسجيل الدخول برقم هاتف نشط لإرسال رمز التحقق وحذف الحساب."
+                )
+                return@launch
+            }
+            _deleteAccountState.value = DeleteAccountUiState.RequestingOtp
+            when (
+                val otpOutcome = com.example.data.repository.AuthRepository.requestOtp(
+                    context = getApplication(),
+                    purpose = "SENSITIVE_ACTION",
+                    channel = "AUTO",
+                    phone = phone
+                )
+            ) {
+                is com.example.data.repository.OtpRequestOutcome.Sent -> {
+                    _deleteAccountState.value = DeleteAccountUiState.AwaitingOtp(
+                        challengeId = otpOutcome.data.challengeId,
+                        maskedPhone = otpOutcome.data.maskedPhone.ifBlank { phone }
+                    )
+                }
+                is com.example.data.repository.OtpRequestOutcome.Error -> {
+                    _deleteAccountState.value = DeleteAccountUiState.Error(otpOutcome.message)
+                }
+            }
+        }
+    }
+
+    fun confirmDeleteAccountWithOtp(code: String) {
+        val currentState = _deleteAccountState.value as? DeleteAccountUiState.AwaitingOtp ?: return
+        val cleanCode = code.trim()
+        if (cleanCode.length < 4) {
+            _deleteAccountState.value = currentState.copy(errorMessage = "أدخل رمز التحقق المكون من 6 أرقام.")
+            return
+        }
+        viewModelScope.launch(safeExceptionHandler) {
+            _deleteAccountState.value = currentState.copy(isSubmitting = true, errorMessage = null)
+            when (
+                val outcome = com.example.data.repository.AuthRepository.deleteMyAccount(
+                    context = getApplication(),
+                    stepUpChallengeId = currentState.challengeId,
+                    stepUpCode = cleanCode
+                )
+            ) {
+                is com.example.data.repository.DeleteAccountOutcome.Deleted -> {
+                    signalingCollectorJob?.cancel()
+                    signalingCollectorJob = null
+                    _signalingManager.value?.disconnect()
+                    _signalingManager.value = null
+                    com.example.service.CallForegroundService.activeSignalingManager = null
+                    _incomingCallPayload.value = null
+                    _autoAcceptIncomingCall.value = false
+                    _isOfflineCacheMode.value = false
+                    _trustedDevices.value = emptyList()
+                    repository.clearAllLocalData()
+                    _deleteAccountState.value = DeleteAccountUiState.Deleted
+                }
+                is com.example.data.repository.DeleteAccountOutcome.StepUpRequired -> {
+                    _deleteAccountState.value = currentState.copy(
+                        isSubmitting = false,
+                        errorMessage = outcome.message
+                    )
+                }
+                is com.example.data.repository.DeleteAccountOutcome.Error -> {
+                    if (outcome.code == "LAST_ADMIN_CANNOT_DELETE") {
+                        _deleteAccountState.value = DeleteAccountUiState.Error(outcome.message)
+                    } else {
+                        _deleteAccountState.value = currentState.copy(
+                            isSubmitting = false,
+                            errorMessage = outcome.message
+                        )
+                    }
+                }
+            }
         }
     }
 

@@ -21,6 +21,7 @@ const {
   revokeSession,
   initiateChangePhone,
   telegramGatewayWebhook,
+  deleteMyAccount,
 } = require('../controllers/otpController');
 const { protect } = require('../middlewares/authMiddleware');
 const { validate, schemas } = require('../middlewares/validateMiddleware');
@@ -62,6 +63,7 @@ router.post('/webhooks/telegram-gateway', telegramGatewayWebhook);
 // Protected Profile, Device Trust & Session Management Routes
 router.get('/me', protect, getMe);
 router.patch('/me', protect, validate(schemas.updateProfile), updateMyProfile);
+router.delete('/me', protect, validate(schemas.deleteAccount), deleteMyAccount);
 router.patch('/language', protect, validate(schemas.updateLanguage), updateLanguagePreference);
 router.get('/search', protect, validate(schemas.searchUsersQuery, 'query'), searchUsers);
 router.post('/logout', protect, logoutSession);

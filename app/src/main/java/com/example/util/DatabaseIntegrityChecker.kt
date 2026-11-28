@@ -44,7 +44,7 @@ enum class IntegrityStatus {
 object DatabaseIntegrityChecker {
 
     private const val TAG = "DbIntegrityChecker"
-    private const val EXPECTED_SCHEMA_VERSION = 27
+    private const val EXPECTED_SCHEMA_VERSION = 28
 
     private val _reports = MutableStateFlow<List<IntegrityReport>>(emptyList())
     val reports: StateFlow<List<IntegrityReport>> = _reports.asStateFlow()

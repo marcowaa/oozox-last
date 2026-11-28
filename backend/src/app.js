@@ -18,6 +18,7 @@ const taskRoutes = require('./routes/taskRoutes');
 const backupRoutes = require('./routes/backupRoutes');
 const transferRoutes = require('./routes/transferRoutes');
 const callRoutes = require('./routes/callRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const { groupRouter, projectRouter, chatRouter, contentRouter } = require('./routes/workspaceRoutes');
 const { protect } = require('./middlewares/authMiddleware');
 const { validate, schemas } = require('./middlewares/validateMiddleware');
@@ -25,8 +26,10 @@ const { syncFcmToken } = require('./controllers/otpController');
 const { sanitizeNoSql } = require('./middlewares/sanitizeMiddleware');
 const { i18nMiddleware } = require('./middlewares/i18nMiddleware');
 const { notFound, errorHandler } = require('./middlewares/errorMiddleware');
+const { structuredAccessLogger, getOptionalSentry } = require('./utils/monitoring');
 
 const app = express();
+getOptionalSentry();
 
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
 app.disable('x-powered-by');
@@ -88,8 +91,9 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Route-scoped 16MB parser for encrypted backups and cross-device media chunks, 1MB default elsewhere
+// Route-scoped 16MB parser for encrypted backups/transfer, 4MB for AI vision, 1MB default elsewhere
 const largeJsonParser = express.json({ limit: '16mb' });
+const aiJsonParser = express.json({ limit: '4mb' });
 const defaultJsonParser = express.json({
   limit: '1mb',
   verify: (req, _res, buf) => {
@@ -101,12 +105,17 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/backups') || req.path.startsWith('/api/transfer')) {
     return largeJsonParser(req, res, next);
   }
+  if (req.path.startsWith('/api/ai')) {
+    return aiJsonParser(req, res, next);
+  }
   return defaultJsonParser(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(sanitizeNoSql);
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV === 'production') {
+  app.use(structuredAccessLogger);
+} else if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
@@ -128,6 +137,7 @@ app.post('/api/devices/fcm-token', protect, validate(schemas.syncFcmToken), sync
 app.use('/api/backups', backupRoutes);
 app.use('/api/transfer', transferRoutes);
 app.use('/api/calls', callRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/groups', groupRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/chats', chatRouter);

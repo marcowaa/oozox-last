@@ -25,9 +25,10 @@ jobs:
       - name: 📥 Checkout Codebase
         uses: actions/checkout@v4
 
-      - name: 🔍 Validate Deployment Scripts & Docker Compose Config
+      - name: 🔍 Validate Deployment Scripts, Env Parity & Docker Compose Config
         run: |
-          bash -n scripts/deploy-prod.sh deploy/mongo/init-app-user.sh
+          bash -n scripts/deploy-prod.sh scripts/check-env.sh deploy/mongo/init-app-user.sh
+          bash scripts/check-env.sh
           cp .env.production.example .env.production
           docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
           rm -f .env.production
@@ -70,8 +71,8 @@ jobs:
           docker build -t oozox-signaling:ci ./backend-signaling
           docker build -t oozox-web:ci -f deploy/web/Dockerfile \
             --build-arg VITE_API_BASE_URL=https://api.oozox.com \
-            --build-arg WEB_PORTAL_DIR=artifacts/mockup-sandbox \
-            --build-arg WEB_WORKSPACE_FILTER=@workspace/mockup-sandbox .
+            --build-arg WEB_PORTAL_DIR=web-portal \
+            --build-arg WEB_WORKSPACE_FILTER=@oozox/web-portal .
 
   test_and_build:
     name: 🧪 Test & Build Release Artifacts (AAB & APK)

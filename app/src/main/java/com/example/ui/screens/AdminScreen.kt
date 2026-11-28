@@ -76,7 +76,7 @@ fun AdminScreen(
     onRejectTrader: (String) -> Unit,
     onSaveConfig: (
         appName: String?, appLogoUri: String?, adminPin: String?,
-        geminiKey: String?, geminiModel: String?, aiPrompt: String?,
+        geminiModel: String?, aiPrompt: String?,
         notificationUrl: String?, notificationKey: String?, newsUrl: String?,
         goldUrl: String?, goldKey: String?, intervalSec: Int?, encryption: Boolean,
         voiceSelection: String?, personaPrompt: String?, biometricAuthEnabled: Boolean?
@@ -107,8 +107,7 @@ fun AdminScreen(
     var appLogoUri by remember(adminConfig) { mutableStateOf(adminConfig?.appLogoUri ?: "") }
     var adminPin by remember(adminConfig) { mutableStateOf(adminConfig?.adminPin ?: "") }
 
-    // AI & Gemini Settings States
-    var geminiApiKey by remember(adminConfig) { mutableStateOf(adminConfig?.geminiApiKey ?: "") }
+    // AI & Gemini Settings States (API keys are strictly managed server-side)
     var geminiModelName by remember(adminConfig) { mutableStateOf(adminConfig?.geminiModelName ?: "gemini-3.5-flash") }
     var aiSystemPrompt by remember(adminConfig) { mutableStateOf(adminConfig?.aiSystemPrompt ?: "أنت المحاسب المالي والمساعد الذكي لمنصة OOZOX (oozox.com).") }
     var voiceSelection by remember(adminConfig) { mutableStateOf(adminConfig?.voiceSelection ?: "ar-EG-Standard-A") }
@@ -166,14 +165,14 @@ fun AdminScreen(
 
     LaunchedEffect(
         appName, appLogoUri, adminPin,
-        geminiApiKey, geminiModelName, aiSystemPrompt,
+        geminiModelName, aiSystemPrompt,
         notificationUrl, notificationKey, newsUrl,
         goldUrl, goldKey, goldRefreshInterval, encryptionEnabled,
         voiceSelection, personaPrompt, biometricAuthEnabled
     ) {
         delay(3000L) // Auto-save / Draft mechanism after 3 seconds of typing
         onSaveConfig(
-            appName, appLogoUri, adminPin, geminiApiKey, geminiModelName, aiSystemPrompt,
+            appName, appLogoUri, adminPin, geminiModelName, aiSystemPrompt,
             notificationUrl, notificationKey, newsUrl, goldUrl, goldKey, goldRefreshInterval, encryptionEnabled,
             voiceSelection, personaPrompt, biometricAuthEnabled
         )
@@ -812,8 +811,6 @@ fun AdminScreen(
                             onAppLogoUriChange = { appLogoUri = it },
                             adminPin = adminPin,
                             onAdminPinChange = { adminPin = it },
-                            geminiApiKey = geminiApiKey,
-                            onGeminiApiKeyChange = { geminiApiKey = it },
                             geminiModelName = geminiModelName,
                             onGeminiModelNameChange = { geminiModelName = it },
                             aiSystemPrompt = aiSystemPrompt,
@@ -849,7 +846,7 @@ fun AdminScreen(
                             onSaveConfig = {
                                 onSaveConfig(
                                     appName, appLogoUri, adminPin,
-                                    geminiApiKey, geminiModelName, aiSystemPrompt,
+                                    geminiModelName, aiSystemPrompt,
                                     notificationUrl, notificationKey, newsUrl,
                                     goldUrl, goldKey, goldRefreshInterval, encryptionEnabled,
                                     voiceSelection, personaPrompt, biometricAuthEnabled
@@ -1754,8 +1751,6 @@ private fun SettingsAndPricesTab(
     onAppLogoUriChange: (String) -> Unit,
     adminPin: String,
     onAdminPinChange: (String) -> Unit,
-    geminiApiKey: String,
-    onGeminiApiKeyChange: (String) -> Unit,
     geminiModelName: String,
     onGeminiModelNameChange: (String) -> Unit,
     aiSystemPrompt: String,
@@ -1880,17 +1875,7 @@ private fun SettingsAndPricesTab(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("إعداد مفاتيح الربط وشخصية المساعد المالي:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-
-                    OutlinedTextField(
-                        value = geminiApiKey,
-                        onValueChange = onGeminiApiKeyChange,
-                        label = { Text("مفتاح الخدمة (أدخله لتفعيل التحليل المالي المباشر)") },
-                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null, tint = GoldPrimary) },
-                        singleLine = true,
-                        placeholder = { Text("مفتاح الوصول...") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Text("إعداد نموذج وشخصية المساعد المالي (يُدار مفتاح الخدمة بأمان على الخادم):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
 
                     Text("اختر محرك التحليل المالي:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Row(
@@ -1933,7 +1918,7 @@ private fun SettingsAndPricesTab(
                                 aiTestResult = null
                                 coroutineScope.launch {
                                     val testConfig = AdminConfigEntity(
-                                        geminiApiKey = geminiApiKey,
+                                        geminiApiKey = null,
                                         geminiModelName = geminiModelName,
                                         aiSystemPrompt = aiSystemPrompt,
                                         voiceSelection = voiceSelection,

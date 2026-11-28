@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.util.ApiAuthData
+import com.example.util.ApiDeleteAccountRequest
 import com.example.util.ApiDeviceTrustDto
 import com.example.util.ApiFcmTokenBody
 import com.example.util.ApiLogoutBody
@@ -81,6 +82,12 @@ sealed class OtpVerifyOutcome {
         val retryAfterSeconds: Int? = null,
         val remainingAttempts: Int? = null
     ) : OtpVerifyOutcome()
+}
+
+sealed class DeleteAccountOutcome {
+    data class Deleted(val message: String) : DeleteAccountOutcome()
+    data class StepUpRequired(val maskedPhone: String?, val message: String) : DeleteAccountOutcome()
+    data class Error(val code: String, val message: String) : DeleteAccountOutcome()
 }
 
 data class ParsedApiError(
@@ -522,6 +529,59 @@ object AuthRepository {
             Result.success(resp.body()?.message ?: "تم إلغاء وثوق الجهاز بنجاح")
         } catch (e: Exception) {
             Result.failure(IllegalStateException(AppErrorMapper.fromThrowable(e)))
+        }
+    }
+
+    suspend fun deleteMyAccount(
+        context: Context,
+        stepUpChallengeId: String? = null,
+        stepUpCode: String? = null
+    ): DeleteAccountOutcome = withContext(Dispatchers.IO) {
+        try {
+            DeviceTrustManager.syncRetrofitDeviceHeaders(context)
+            val resp = RetrofitClient.apiService().deleteMyAccount(
+                ApiDeleteAccountRequest(
+                    stepUpChallengeId = stepUpChallengeId?.takeIf { it.isNotBlank() },
+                    stepUpCode = stepUpCode?.trim()?.takeIf { it.isNotBlank() }
+                )
+            )
+            if (!resp.isSuccessful) {
+                val rawErr = resp.errorBody()?.string()
+                val err = parseErrorBody(
+                    rawBody = rawErr,
+                    fallbackAr = "تعذر حذف الحساب، حاول مجدداً",
+                    fallbackEn = "Couldn't delete account. Please try again",
+                    statusCode = resp.code()
+                )
+                if (resp.code() == 403 && (err.requiresStepUpOtp || err.code == "STEP_UP_OTP_REQUIRED")) {
+                    return@withContext DeleteAccountOutcome.StepUpRequired(
+                        maskedPhone = err.maskedPhone,
+                        message = err.message
+                    )
+                }
+                if (resp.code() == 409 || err.code == "LAST_ADMIN_CANNOT_DELETE") {
+                    return@withContext DeleteAccountOutcome.Error(
+                        code = "LAST_ADMIN_CANNOT_DELETE",
+                        message = "لا يمكن حذف حساب المسؤول الوحيد المتبقي في المنصة. قم بترقية مسؤول آخر أولاً."
+                    )
+                }
+                return@withContext DeleteAccountOutcome.Error(err.code, err.message)
+            }
+            SecureCredentialVault.clearAll(context)
+            RetrofitClient.setAuthToken(null)
+            DeleteAccountOutcome.Deleted(
+                resp.body()?.message?.takeIf { it.isNotBlank() }
+                    ?: "تم حذف حسابك وإزالة بياناتك الشخصية بنجاح"
+            )
+        } catch (e: Exception) {
+            DeleteAccountOutcome.Error(
+                "NETWORK_ERROR",
+                AppErrorMapper.fromThrowable(
+                    e,
+                    fallbackAr = "تعذر الاتصال بالخادم، تحقق من الإنترنت",
+                    fallbackEn = "No connection. Check your internet"
+                )
+            )
         }
     }
 

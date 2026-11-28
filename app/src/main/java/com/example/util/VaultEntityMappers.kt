@@ -863,7 +863,6 @@ internal object VaultEntityMappers {
         put("appName", a.appName)
         putOptValue("appLogoUri", a.appLogoUri)
         put("adminPin", a.adminPin)
-        putOptValue("geminiApiKey", a.geminiApiKey)
         put("geminiModelName", a.geminiModelName)
         put("aiSystemPrompt", a.aiSystemPrompt)
         put("voiceSelection", a.voiceSelection)
@@ -887,7 +886,7 @@ internal object VaultEntityMappers {
         appName = j.optString("appName", "الصاغة - تداول الذهب والفضة"),
         appLogoUri = rewrite(j.strOrNull("appLogoUri"), map),
         adminPin = j.optString("adminPin", ""),
-        geminiApiKey = j.strOrNull("geminiApiKey"),
+        geminiApiKey = null,
         geminiModelName = j.optString("geminiModelName", "gemini-3.5-flash"),
         aiSystemPrompt = j.optString("aiSystemPrompt", "أنت المحاسب الذكي لمنصة أوزوكس."),
         voiceSelection = j.optString("voiceSelection", "ar-EG-Standard-A"),

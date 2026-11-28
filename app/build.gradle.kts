@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,25 +10,19 @@ plugins {
 
 android {
     namespace = "com.example"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.aistudio.goldchat.app.mirhxk"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        getByName("debug") {
-            storeFile = file("${rootDir}/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
         create("release") {
             val keystorePath = System.getenv("ANDROID_KEYSTORE_FILE") ?: "${rootDir}/release.keystore"
             val keystoreFile = file(keystorePath)
@@ -35,11 +31,6 @@ android {
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
                 keyAlias = System.getenv("KEY_ALIAS") ?: "releasekey"
                 keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
-            } else {
-                storeFile = file("${rootDir}/debug.keystore")
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
             }
         }
     }
@@ -55,7 +46,7 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
         }
     }
     compileOptions {
@@ -76,6 +67,14 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 dependencies {
@@ -100,6 +99,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.coil.compose)
+    implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization.converter)
@@ -117,6 +117,7 @@ dependencies {
     implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.room.testing)
     testImplementation("org.robolectric:robolectric:4.11.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.test.ext:junit:1.1.5")
@@ -130,16 +131,25 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 }
 
-tasks.matching { it.name in listOf("assembleRelease", "bundleRelease", "packageRelease") }.configureEach {
-    doFirst {
-        val keystorePath = System.getenv("ANDROID_KEYSTORE_FILE") ?: "${rootDir}/release.keystore"
-        val keystoreFile = file(keystorePath)
-        if (!keystoreFile.exists()) {
-            throw org.gradle.api.GradleException(
-                "Release build blocked: release keystore not found at '$keystorePath'. " +
-                    "Configure ANDROID_KEYSTORE_FILE or provide release.keystore (never sign release with debug.keystore)."
-            )
-        }
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+
+if (isReleaseBuildRequested) {
+    val gsFile = file("google-services.json")
+    if (!gsFile.exists()) {
+        throw org.gradle.api.GradleException(
+            "Release build blocked: missing app/google-services.json for Firebase/FCM. " +
+                "Add real google-services.json before building release artifacts (debug builds work without it)."
+        )
+    }
+    val keystorePath = System.getenv("ANDROID_KEYSTORE_FILE") ?: "${rootDir}/release.keystore"
+    val keystoreFile = file(keystorePath)
+    if (!keystoreFile.exists()) {
+        throw org.gradle.api.GradleException(
+            "Release build blocked: release keystore not found at '$keystorePath'. " +
+                "Configure ANDROID_KEYSTORE_FILE or provide release.keystore (never sign release with debug.keystore)."
+        )
     }
 }
 

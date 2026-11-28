@@ -8,6 +8,9 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * OOZOX Application instance configuring global Coil ImageLoader with
@@ -28,11 +31,27 @@ class OozoxApplication : Application(), ImageLoaderFactory {
         )
         // Initialize Notification Channels & FCM Token Manager
         com.example.util.FcmNotificationManager.initialize(this)
+        scrubLegacyClientGeminiKeyOnce()
         try {
             scheduleGeofenceMonitoring()
             com.example.util.OfflineSyncManager.schedulePeriodicSync(this)
         } catch (e: Throwable) {
             android.util.Log.w("OozoxApp", "WorkManager init skipped or failed: ${e.message}")
+        }
+    }
+
+    private fun scrubLegacyClientGeminiKeyOnce() {
+        val prefs = getSharedPreferences("oozox_security_migrations", MODE_PRIVATE)
+        if (prefs.getBoolean("cleared_legacy_gemini_key_v1", false)) return
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                com.example.data.local.AppDatabase.getInstance(applicationContext)
+                    .adminConfigDao()
+                    .clearLegacyGeminiApiKey()
+                prefs.edit().putBoolean("cleared_legacy_gemini_key_v1", true).apply()
+            } catch (e: Throwable) {
+                android.util.Log.w("OozoxApp", "Legacy Gemini key scrub skipped: ${e.message}")
+            }
         }
     }
 

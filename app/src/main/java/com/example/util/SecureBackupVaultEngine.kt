@@ -320,7 +320,7 @@ object SecureBackupVaultEngine {
         val transactions = db.transactionDao().getAllTransactionsSync()
         val purchases = db.goldPurchaseDao().getAllPurchasesSync()
         val traderRequests = db.traderRequestDao().getAllTraderRequestsSync()
-        val adminConfig = db.adminConfigDao().getConfigSync()?.let { listOf(it) } ?: emptyList()
+        val adminConfig = db.adminConfigDao().getConfigSync()?.let { listOf(it.copy(geminiApiKey = null)) } ?: emptyList()
         val invoices = db.invoiceDao().getAllInvoicesSync()
         val projectTasks = db.projectTaskDao().getAllProjectTasksSync()
         val shiftHandovers = db.shiftHandoverDao().getAllShiftHandoversSync()
@@ -1036,7 +1036,7 @@ object SecureBackupVaultEngine {
                 if (snapshot.transactions.isNotEmpty()) { db.transactionDao().insertTransactions(snapshot.transactions); restoredCount += snapshot.transactions.size }
                 if (snapshot.purchases.isNotEmpty()) { db.goldPurchaseDao().insertPurchases(snapshot.purchases); restoredCount += snapshot.purchases.size }
                 if (snapshot.traderRequests.isNotEmpty()) { db.traderRequestDao().insertTraderRequests(snapshot.traderRequests); restoredCount += snapshot.traderRequests.size }
-                snapshot.adminConfigs.firstOrNull()?.let { db.adminConfigDao().saveConfig(it); restoredCount++ }
+                snapshot.adminConfigs.firstOrNull()?.let { db.adminConfigDao().saveConfig(it.copy(geminiApiKey = null)); restoredCount++ }
                 if (snapshot.invoices.isNotEmpty()) { db.invoiceDao().insertInvoices(snapshot.invoices); restoredCount += snapshot.invoices.size }
                 if (snapshot.projectTasks.isNotEmpty()) { db.projectTaskDao().insertTasks(snapshot.projectTasks); restoredCount += snapshot.projectTasks.size }
                 if (snapshot.shiftHandovers.isNotEmpty()) { db.shiftHandoverDao().insertShiftHandovers(snapshot.shiftHandovers); restoredCount += snapshot.shiftHandovers.size }

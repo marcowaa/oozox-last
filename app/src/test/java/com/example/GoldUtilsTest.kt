@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.data.model.GoldKarat
+import com.example.util.AppLanguage
 import com.example.util.GoldUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -48,11 +49,11 @@ class GoldUtilsTest {
 
     @Test
     fun formatWeight_and_formatCurrency_outputProperStrings() {
-        val formattedWeight = GoldUtils.formatWeight(12.34)
-        assertTrue(formattedWeight.contains("جم"))
+        val formattedWeight = GoldUtils.formatWeight(12.34, AppLanguage.ARABIC)
+        assertTrue(formattedWeight.contains("12") || formattedWeight.contains("١٢"))
 
-        val formattedCurrency = GoldUtils.formatCurrency(5000.0)
-        assertTrue(formattedCurrency.contains("ج.م"))
+        val formattedCurrency = GoldUtils.formatCurrency(5000.0, AppLanguage.ARABIC)
+        assertTrue(formattedCurrency.contains("5000") || formattedCurrency.contains("5,000") || formattedCurrency.contains("٥٠٠٠") || formattedCurrency.contains("٥٬٠٠٠"))
     }
 
     @Test

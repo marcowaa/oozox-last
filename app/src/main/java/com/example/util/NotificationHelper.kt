@@ -15,6 +15,7 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -36,11 +37,19 @@ object NotificationHelper {
     const val CHANNEL_SYSTEM = "oozox_system_channel"
     const val CHANNEL_FINANCIAL_ALERTS = "oozox_financial_alerts_channel"
     const val CHANNEL_GEOFENCING = "oozox_geofencing_channel"
+    const val CHANNEL_INCOMING_CALLS = "oozox_incoming_calls_channel"
 
     const val EXTRA_DESTINATION = "destination"
     const val EXTRA_CHAT_ID = "chat_id"
     const val EXTRA_PROJECT_ID = "project_id"
     const val EXTRA_TRANSACTION_ID = "transaction_id"
+    const val EXTRA_CALL_ID = "call_id"
+    const val EXTRA_CALLER_ID = "caller_id"
+    const val EXTRA_CALLER_NAME = "caller_name"
+    const val EXTRA_IS_VIDEO = "is_video"
+    const val EXTRA_INCOMING_CALL_ACTION = "incoming_call_action"
+    const val CALL_ACTION_ACCEPT = "ACCEPT"
+    const val CALL_ACTION_DECLINE = "DECLINE"
     const val KEY_TEXT_REPLY = "key_text_reply"
 
     const val DESTINATION_CHAT = "chat_detail"
@@ -143,6 +152,27 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
+            val incomingCallsChannel = NotificationChannel(
+                CHANNEL_INCOMING_CALLS,
+                "المكالمات الواردة",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "تنبيهات الرنين الفوري للمكالمات الصوتية والمرئية الواردة"
+                enableLights(true)
+                lightColor = Color.parseColor("#10B981")
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 600, 450, 600, 900)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setBypassDnd(true)
+                setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+            }
+
             notificationManager.createNotificationChannels(
                 listOf(
                     messagesChannel,
@@ -151,7 +181,8 @@ object NotificationHelper {
                     priceAlertsChannel,
                     systemChannel,
                     financialChannel,
-                    geofencingChannel
+                    geofencingChannel,
+                    incomingCallsChannel
                 )
             )
         }
@@ -1224,6 +1255,107 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .build()
         notifySafe(context, 2005, notification)
+    }
+
+    fun incomingCallNotificationId(callId: String): Int {
+        return 4500 + ((callId.ifBlank { "default" }.hashCode()) and 0x0FFF)
+    }
+
+    fun showIncomingCallNotification(
+        context: Context,
+        callId: String,
+        callerId: String,
+        callerName: String,
+        isVideo: Boolean
+    ) {
+        createNotificationChannels(context)
+        val safeCallerName = callerName.trim().ifBlank { "مستخدم OOZOX" }
+        val notifId = incomingCallNotificationId(callId)
+
+        val fullScreenIntent = Intent(context, com.example.activity.IncomingCallActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_NO_USER_ACTION
+            putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_CALLER_ID, callerId)
+            putExtra(EXTRA_CALLER_NAME, safeCallerName)
+            putExtra(EXTRA_IS_VIDEO, isVideo)
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            context,
+            notifId,
+            fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val answerIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_INCOMING_CALL_ACTION, CALL_ACTION_ACCEPT)
+            putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_CALLER_ID, callerId)
+            putExtra(EXTRA_CALLER_NAME, safeCallerName)
+            putExtra(EXTRA_IS_VIDEO, isVideo)
+        }
+        val answerPendingIntent = PendingIntent.getActivity(
+            context,
+            notifId + 10000,
+            answerIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val declineIntent = Intent(context, com.example.activity.IncomingCallActionReceiver::class.java).apply {
+            putExtra(EXTRA_INCOMING_CALL_ACTION, CALL_ACTION_DECLINE)
+            putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_CALLER_ID, callerId)
+            putExtra(EXTRA_CALLER_NAME, safeCallerName)
+            putExtra(EXTRA_IS_VIDEO, isVideo)
+        }
+        val declinePendingIntent = PendingIntent.getBroadcast(
+            context,
+            notifId + 20000,
+            declineIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val callerPerson = Person.Builder()
+            .setName(safeCallerName)
+            .setKey(callerId.ifBlank { safeCallerName })
+            .setImportant(true)
+            .build()
+
+        val callStyle = NotificationCompat.CallStyle.forIncomingCall(
+            callerPerson,
+            declinePendingIntent,
+            answerPendingIntent
+        ).setIsVideo(isVideo)
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_INCOMING_CALLS)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(if (isVideo) "مكالمة فيديو واردة • $safeCallerName" else "مكالمة صوتية واردة • $safeCallerName")
+            .setContentText("اتصال مشفر P2P عبر OOZOX")
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setColor(Color.parseColor("#10B981"))
+            .setStyle(callStyle)
+            .addPerson(callerPerson)
+            .setContentIntent(fullScreenPendingIntent)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setTimeoutAfter(45_000L)
+            .build()
+
+        notifySafe(context, notifId, notification)
+    }
+
+    fun cancelIncomingCallNotification(context: Context, callId: String) {
+        try {
+            NotificationManagerCompat.from(context).cancel(incomingCallNotificationId(callId))
+        } catch (_: Exception) {
+        }
     }
 
     private fun notifySafe(context: Context, id: Int, notification: android.app.Notification) {

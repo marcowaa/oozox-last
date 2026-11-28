@@ -332,7 +332,7 @@ describe('Phone-Only OTP Auth, Provider Fallback, Email Preservation, Admin Gate
     expect(secondRun.updatedCount).toBe(0);
   });
 
-  it('8. Cancels active OTP challenge on Back step, rejects verify with OTP_CANCELLED, and allows switching channel cleanly', async () => {
+  it('8. Cancels active OTP challenge on Back step, enforces >=10s switch gap, and counts switch in daily & cost ledgers', async () => {
     const firstReq = await request(app).post('/api/auth/otp/request').send({
       phone: '+201077778888',
       channel: 'TELEGRAM',
@@ -341,7 +341,7 @@ describe('Phone-Only OTP Auth, Provider Fallback, Email Preservation, Admin Gate
     expect(firstReq.statusCode).toBe(200);
     const challengeId1 = firstReq.body.data.challengeId;
 
-    // Simulate 3s elapsed so burst guard passes while still well inside 15s-60s cooldown window
+    // 3.5s elapsed -> inside 10s minimum switch window
     await OtpAbuseLedger.updateMany({}, { $set: { lastSentAt: new Date(Date.now() - 3500) } });
 
     const cancelRes = await request(app).post('/api/auth/otp/cancel').send({
@@ -362,7 +362,20 @@ describe('Phone-Only OTP Auth, Provider Fallback, Email Preservation, Admin Gate
     expect(verifyCancelled.statusCode).toBe(400);
     expect(verifyCancelled.body.code).toBe('OTP_CANCELLED');
 
-    // User can now go back and select another channel (WHATSAPP) immediately after cancelling
+    // Immediate switch at 3.5s (< 10s) MUST be blocked with 429 OTP_COOLDOWN
+    const tooEarlySwitch = await request(app).post('/api/auth/otp/request').send({
+      phone: '+201077778888',
+      channel: 'WHATSAPP',
+      deviceId: 'dev_cancel_1',
+    });
+    expect(tooEarlySwitch.statusCode).toBe(429);
+    expect(tooEarlySwitch.body.code).toBe('OTP_COOLDOWN');
+    expect(tooEarlySwitch.body.retryAfterSeconds).toBeGreaterThanOrEqual(5);
+
+    // Advance past 10s gap (still well inside 60s full cooldown) -> switch allowed and counted in ledgers
+    process.env.OTP_RESEND_COOLDOWN_SECONDS = '60';
+    await OtpAbuseLedger.updateMany({ kind: 'PHONE_DAY' }, { $set: { lastSentAt: new Date(Date.now() - 10500) } });
+
     const secondReq = await request(app).post('/api/auth/otp/request').send({
       phone: '+201077778888',
       channel: 'WHATSAPP',
@@ -370,6 +383,12 @@ describe('Phone-Only OTP Auth, Provider Fallback, Email Preservation, Admin Gate
     });
     expect(secondReq.statusCode).toBe(200);
     expect(secondReq.body.data.activeChannel).toBe('WHATSAPP');
+
+    const dayLedger = await OtpAbuseLedger.findOne({ kind: 'PHONE_DAY', key: /\+201077778888/ });
+    const monthLedger = await OtpAbuseLedger.findOne({ kind: 'OTP_MONTH' });
+    expect(dayLedger.sendCount).toBe(2);
+    expect(monthLedger.sendCount).toBe(2);
+    expect(monthLedger.estimatedCostUsd).toBeGreaterThan(0.01);
 
     const okVerify = await request(app).post('/api/auth/otp/verify').send({
       challengeId: secondReq.body.data.challengeId,

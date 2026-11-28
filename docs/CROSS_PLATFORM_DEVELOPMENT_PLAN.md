@@ -14,8 +14,8 @@
    * يعتمد على ميزات نظام أندرويد (Material 3، Room DB، Android Biometric Authentication، WorkManager، Foreground Services للمكالمات).
 2. **الواجهة الخلفية (Backend Services):**
    * خادم Node.js / Express وخادم إشارات WebRTC Signaling داخل مجلدات `/backend` و `/backend-signaling`.
-3. **وحدات الـ Mobile Client المشتركة (React Native / Flutter Modules):**
-   * شاشات وتكاملات مشتركة متواجدة داخل مجلدات `/mobile-client` و `/mobile_app`.
+3. **نماذج العملاء القديمة المؤرشفة (Legacy Archived Prototypes):**
+   * تم أرشفة نماذج `/mobile-client` (React Native) و`/mobile_app` (Flutter) غير المستخدمة في `archive/legacy-mobile-clients.tar.gz` وإزالتها من الشجرة النشطة لصالح تطبيق Android الأصلي (`/app`).
 
 لضمان تشغيل التطبيق بأعلى كفاءة وسلاسة على **كلا النظامين (Android و iOS)** مع الحفاظ على الهوية البصرية ونفس الأداء العالي، يوضح هذا الدليل المسارات الفنية، متطلبات المطور، إعدادات Xcode، وخطوات التشغيل خطوة بخطوة.
 

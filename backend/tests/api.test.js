@@ -39,11 +39,20 @@ afterAll(async () => {
 });
 
 describe('1. Health Check Endpoint', () => {
-  it('GET /api/health should return HEALTHY status', async () => {
+  it('GET /api/health should return minimal HEALTHY status without internal leaks', async () => {
     const res = await request(app).get('/api/health');
     expect(res.statusCode).toEqual(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.status).toBe('HEALTHY');
+    expect(res.body.data).toEqual({ status: 'HEALTHY' });
+    expect(res.body.data.database).toBeUndefined();
+    expect(res.body.data.system).toBeUndefined();
+  });
+
+  it('GET /api/health/details rejects forwarded external unauthenticated callers and non-admins', async () => {
+    const externalUnauth = await request(app)
+      .get('/api/health/details')
+      .set('X-Forwarded-For', '203.0.113.10');
+    expect(externalUnauth.statusCode).toEqual(401);
   });
 });
 

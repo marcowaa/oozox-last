@@ -31,6 +31,9 @@ object FcmNotificationManager {
     private val _incomingCallPushEvents = MutableSharedFlow<SignalingPayload>(extraBufferCapacity = 8)
     val incomingCallPushEvents = _incomingCallPushEvents.asSharedFlow()
 
+    private val _callEndedPushEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val callEndedPushEvents = _callEndedPushEvents.asSharedFlow()
+
     private var isFirebaseReady = false
 
     fun initialize(context: Context) {
@@ -102,6 +105,12 @@ object FcmNotificationManager {
 
     fun notifyIncomingCall(payload: SignalingPayload) {
         _incomingCallPushEvents.tryEmit(payload)
+    }
+
+    fun notifyCallEnded(callId: String) {
+        if (callId.isNotBlank()) {
+            _callEndedPushEvents.tryEmit(callId)
+        }
     }
 
     fun subscribeToTopic(topic: String) {

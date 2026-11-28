@@ -133,15 +133,16 @@ async function requestOtpChallenge({
       const latestChallenge = await OtpChallenge.findOne({ phoneE164, purpose })
         .sort({ createdAt: -1 })
         .select('status activeChannel');
-      const isChannelSwitchAfterCancel =
+      const isCancelledChannelSwitch =
         latestChallenge &&
         latestChallenge.status === 'CANCELLED' &&
         normalizedPref !== 'AUTO' &&
-        normalizedPref !== latestChallenge.activeChannel &&
-        elapsedSec >= 2;
+        normalizedPref !== latestChallenge.activeChannel;
+      const isChannelSwitchAfterCancel = isCancelledChannelSwitch && elapsedSec >= 10;
 
       if (!isChannelSwitchAfterCancel) {
-        const waitSec = Math.ceil(policy.resendCooldownSeconds - elapsedSec);
+        const minRequiredSec = isCancelledChannelSwitch ? 10 : policy.resendCooldownSeconds;
+        const waitSec = Math.max(1, Math.ceil(minRequiredSec - elapsedSec));
         const err = new Error(pickMsg(lang, `انتظر ${waitSec} ثانية قبل طلب رمز جديد`, `Wait ${waitSec}s before requesting another code`));
         err.statusCode = 429;
         err.code = 'OTP_COOLDOWN';

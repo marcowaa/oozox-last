@@ -55,23 +55,23 @@ const generatePreAuthToken = (userId, extra = {}) => {
   );
 };
 
-const generateEmployeeToken = (employee) => {
-  return jwt.sign(
-    {
-      id: employee._id,
-      sub: String(employee._id),
-      role: 'EMPLOYEE',
-      scope: 'EMPLOYEE',
-      tokenType: 'EMPLOYEE',
-      businessId: String(employee.business),
-      ownerId: String(employee.owner),
-    },
-    getJwtSecret(),
-    {
-      algorithm: 'HS256',
-      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-    }
-  );
+const generateEmployeeToken = (employee, sessionId = null) => {
+  const payload = {
+    id: employee._id,
+    sub: String(employee._id),
+    role: 'EMPLOYEE',
+    scope: 'EMPLOYEE',
+    tokenType: 'EMPLOYEE',
+    businessId: String(employee.business?._id || employee.business),
+    ownerId: String(employee.owner),
+  };
+  if (sessionId) {
+    payload.sid = String(sessionId);
+  }
+  return jwt.sign(payload, getJwtSecret(), {
+    algorithm: 'HS256',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  });
 };
 
 const verifyToken = (token) => {

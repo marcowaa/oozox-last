@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +40,7 @@ import com.example.data.model.UserEntity
 import com.example.ui.components.AppToastType
 import com.example.ui.components.LocalAppToast
 import com.example.ui.theme.*
+import com.example.ui.viewmodel.DeleteAccountUiState
 import com.example.util.AppLanguage
 import com.example.util.BiometricHelper
 import com.example.util.BiometricStatus
@@ -704,18 +707,68 @@ internal fun ProfileCameraPermissionRationaleDialog(
 
 @Composable
 internal fun ProfileDeleteAccountDialog(
-    onConfirmDelete: () -> Unit,
+    deleteState: DeleteAccountUiState,
+    onRequestOtp: () -> Unit,
+    onConfirmDeleteWithOtp: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var otpCode by remember { mutableStateOf("") }
+    val isBusy = deleteState is DeleteAccountUiState.RequestingOtp ||
+        (deleteState as? DeleteAccountUiState.AwaitingOtp)?.isSubmitting == true
+
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("تأكيد حذف الحساب", color = Color(0xFFE53935), fontWeight = FontWeight.Bold) },
-        text = {
+        onDismissRequest = { if (!isBusy) onDismiss() },
+        title = {
             Text(
-                "وفقاً لسياسة الخصوصية، إن الضغط على تأكيد الحذف سيقوم بإزالة بيانات حسابك وملفات التوثيق والاشتراكات نهائياً من النظام. هل أنت متأكد من المتابعة؟",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface
+                "حذف الحساب نهائياً",
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Bold
             )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (deleteState) {
+                    is DeleteAccountUiState.AwaitingOtp -> {
+                        Text(
+                            "أدخل رمز التحقق المرسل إلى ${deleteState.maskedPhone} لتأكيد حذف حسابك بشكل نهائي:",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        OutlinedTextField(
+                            value = otpCode,
+                            onValueChange = { next -> otpCode = next.filter { it.isDigit() }.take(8) },
+                            label = { Text("رمز التحقق (OTP)") },
+                            singleLine = true,
+                            enabled = !deleteState.isSubmitting,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_delete_otp_code")
+                        )
+                        if (!deleteState.errorMessage.isNullOrBlank()) {
+                            Text(
+                                text = deleteState.errorMessage,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    else -> {
+                        Text(
+                            "سيؤدي حذف الحساب إلى إنهاء جميع الجلسات والأجهزة الموثوقة، وإلغاء رموز الإشعارات والنسخ السحابية، وحذف بياناتك الشخصية نهائياً. أما الفواتير أو المحادثات المشتركة مع أطراف أخرى فسيتم إخفاء هويتك فيها فقط وفقاً لسياسة الخصوصية.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (deleteState is DeleteAccountUiState.Error) {
+                            Text(
+                                text = deleteState.message,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
             Row(
@@ -724,26 +777,67 @@ internal fun ProfileDeleteAccountDialog(
             ) {
                 OutlinedButton(
                     onClick = onDismiss,
+                    enabled = !isBusy,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
+                        .testTag("btn_cancel_delete_account")
                 ) {
                     Text("إلغاء")
                 }
 
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onConfirmDelete()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                ) {
-                    Text("حذف الحساب", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+                when (deleteState) {
+                    is DeleteAccountUiState.AwaitingOtp -> {
+                        Button(
+                            onClick = { onConfirmDeleteWithOtp(otpCode) },
+                            enabled = !deleteState.isSubmitting && otpCode.trim().length >= 4,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_confirm_delete_account")
+                        ) {
+                            if (deleteState.isSubmitting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onError
+                                )
+                            } else {
+                                Text("تأكيد الحذف", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    else -> {
+                        Button(
+                            onClick = onRequestOtp,
+                            enabled = !isBusy,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_request_delete_otp")
+                        ) {
+                            if (deleteState is DeleteAccountUiState.RequestingOtp) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onError
+                                )
+                            } else {
+                                Text("إرسال رمز التحقق", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
         },

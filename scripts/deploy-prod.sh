@@ -37,16 +37,33 @@ Commands:
   ensure-mongo-user              Idempotently create least-privilege MONGO_APP_USER on existing Mongo volumes
   create-admin <phone> [name]    Create or promote an OTP-only ADMIN account via oozox_api_prod container
   smoke                          Run all post-deployment health, TLS, auth-guard, Prometheus firewall & DB isolation checks
-  backup                         Run AES-256-CBC PBKDF2 encrypted mongodump immediately
-  install-backup-script          Install /opt/oozox/backup_mongo.sh and show Docker cron entries
+  backup                         Run AES-256-CBC PBKDF2 encrypted mongodump + optional off-server copy (rclone/S3)
+  restore <backup-file>          Decrypt and restore backup with confirmation prompt (--target-db <db> for drill, --yes to confirm)
+  monitor                        Check web/API/signaling uptime & disk usage and send Telegram alert on failure
+  install-backup-script          Install /opt/oozox/backup_mongo.sh + monitor script and show cron entries
   renew-ssl                      Renew TLS certificates via Dockerized certbot and reload Nginx
   update                         Zero-downtime rebuild & restart of api, signaling, and web containers
   status                         Show container status (`docker compose ps`)
   logs [service]                 Tail container logs (default: all services)
 
 Environment overrides:
-  ENV_FILE, COMPOSE_FILE, BACKUP_KEY_FILE, BACKUP_DIR, SERVER_PUBLIC_IP
+  ENV_FILE, COMPOSE_FILE, BACKUP_KEY_FILE, BACKUP_DIR, SERVER_PUBLIC_IP, BACKUP_RCLONE_REMOTE, BACKUP_S3_URI
 EOF
+}
+
+send_telegram_alert() {
+  local title="$1"
+  local details="${2:-}"
+  if [[ -z "${ALERT_TELEGRAM_BOT_TOKEN:-}" || -z "${ALERT_TELEGRAM_CHAT_ID:-}" ]]; then
+    return 0
+  fi
+  command -v curl >/dev/null 2>&1 || return 0
+  local payload
+  payload="[OOZOX OPS ALERT] ${title}"$'\n'"${details}"
+  curl -fsS --max-time 8 -X POST "https://api.telegram.org/bot${ALERT_TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${ALERT_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${payload}" \
+    --data-urlencode "disable_web_page_preview=true" >/dev/null 2>&1 || true
 }
 
 cmd_check_prereqs() {
@@ -91,6 +108,8 @@ cmd_init_env() {
   umask 077
   cat > "$ENV_FILE" <<EOF
 # Auto-generated OOZOX Production Environment ($(date -u +"%Y-%m-%dT%H:%M:%SZ"))
+NODE_ENV=production
+TRUST_PROXY_HOPS=1
 SERVER_PUBLIC_IP=${public_ip}
 TURN_REALM=turn.oozox.com
 
@@ -103,26 +122,39 @@ MONGO_DB_NAME=oozox_prod_db
 DB_ENCRYPTION_KEY=${db_enc_key}
 
 REDIS_PASSWORD=${redis_pass}
+REDIS_DB=0
 
 JWT_SECRET=${jwt_key}
 JWT_EXPIRES_IN=7d
+PRE_AUTH_EXPIRES_IN=15m
+DEVICE_TRUST_DAYS=30
+REFRESH_TOKEN_DAYS=30
+SENSITIVE_STEP_UP_SECONDS=900
 
 CLIENT_ORIGIN=https://oozox.com,https://www.oozox.com,https://admin.oozox.com
 ALLOWED_ORIGINS=https://oozox.com,https://www.oozox.com,https://admin.oozox.com
 API_RATE_LIMIT_MAX=500
+LOGIN_RATE_LIMIT_MAX=10
+OTP_IP_RATE_LIMIT_MAX=25
+AI_IP_RATE_LIMIT_PER_MIN=20
 
 # Mandatory: configure at least one OTP provider (TELEGRAM_GATEWAY_TOKEN OR all 3 TWILIO_* keys)
 OTP_CHANNEL_ORDER=TELEGRAM,WHATSAPP,SMS
 TELEGRAM_GATEWAY_TOKEN=CHANGE_ME_TELEGRAM_GATEWAY_TOKEN
+TELEGRAM_GATEWAY_BASE_URL=https://gatewayapi.telegram.org
 TELEGRAM_GATEWAY_CALLBACK_URL=https://api.oozox.com/api/auth/webhooks/telegram-gateway
+TELEGRAM_GATEWAY_COST_USD=0.01
 TWILIO_ACCOUNT_SID=CHANGE_ME_TWILIO_ACCOUNT_SID
 TWILIO_AUTH_TOKEN=CHANGE_ME_TWILIO_AUTH_TOKEN
 TWILIO_VERIFY_SERVICE_SID=CHANGE_ME_TWILIO_VERIFY_SERVICE_SID
+TWILIO_SMS_COST_USD=0.05
+TWILIO_WHATSAPP_COST_USD=0.025
 OTP_ALLOWED_COUNTRIES=+20,+966,+971,+965,+974,+973,+968,+962
-OTP_COOLDOWN_SECONDS=60
-OTP_DAILY_LIMIT_PER_PHONE=5
-OTP_EXPIRES_SECONDS=300
-OTP_MAX_VERIFY_ATTEMPTS=5
+OTP_RESEND_COOLDOWN_SECONDS=60
+OTP_DAILY_MAX_PER_PHONE=5
+OTP_TTL_SECONDS=300
+OTP_MAX_ATTEMPTS=5
+OTP_LOCK_MINUTES=15
 OTP_MONTHLY_BUDGET_USD=150
 
 COTURN_SECRET=${coturn_key}
@@ -138,6 +170,18 @@ RTC_COST_PER_MINUTE_USD=0.004
 RTC_TURN_COST_PER_GB_USD=0.09
 RTC_DAILY_USER_LIMIT_MINUTES=0
 RTC_MAX_CALL_DURATION_SECONDS=14400
+LOAD_SHED_ENABLED=true
+LOAD_SHED_MAX_GOROUTINES=10000
+LOAD_SHED_GOROUTINES_ENTER_THRESHOLD=10000
+LOAD_SHED_GOROUTINES_EXIT_THRESHOLD=8000
+LOAD_SHED_MAX_SYSTEM_LOAD=0
+LOAD_SHED_SYSTEM_LOAD_ENTER_THRESHOLD=0
+LOAD_SHED_SYSTEM_LOAD_EXIT_THRESHOLD=0
+LOAD_SHED_SAMPLE_INTERVAL_MS=1000
+LOAD_SHED_SUSTAINED_TICKS=2
+LOAD_SHED_RECOVERY_TICKS=3
+MAINTENANCE_INTERVAL_SECONDS=30
+NODE_INACTIVITY_THRESHOLD_SECONDS=90
 
 # Recommended: Server-side Gemini AI proxy & Firebase Cloud Messaging
 GEMINI_API_KEY=
@@ -145,14 +189,23 @@ GEMINI_MODEL=gemini-2.5-flash
 GEMINI_USER_DAILY_LIMIT=30
 GEMINI_USER_MONTHLY_LIMIT=300
 GEMINI_MONTHLY_BUDGET_USD=50
+GEMINI_TIMEOUT_MS=30000
 FIREBASE_SERVICE_ACCOUNT_JSON=
+FIREBASE_SERVICE_ACCOUNT_PATH=
 
 MAX_CLOUD_BACKUPS_PER_USER=10
 TRANSFER_TTL_MINUTES=15
+BACKUP_RCLONE_REMOTE=
+BACKUP_S3_URI=
+
+LOG_LEVEL=info
+SENTRY_DSN=
+ALERT_TELEGRAM_BOT_TOKEN=
+ALERT_TELEGRAM_CHAT_ID=
 
 VITE_API_BASE_URL=https://api.oozox.com
-WEB_PORTAL_DIR=artifacts/mockup-sandbox
-WEB_WORKSPACE_FILTER=@workspace/mockup-sandbox
+WEB_PORTAL_DIR=web-portal
+WEB_WORKSPACE_FILTER=@oozox/web-portal
 EOF
   chmod 600 "$ENV_FILE"
   log "Wrote $ENV_FILE (chmod 600) for SERVER_PUBLIC_IP=${public_ip}"
@@ -440,34 +493,172 @@ cmd_backup() {
   out_file="$BACKUP_DIR/oozox_mongo_${ts}.archive.gz.enc"
 
   export BACKUP_ENCRYPTION_PASSPHRASE
-  docker exec oozox_mongo_prod mongodump \
-    --username="$MONGO_ROOT_USER" \
-    --password="$MONGO_ROOT_PASSWORD" \
-    --authenticationDatabase=admin \
-    --db="${MONGO_DB_NAME:-oozox_prod_db}" \
-    --archive --gzip \
-  | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
-    -pass env:BACKUP_ENCRYPTION_PASSPHRASE -out "$out_file"
+  if ! docker exec oozox_mongo_prod mongodump \
+      --username="$MONGO_ROOT_USER" \
+      --password="$MONGO_ROOT_PASSWORD" \
+      --authenticationDatabase=admin \
+      --db="${MONGO_DB_NAME:-oozox_prod_db}" \
+      --archive --gzip \
+    | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+      -pass env:BACKUP_ENCRYPTION_PASSPHRASE -out "$out_file"; then
+    send_telegram_alert "MongoDB Backup Failed" "Host: $(hostname) Target: $out_file"
+    die "MongoDB encrypted backup failed!"
+  fi
 
   chmod 600 "$out_file"
+  log "Encrypted backup created locally: $out_file"
+
+  if [[ -n "${BACKUP_RCLONE_REMOTE:-}" ]]; then
+    require_cmd rclone
+    if ! rclone copy "$out_file" "$BACKUP_RCLONE_REMOTE"; then
+      send_telegram_alert "Off-Server Backup Copy Failed (rclone)" "File: $(basename "$out_file") Remote: $BACKUP_RCLONE_REMOTE"
+      die "Off-server rclone upload failed!"
+    fi
+    log "Off-server copy uploaded via rclone -> $BACKUP_RCLONE_REMOTE"
+  elif [[ -n "${BACKUP_S3_URI:-}" ]]; then
+    require_cmd aws
+    local s3_target="${BACKUP_S3_URI%/}/$(basename "$out_file")"
+    if ! aws s3 cp "$out_file" "$s3_target" --sse AES256; then
+      send_telegram_alert "Off-Server Backup Copy Failed (S3)" "File: $(basename "$out_file") Target: $s3_target"
+      die "Off-server S3 upload failed!"
+    fi
+    log "Off-server copy uploaded via S3 -> $s3_target"
+  else
+    warn "No off-server backup target set (BACKUP_RCLONE_REMOTE or BACKUP_S3_URI). Configure one before going live!"
+  fi
+
   find "$BACKUP_DIR" -type f -name "*.archive.gz.enc" -mtime +30 -delete
-  log "Encrypted backup created: $out_file"
+}
+
+cmd_restore() {
+  require_cmd openssl
+  local backup_file="${1:-}"
+  shift || true
+
+  local target_db=""
+  local auto_confirm=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --target-db)
+        target_db="${2:-}"
+        shift 2
+        ;;
+      --yes)
+        auto_confirm=1
+        shift
+        ;;
+      *)
+        die "Unknown option for restore: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "$backup_file" ]] || die "Usage: ./scripts/deploy-prod.sh restore <backup-file> [--target-db <db>] [--yes]"
+  [[ -f "$backup_file" ]] || die "Backup file not found: $backup_file"
+  [[ -f "$BACKUP_KEY_FILE" ]] || die "Missing $BACKUP_KEY_FILE containing BACKUP_ENCRYPTION_PASSPHRASE=..."
+
+  cmd_validate_env
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  # shellcheck disable=SC1090
+  source "$BACKUP_KEY_FILE"
+  set +a
+
+  [[ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]] || die "BACKUP_ENCRYPTION_PASSPHRASE is empty in $BACKUP_KEY_FILE"
+
+  local source_db="${MONGO_DB_NAME:-oozox_prod_db}"
+  local restore_db="${target_db:-$source_db}"
+
+  if [[ "$auto_confirm" -ne 1 ]]; then
+    warn "DANGER: Restoring '$backup_file' will DROP & REPLACE collections in MongoDB database '${restore_db}'."
+    local confirm=""
+    read -r -p "Type RESTORE to confirm restoring into '${restore_db}': " confirm
+    [[ "$confirm" == "RESTORE" ]] || die "Restore aborted by operator."
+  fi
+
+  local -a ns_args=()
+  if [[ "$restore_db" != "$source_db" ]]; then
+    ns_args=(--nsFrom "${source_db}.*" --nsTo "${restore_db}.*")
+  fi
+
+  export BACKUP_ENCRYPTION_PASSPHRASE
+  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+      -pass env:BACKUP_ENCRYPTION_PASSPHRASE -in "$backup_file" \
+    | docker exec -i oozox_mongo_prod mongorestore \
+      --username="$MONGO_ROOT_USER" \
+      --password="$MONGO_ROOT_PASSWORD" \
+      --authenticationDatabase=admin \
+      --drop \
+      "${ns_args[@]}" \
+      --archive --gzip; then
+    send_telegram_alert "MongoDB Restore Failed" "Backup: $(basename "$backup_file") Target DB: ${restore_db}"
+    die "MongoDB restore failed!"
+  fi
+
+  log "Restore completed successfully into MongoDB database '${restore_db}'."
+  send_telegram_alert "MongoDB Restore Completed" "Backup: $(basename "$backup_file") -> DB: ${restore_db}"
+}
+
+cmd_monitor() {
+  require_cmd curl
+  if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+  fi
+
+  local failures=""
+  local api_url="${MONITOR_API_URL:-https://api.oozox.com/api/health}"
+  local sig_url="${MONITOR_SIGNALING_URL:-https://signaling.oozox.com/health}"
+  local web_url="${MONITOR_WEB_URL:-https://oozox.com/}"
+
+  if ! curl -fsS --max-time 8 "$api_url" | grep -q '"HEALTHY"'; then
+    failures+="- Core API health check failed ($api_url)"$'\n'
+  fi
+  if ! curl -fsS --max-time 8 "$sig_url" | grep -q '"HEALTHY"'; then
+    failures+="- Signaling health check failed ($sig_url)"$'\n'
+  fi
+  if ! curl -fsSI --max-time 8 "$web_url" >/dev/null 2>&1; then
+    failures+="- Web Portal HTTPS check failed ($web_url)"$'\n'
+  fi
+
+  local disk_pct
+  disk_pct="$(df -P "$REPO_DIR" | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
+  if [[ -n "$disk_pct" && "$disk_pct" -ge 85 ]]; then
+    failures+="- Disk usage critical: ${disk_pct}% on ${REPO_DIR}"$'\n'
+  fi
+
+  if [[ -n "$failures" ]]; then
+    send_telegram_alert "Production Uptime / Resource Warning ($(hostname))" "$failures"
+    printf '%s' "$failures" >&2
+    exit 1
+  fi
+  log "Uptime monitor OK (API, Signaling, Web, Disk ${disk_pct:-0}%)."
 }
 
 cmd_install_backup_script() {
   local target_script="/opt/oozox/backup_mongo.sh"
+  local monitor_script="/opt/oozox/monitor_health.sh"
   mkdir -p /opt/oozox "$BACKUP_DIR"
   cat > "$target_script" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec "$REPO_DIR/scripts/deploy-prod.sh" backup
 EOF
-  chmod 700 "$target_script"
-  log "Installed $target_script (chmod 700)"
+  cat > "$monitor_script" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "$REPO_DIR/scripts/deploy-prod.sh" monitor
+EOF
+  chmod 700 "$target_script" "$monitor_script"
+  log "Installed $target_script and $monitor_script (chmod 700)"
   cat <<EOF
 
 Add these cron jobs via 'crontab -e':
 0 3 * * * /opt/oozox/backup_mongo.sh >> /var/log/oozox_backup.log 2>&1
+*/5 * * * * /opt/oozox/monitor_health.sh >> /var/log/oozox_monitor.log 2>&1
 0 4 * * 1 cd $REPO_DIR && ./scripts/deploy-prod.sh renew-ssl >> /var/log/oozox_certbot.log 2>&1
 EOF
 }
@@ -502,6 +693,8 @@ main() {
     create-admin)           cmd_create_admin "$@" ;;
     smoke)                  cmd_smoke "$@" ;;
     backup)                 cmd_backup "$@" ;;
+    restore)                cmd_restore "$@" ;;
+    monitor)                cmd_monitor "$@" ;;
     install-backup-script)  cmd_install_backup_script "$@" ;;
     renew-ssl)              cmd_renew_ssl "$@" ;;
     update)                 cmd_update "$@" ;;

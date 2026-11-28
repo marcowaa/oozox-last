@@ -1,10 +1,13 @@
+const crypto = require('crypto');
 const BusinessProfile = require('../models/BusinessProfile');
 const Employee = require('../models/Employee');
+const AuthSession = require('../models/AuthSession');
+const User = require('../models/User');
 const PayrollAdjustment = require('../models/PayrollAdjustment');
 const EmployeeLeave = require('../models/EmployeeLeave');
 const AttendanceRecord = require('../models/AttendanceRecord');
 const { createNotification } = require('../services/notificationService');
-const { generateEmployeeToken } = require('../utils/jwt');
+const { generateEmployeeToken, generateRefreshToken, hashToken } = require('../utils/jwt');
 const { successResponse, errorResponse } = require('../utils/response');
 const { resolveBusinessForActor } = require('./businessController');
 const { t } = require('../i18n');
@@ -56,12 +59,35 @@ const loginEmployee = async (req, res, next) => {
       return errorResponse(res, 401, req.t('api.invalid_credentials'));
     }
 
-    employee.lastLoginAt = new Date();
+    const owner = await User.findById(employee.owner).select('isVerified');
+    if (!owner || owner.isVerified !== true) {
+      return errorResponse(res, 401, req.t('api.invalid_credentials'));
+    }
+
+    const now = new Date();
+    employee.lastLoginAt = now;
     await employee.save();
 
-    const token = generateEmployeeToken(employee);
+    const refreshDays = Math.max(1, Number(process.env.REFRESH_TOKEN_DAYS) || 30);
+    const session = await AuthSession.create({
+      sessionId: crypto.randomUUID(),
+      principalType: 'EMPLOYEE',
+      userId: null,
+      employeeId: employee._id,
+      deviceId: String(req.headers['x-device-id'] || '').trim().slice(0, 128),
+      refreshTokenHash: hashToken(generateRefreshToken()),
+      authMethod: 'EMPLOYEE_PASSWORD',
+      issuedAt: now,
+      lastStepUpAt: now,
+      expiresAt: new Date(now.getTime() + refreshDays * 86400000),
+      userAgent: String(req.headers['user-agent'] || '').slice(0, 250),
+      ipAddress: String((req.headers['x-forwarded-for'] || req.ip || '')).split(',')[0].trim().slice(0, 64),
+    });
+
+    const token = generateEmployeeToken(employee, session.sessionId);
     return successResponse(res, 200, req.t('api.login_success'), {
       token,
+      sessionId: session.sessionId,
       employee: {
         id: employee._id,
         fullName: employee.fullName,
@@ -76,6 +102,25 @@ const loginEmployee = async (req, res, next) => {
         businessId: employee.business?._id || employee.business,
         businessProfile: employee.business,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Logout active employee session (revokes AuthSession immediately)
+// @route   POST /api/hr/employee-logout
+// @access  Private (Employee)
+const logoutEmployee = async (req, res, next) => {
+  try {
+    if (req.isEmployeeActor && req.employee && req.authSessionId) {
+      await AuthSession.findOneAndUpdate(
+        { sessionId: req.authSessionId, employeeId: req.employee._id, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+    }
+    return successResponse(res, 200, req.t('api.logout_success') || 'Logged out', {
+      revoked: true,
     });
   } catch (error) {
     next(error);
@@ -180,6 +225,7 @@ const updateEmployee = async (req, res, next) => {
     if (!employee) return errorResponse(res, 404, req.t('api.user_not_found'));
 
     const { password, permissions, ...rest } = req.body;
+    const wasDeactivated = rest.isActive === false;
     Object.assign(employee, rest);
     if (permissions) {
       employee.permissions = { ...(employee.permissions?.toObject ? employee.permissions.toObject() : employee.permissions), ...permissions };
@@ -187,8 +233,17 @@ const updateEmployee = async (req, res, next) => {
     if (password) {
       employee.passwordHash = password;
     }
+    if (password || wasDeactivated) {
+      employee.tokenRevokedBefore = new Date();
+    }
 
     await employee.save();
+    if (password || wasDeactivated) {
+      await AuthSession.updateMany(
+        { employeeId: employee._id, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+    }
     return successResponse(res, 200, req.t('api.hr_employee_updated'), { employee });
   } catch (error) {
     next(error);
@@ -205,6 +260,11 @@ const deleteEmployee = async (req, res, next) => {
 
     const employee = await Employee.findOneAndDelete({ _id: req.params.id, business: business._id });
     if (!employee) return errorResponse(res, 404, req.t('api.user_not_found'));
+
+    await AuthSession.updateMany(
+      { employeeId: employee._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
 
     return successResponse(res, 200, req.t('api.hr_employee_deleted'), null);
   } catch (error) {
@@ -554,6 +614,7 @@ const listAttendanceRecords = async (req, res, next) => {
 
 module.exports = {
   loginEmployee,
+  logoutEmployee,
   listEmployees,
   createEmployee,
   updateEmployee,

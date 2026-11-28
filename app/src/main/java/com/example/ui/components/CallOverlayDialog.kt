@@ -88,6 +88,7 @@ fun CallOverlayDialog(
     currentUserName: String = "",
     incomingCallId: String? = null,
     incomingOfferSdp: String? = null,
+    autoAcceptIncoming: Boolean = false,
     signalingManager: WebRtcSignalingManager? = null,
     onBudgetExceeded: (String) -> Unit = {},
     onDismiss: () -> Unit,
@@ -199,6 +200,42 @@ fun CallOverlayDialog(
         )
     }
 
+    val acceptIncomingCallAction: () -> Unit = {
+        if (callState == CallState.INCOMING_RINGING) {
+            callState = CallState.CONNECTING
+            com.example.util.NotificationHelper.cancelIncomingCallNotification(context, activeCallId)
+            com.example.activity.IncomingCallActivity.dismissIfActive(activeCallId)
+            scope.launch {
+                CallForegroundService.start(context, activeCallId, contactName, callType == CallType.VIDEO)
+                val iceServers = fetchIceServersWithTurn()
+                val pm = buildPeerManager(iceServers, activeCallId)
+                peerManager = pm
+                pm.setMicrophoneMuted(isMuted)
+                audioManager?.isSpeakerphoneOn = isSpeakerOn
+                val offerSdp = incomingOfferSdp
+                if (!offerSdp.isNullOrBlank()) {
+                    pm.handleRemoteOfferAndCreateAnswer(
+                        offerSdp = offerSdp,
+                        onAnswerSdp = { ansSdp ->
+                            if (calleeUserId.isNotBlank()) {
+                                signalingManager?.sendCallAccept(activeCallId, calleeUserId, ansSdp, callType == CallType.VIDEO)
+                            }
+                            callState = CallState.CONNECTED
+                        }
+                    )
+                } else {
+                    callState = CallState.CONNECTED
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(isIncoming, autoAcceptIncoming, activeCallId) {
+        if (isIncoming && autoAcceptIncoming && callState == CallState.INCOMING_RINGING) {
+            acceptIncomingCallAction()
+        }
+    }
+
     // Outgoing Call: Backend Budget Check (/api/calls/authorize) -> TURN -> Foreground Service -> WebRTC Offer
     LaunchedEffect(isIncoming, calleeUserId, callType) {
         if (!isIncoming) {
@@ -306,8 +343,27 @@ fun CallOverlayDialog(
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(activeCallId, calleeUserId) {
+        CallForegroundService.registerActiveCallHangup {
+            scope.launch {
+                if (callState != CallState.ENDED) {
+                    val wasRingingIncoming = (callState == CallState.INCOMING_RINGING)
+                    callState = CallState.ENDED
+                    if (calleeUserId.isNotBlank()) {
+                        if (wasRingingIncoming) {
+                            signalingManager?.rejectCall(activeCallId, calleeUserId, callType == CallType.VIDEO)
+                        } else {
+                            signalingManager?.endCall(activeCallId, calleeUserId, callType == CallType.VIDEO)
+                        }
+                    }
+                    onDismiss()
+                }
+            }
+        }
         onDispose {
+            CallForegroundService.clearActiveCallHangup()
+            com.example.util.NotificationHelper.cancelIncomingCallNotification(context, activeCallId)
+            com.example.activity.IncomingCallActivity.dismissIfActive(activeCallId)
             peerManager?.dispose()
             peerManager = null
             CallForegroundService.stop(context)
@@ -772,6 +828,8 @@ fun CallOverlayDialog(
                                     Button(
                                         onClick = {
                                             callState = CallState.ENDED
+                                            com.example.util.NotificationHelper.cancelIncomingCallNotification(context, activeCallId)
+                                            com.example.activity.IncomingCallActivity.dismissIfActive(activeCallId)
                                             if (calleeUserId.isNotBlank()) {
                                                 signalingManager?.rejectCall(activeCallId, calleeUserId, callType == CallType.VIDEO)
                                             }
@@ -791,31 +849,7 @@ fun CallOverlayDialog(
 
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Button(
-                                        onClick = {
-                                            callState = CallState.CONNECTING
-                                            scope.launch {
-                                                CallForegroundService.start(context, activeCallId, contactName, callType == CallType.VIDEO)
-                                                val iceServers = fetchIceServersWithTurn()
-                                                val pm = buildPeerManager(iceServers, activeCallId)
-                                                peerManager = pm
-                                                pm.setMicrophoneMuted(isMuted)
-                                                audioManager?.isSpeakerphoneOn = isSpeakerOn
-                                                val offerSdp = incomingOfferSdp
-                                                if (!offerSdp.isNullOrBlank()) {
-                                                    pm.handleRemoteOfferAndCreateAnswer(
-                                                        offerSdp = offerSdp,
-                                                        onAnswerSdp = { ansSdp ->
-                                                            if (calleeUserId.isNotBlank()) {
-                                                                signalingManager?.sendCallAccept(activeCallId, calleeUserId, ansSdp, callType == CallType.VIDEO)
-                                                            }
-                                                            callState = CallState.CONNECTED
-                                                        }
-                                                    )
-                                                } else {
-                                                    callState = CallState.CONNECTED
-                                                }
-                                            }
-                                        },
+                                        onClick = acceptIncomingCallAction,
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                         shape = CircleShape,
                                         modifier = Modifier.size(68.dp),

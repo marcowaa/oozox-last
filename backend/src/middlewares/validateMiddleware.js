@@ -15,7 +15,8 @@ const validate = (schema, source = 'body') => {
     try {
       const result = schema.safeParse(req[source]);
       if (!result.success) {
-        const errorDetails = result.error.errors.map((issue) => ({
+        const issues = result.error.issues || result.error.errors || [];
+        const errorDetails = issues.map((issue) => ({
           field: issue.path.join('.'),
           message: issue.message.startsWith('api.')
             ? translate(issue.message)
@@ -119,7 +120,7 @@ const schemas = {
 
   updateLanguage: z.object({
     language: z.enum(SUPPORTED_LANGUAGE_CODES, {
-      errorMap: () => ({ message: 'api.i18n_unsupported_lang' }),
+      error: 'api.i18n_unsupported_lang',
     }),
   }),
 
@@ -173,7 +174,7 @@ const schemas = {
 
   updateInvoiceStatus: z.object({
     status: z.enum(['PENDING', 'PAID', 'OVERDUE', 'CANCELLED'], {
-      errorMap: () => ({ message: 'api.val_invoice_status_invalid' }),
+      error: 'api.val_invoice_status_invalid',
     }),
   }),
 
@@ -294,6 +295,30 @@ const schemas = {
 
   updateWorkTaskStatus: z.object({
     status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
+  }),
+
+  deleteAccount: z.object({
+    stepUpChallengeId: z.string().trim().max(128).optional(),
+    stepUpCode: z.string().trim().max(12).optional(),
+    confirmText: z.string().trim().max(32).optional(),
+  }),
+
+  aiChat: z.object({
+    prompt: z.string().trim().min(1, 'api.validation_error').max(8000),
+    contextInfo: z.string().max(16000).optional().default(''),
+    systemPrompt: z.string().max(4000).optional().default(''),
+    model: z.string().trim().max(80).optional().default(''),
+    useThinkingMode: z.boolean().optional().default(false),
+    mode: z.enum(['CHAT', 'ACCOUNTANT', 'TRANSLATE']).optional().default('CHAT'),
+    targetLanguage: z.string().trim().max(24).optional().default('auto'),
+  }),
+
+  aiVision: z.object({
+    prompt: z.string().trim().min(1, 'api.validation_error').max(4000),
+    imageBase64: z.string().trim().min(16).max(4 * 1024 * 1024),
+    mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']).optional().default('image/jpeg'),
+    model: z.string().trim().max(80).optional().default(''),
+    systemPrompt: z.string().max(4000).optional().default(''),
   }),
 };
 

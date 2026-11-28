@@ -16,6 +16,8 @@ node_modules
 **/dist
 **/build
 android
+archive
+.build-outputs
 mobile-client
 mobile_app
 store

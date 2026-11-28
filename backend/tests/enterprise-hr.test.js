@@ -254,4 +254,37 @@ describe('Enterprise Business, HR, Geofence & Task Flows', () => {
       .set('Authorization', `Bearer ${ownerToken}`);
     expect(delLeave.statusCode).toBe(200);
   });
+
+  it('8. Rejects employee token immediately after employee-logout or owner deactivation/password reset', async () => {
+    const logoutRes = await request(app)
+      .post('/api/hr/employee-logout')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(logoutRes.statusCode).toBe(200);
+
+    // Reusing logged-out employee token MUST fail with 401
+    const afterLogout = await request(app)
+      .get('/api/hr/employees')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(afterLogout.statusCode).toBe(401);
+
+    // Fresh login creates a new active AuthSession
+    const reLogin = await request(app).post('/api/hr/employee-login').send({
+      username: 'mahmoud_eng',
+      password: 'empSecret99',
+    });
+    expect(reLogin.statusCode).toBe(200);
+    const freshToken = reLogin.body.data.token;
+
+    // Owner changes employee password -> old active token immediately rejected with 401
+    const resetRes = await request(app)
+      .patch(`/api/hr/employees/${employeeId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ password: 'newEmpSecret123' });
+    expect(resetRes.statusCode).toBe(200);
+
+    const afterReset = await request(app)
+      .get('/api/hr/employees')
+      .set('Authorization', `Bearer ${freshToken}`);
+    expect(afterReset.statusCode).toBe(401);
+  });
 });

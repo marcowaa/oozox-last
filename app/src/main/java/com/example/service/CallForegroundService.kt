@@ -17,6 +17,9 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.util.FcmNotificationManager
+import com.example.util.NotificationHelper
+import com.example.util.WebRtcSignalingManager
 
 /**
  * Foreground service keeping 1-on-1 encrypted WebRTC audio/video calls active
@@ -30,9 +33,33 @@ class CallForegroundService : Service() {
 
         const val ACTION_START = "com.example.service.CallForegroundService.START"
         const val ACTION_STOP = "com.example.service.CallForegroundService.STOP"
+        const val ACTION_NOTIFICATION_HANGUP = "com.example.service.CallForegroundService.NOTIFICATION_HANGUP"
         const val EXTRA_CALL_ID = "extra_call_id"
         const val EXTRA_PEER_NAME = "extra_peer_name"
         const val EXTRA_IS_VIDEO = "extra_is_video"
+
+        @Volatile
+        private var activeHangupCallback: (() -> Unit)? = null
+
+        @Volatile
+        var activeSignalingManager: WebRtcSignalingManager? = null
+
+        fun registerActiveCallHangup(onHangup: () -> Unit) {
+            activeHangupCallback = onHangup
+        }
+
+        fun clearActiveCallHangup() {
+            activeHangupCallback = null
+        }
+
+        fun rejectIncomingCallSilently(callId: String, callerId: String, isVideo: Boolean) {
+            if (callId.isNotBlank() && callerId.isNotBlank()) {
+                activeSignalingManager?.rejectCall(callId, callerId, isVideo)
+            }
+            if (callId.isNotBlank()) {
+                FcmNotificationManager.notifyCallEnded(callId)
+            }
+        }
 
         fun start(context: Context, callId: String, peerName: String, isVideo: Boolean) {
             val intent = Intent(context, CallForegroundService::class.java).apply {
@@ -52,6 +79,7 @@ class CallForegroundService : Service() {
         }
 
         fun stop(context: Context) {
+            activeHangupCallback = null
             val intent = Intent(context, CallForegroundService::class.java).apply {
                 action = ACTION_STOP
             }
@@ -66,21 +94,35 @@ class CallForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_NOTIFICATION_HANGUP -> {
+                val callId = intent.getStringExtra(EXTRA_CALL_ID).orEmpty()
+                val cb = activeHangupCallback
+                activeHangupCallback = null
+                cb?.invoke()
+                if (callId.isNotBlank()) {
+                    NotificationHelper.cancelIncomingCallNotification(this, callId)
+                    FcmNotificationManager.notifyCallEnded(callId)
+                }
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
             ACTION_STOP -> {
+                activeHangupCallback = null
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             else -> {
+                val callId = intent?.getStringExtra(EXTRA_CALL_ID).orEmpty()
                 val peerName = intent?.getStringExtra(EXTRA_PEER_NAME).orEmpty().ifBlank { "OOZOX" }
                 val isVideo = intent?.getBooleanExtra(EXTRA_IS_VIDEO, false) == true
                 ensureChannel()
-                val notification = buildNotification(peerName, isVideo)
+                val notification = buildNotification(callId, peerName, isVideo)
                 val fgsType = resolveForegroundType(isVideo)
                 try {
                     ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
                 } catch (_: SecurityException) {
-                    // Graceful fallback if OS restricts foreground type when runtime permission was denied
                     try {
                         startForeground(NOTIFICATION_ID, notification)
                     } catch (_: Exception) {
@@ -122,7 +164,7 @@ class CallForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(peerName: String, isVideo: Boolean): Notification {
+    private fun buildNotification(callId: String, peerName: String, isVideo: Boolean): Notification {
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -134,7 +176,8 @@ class CallForegroundService : Service() {
         )
 
         val endIntent = Intent(this, CallForegroundService::class.java).apply {
-            action = ACTION_STOP
+            action = ACTION_NOTIFICATION_HANGUP
+            putExtra(EXTRA_CALL_ID, callId)
         }
         val endPending = PendingIntent.getService(
             this,

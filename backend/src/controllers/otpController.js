@@ -4,6 +4,14 @@ const AuthSession = require('../models/AuthSession');
 const OtpChallenge = require('../models/OtpChallenge');
 const EncryptedBackup = require('../models/EncryptedBackup');
 const Notification = require('../models/Notification');
+const DeviceTransferSession = require('../models/DeviceTransferSession');
+const DeviceTransferChunk = require('../models/DeviceTransferChunk');
+const OtpAbuseLedger = require('../models/OtpAbuseLedger');
+const BusinessProfile = require('../models/BusinessProfile');
+const Employee = require('../models/Employee');
+const WorkGroup = require('../models/WorkGroup');
+const ProjectWorkspace = require('../models/ProjectWorkspace');
+const ChatMessage = require('../models/ChatMessage');
 const { verifyToken, generatePreAuthToken } = require('../utils/jwt');
 const { successResponse, errorResponse } = require('../utils/response');
 const { normalizePhoneE164, maskPhone } = require('../utils/phoneUtils');
@@ -15,10 +23,12 @@ const {
 } = require('../services/otp/otpOrchestrator');
 const { verifyWebhookSignature } = require('../services/otp/telegramGatewayAdapter');
 const {
+  getStepUpMaxAgeSeconds,
   issueTrustedDevice,
   verifyTrustedDevice,
   issueAuthSession,
   rotateRefreshSession,
+  revokeAllTrustedDevicesAndSessions,
   revokeDeviceAndSessions,
   isSessionFreshForSensitiveOp,
   markSessionStepUp,
@@ -810,6 +820,187 @@ const telegramGatewayWebhook = async (req, res, next) => {
   }
 };
 
+// @desc    Delete / anonymize authenticated user account (OTP step-up required + 409 last-admin guard)
+// @route   DELETE /api/auth/me
+// @access  Private (Fresh OTP Step-Up Required)
+const deleteMyAccount = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return errorResponse(res, 404, req.t('api.user_not_found'));
+    }
+
+    const { stepUpChallengeId, stepUpCode } = req.body || {};
+    const userPhoneE164 = user.phoneE164 || normalizePhoneE164(user.phone);
+
+    // Account deletion strictly requires either a fresh SENSITIVE_ACTION OTP verification
+    // or a current session whose OTP verification occurred within the step-up window.
+    let hasFreshOtpStepUp = false;
+    if (stepUpChallengeId && stepUpCode) {
+      const verified = await verifyOtpChallenge({
+        challengeId: stepUpChallengeId,
+        code: stepUpCode,
+        phoneE164: userPhoneE164 || undefined,
+        lang: user.preferredLanguage || req.lang || 'ar',
+      });
+      if (
+        verified &&
+        verified.purpose === 'SENSITIVE_ACTION' &&
+        (!verified.userId || String(verified.userId) === String(user._id))
+      ) {
+        hasFreshOtpStepUp = true;
+      }
+    } else if (req.authSessionId) {
+      const activeSession = await AuthSession.findOne({
+        sessionId: req.authSessionId,
+        userId: user._id,
+        revokedAt: null,
+      });
+      if (activeSession && activeSession.otpVerifiedAt) {
+        const ageSec = (Date.now() - activeSession.otpVerifiedAt.getTime()) / 1000;
+        if (ageSec <= getStepUpMaxAgeSeconds()) {
+          hasFreshOtpStepUp = true;
+        }
+      }
+    }
+
+    if (!hasFreshOtpStepUp) {
+      return res.status(403).json({
+        success: false,
+        requiresStepUpOtp: true,
+        code: 'STEP_UP_OTP_REQUIRED',
+        maskedPhone: maskPhone(userPhoneE164 || user.phone),
+        message: req.t('api.step_up_otp_required'),
+      });
+    }
+
+    // Prevent leaving the platform without any ADMIN user
+    if (user.role === 'ADMIN') {
+      const otherAdminsCount = await User.countDocuments({
+        role: 'ADMIN',
+        _id: { $ne: user._id },
+      });
+      if (otherAdminsCount === 0) {
+        return res.status(409).json({
+          success: false,
+          code: 'LAST_ADMIN_CANNOT_DELETE',
+          message:
+            req.t('api.last_admin_cannot_delete') ||
+            'Cannot delete the last remaining administrator account. Promote another administrator first.',
+        });
+      }
+    }
+
+    const userId = user._id;
+    const transferSessions = await DeviceTransferSession.find({ userId }).select('transferId').lean();
+    const transferIds = transferSessions.map((t) => t.transferId).filter(Boolean);
+
+    // 1. Revoke all auth sessions & trusted devices
+    await revokeAllTrustedDevicesAndSessions(userId, 'ACCOUNT_DELETED');
+
+    // 2. Delete purely personal / transfer / backup / security ledger artifacts
+    await Promise.all([
+      EncryptedBackup.deleteMany({ ownerId: userId }),
+      transferIds.length > 0
+        ? DeviceTransferChunk.deleteMany({ transferId: { $in: transferIds } })
+        : Promise.resolve(),
+      DeviceTransferSession.deleteMany({ userId }),
+      Notification.deleteMany({ recipient: userId }),
+      OtpChallenge.deleteMany({
+        $or: [
+          { userId },
+          ...(userPhoneE164 ? [{ phoneE164: userPhoneE164 }] : []),
+        ],
+      }),
+      userPhoneE164
+        ? OtpAbuseLedger.deleteMany({
+            kind: 'PHONE_DAY',
+            key: { $regex: `^PHONE_DAY:${userPhoneE164.replace('+', '\\+')}:` },
+          })
+        : Promise.resolve(),
+    ]);
+
+    // 3. Remove user from shared group/project member lists & read/delivery arrays
+    await Promise.all([
+      WorkGroup.updateMany(
+        { 'members.userId': userId },
+        { $pull: { members: { userId } } }
+      ),
+      ProjectWorkspace.updateMany(
+        { 'members.userId': userId },
+        { $pull: { members: { userId } } }
+      ),
+      ChatMessage.updateMany(
+        { $or: [{ deliveredTo: userId }, { readBy: userId }] },
+        { $pull: { deliveredTo: userId, readBy: userId } }
+      ),
+    ]);
+
+    // 4. Anonymize owned BusinessProfile PII (or remove if no employee records exist)
+    const ownedEmployeesCount = await Employee.countDocuments({ owner: userId });
+    if (ownedEmployeesCount === 0) {
+      await BusinessProfile.deleteMany({ owner: userId });
+    } else {
+      await BusinessProfile.updateMany(
+        { owner: userId },
+        {
+          $set: {
+            companyName: 'Deleted Account Business',
+            commercialRegistration: '',
+            taxNumber: '',
+            phone: '',
+            address: '',
+          },
+        }
+      );
+    }
+
+    // 5. Anonymize the User record in place so counterparty Invoices, ChatMessages,
+    //    ChatConversations, CallRecords, and WorkTasks retain referential integrity without PII.
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          name: 'Deleted User',
+          phone: `deleted_${String(userId)}`,
+          avatar: '',
+          role: 'USER',
+          isVerified: false,
+          phoneVerifiedAt: null,
+          passwordChangedAt: new Date(),
+          dailyCallLimitMinutes: 0,
+          fcmTokens: [],
+        },
+        $unset: {
+          phoneE164: 1,
+          email: 1,
+          password: 1,
+        },
+      }
+    );
+
+    return successResponse(
+      res,
+      200,
+      req.t('api.account_deleted') || 'Account deleted and personal data removed successfully.',
+      {
+        deleted: true,
+        anonymizedSharedRecords: true,
+      }
+    );
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        code: err.code || 'ACCOUNT_DELETE_ERROR',
+        remainingAttempts: err.remainingAttempts,
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+};
+
 module.exports = {
   buildClientUserPayload,
   resolveClientMeta,
@@ -826,4 +1017,5 @@ module.exports = {
   revokeSession,
   initiateChangePhone,
   telegramGatewayWebhook,
+  deleteMyAccount,
 };

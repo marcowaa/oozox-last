@@ -97,6 +97,26 @@ func TestCallEventReporterSignsWebhookAndVerifiesCallAuth(t *testing.T) {
 	}
 }
 
+func TestValidateSignalingHMACSecretRejectsMissingAndJwtFallback(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("JWT_SECRET", "some_jwt_secret_that_must_not_be_reused_as_hmac_fallback")
+	t.Setenv("INTERNAL_SIGNALING_HMAC_SECRET", "")
+	if err := ValidateSignalingHMACSecret(); err == nil {
+		t.Fatal("expected ValidateSignalingHMACSecret to fail when INTERNAL_SIGNALING_HMAC_SECRET is empty even if JWT_SECRET is set")
+	}
+
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("INTERNAL_SIGNALING_HMAC_SECRET", "short_secret")
+	if err := ValidateSignalingHMACSecret(); err == nil {
+		t.Fatal("expected ValidateSignalingHMACSecret to reject <32 char secret in production")
+	}
+
+	t.Setenv("INTERNAL_SIGNALING_HMAC_SECRET", "valid_prod_signaling_hmac_secret_32_plus_chars")
+	if err := ValidateSignalingHMACSecret(); err != nil {
+		t.Fatalf("expected valid secret to pass, got %v", err)
+	}
+}
+
 func TestPubSubRealtimeEventEnvelopeRoutesToUser(t *testing.T) {
 	_, hub, mr := setupTestBridge(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

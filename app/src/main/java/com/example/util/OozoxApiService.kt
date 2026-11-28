@@ -6,6 +6,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -694,6 +695,49 @@ data class ApiUpdateTaskStatusRequest(
     val status: String
 )
 
+@Serializable
+data class ApiDeleteAccountRequest(
+    val stepUpChallengeId: String? = null,
+    val stepUpCode: String? = null,
+    val confirmText: String? = null
+)
+
+@Serializable
+data class ApiAiChatRequest(
+    val prompt: String,
+    val contextInfo: String = "",
+    val systemPrompt: String = "",
+    val model: String = "",
+    val useThinkingMode: Boolean = false,
+    val mode: String = "CHAT",
+    val targetLanguage: String = "auto"
+)
+
+@Serializable
+data class ApiAiVisionRequest(
+    val prompt: String,
+    val imageBase64: String,
+    val mimeType: String = "image/jpeg",
+    val model: String = "",
+    val systemPrompt: String = ""
+)
+
+@Serializable
+data class ApiAiQuotaData(
+    val dailyUsed: Int = 0,
+    val dailyLimit: Int = 0,
+    val monthlyUsed: Int = 0,
+    val monthlyLimit: Int = 0,
+    val globalBudgetAvailable: Boolean = true
+)
+
+@Serializable
+data class ApiAiResponseData(
+    val text: String = "",
+    val model: String = "",
+    val quota: ApiAiQuotaData? = null
+)
+
 interface OozoxApiService {
     @GET("health")
     suspend fun getHealth(): Response<ApiEnvelope<ApiHealthData>>
@@ -750,6 +794,18 @@ interface OozoxApiService {
 
     @PATCH("auth/me")
     suspend fun updateMe(@Body request: ApiUpdateProfileBody): Response<ApiEnvelope<ApiAuthData>>
+
+    @HTTP(method = "DELETE", path = "auth/me", hasBody = true)
+    suspend fun deleteMyAccount(@Body request: ApiDeleteAccountRequest = ApiDeleteAccountRequest()): Response<ApiEnvelope<Map<String, kotlinx.serialization.json.JsonElement>>>
+
+    @POST("ai/chat")
+    suspend fun postAiChat(@Body request: ApiAiChatRequest): Response<ApiEnvelope<ApiAiResponseData>>
+
+    @POST("ai/vision")
+    suspend fun postAiVision(@Body request: ApiAiVisionRequest): Response<ApiEnvelope<ApiAiResponseData>>
+
+    @GET("ai/quota")
+    suspend fun getAiQuota(): Response<ApiEnvelope<ApiAiQuotaData>>
 
     @POST("devices/fcm-token")
     suspend fun registerFcmToken(@Body request: ApiFcmTokenBody): Response<ApiEnvelope<Map<String, String>>>
